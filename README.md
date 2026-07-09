@@ -469,38 +469,6 @@ EOF
 dd if=rootfs.ext4 of=raspi-os.img bs=512 seek=1064960 count=4751360 conv=notrunc
 ```
 
-### 发布新版本
-
-#### 通过 GitHub 网页发布（推荐）
-
-1. 打开 https://github.com/ljcccc999/yunsh-os/releases/new
-2. 填写版本标签：`v1.1.0`
-3. 编写更新说明（中文）
-4. 上传构建好的 `.img.xz` 文件（≤ 2GB）
-5. 测试版勾选 **☐ Set as a pre-release**
-6. 点击 **Publish release**
-
-#### 版本命名规范
-
-| 版本类型 | 标签示例 | 说明 |
-|---------|---------|------|
-| 正式版 | `v1.0.0` | 稳定发布 |
-| 小版本更新 | `v1.1.0` | 功能新增或修复 |
-| 大版本更新 | `v2.0.0` | 重大架构变更 |
-| 测试版 | `v1.1.0-beta` | 预览版 |
-
-**版本号比较规则：**
-```
-v1.0.0 → v1.1.0  → 非大版本（次版本号变化）
-v1.0.0 → v2.0.0  → 大版本（主版本号变化）
-```
-
-#### 通道分发逻辑
-
-- **Stable 通道** → 只返回 GitHub Release 中 **非 prerelease** 的最新版
-- **Beta 通道** → 返回最新的 5 个 Release，取版本号最高的（包含 prerelease）
-- 所以发测试版记得勾 **Set as a pre-release**，这样 Stable 用户不会收到
-
 ### 开发注意事项
 
 #### Git 管理
