@@ -118,30 +118,6 @@ YUNSH OS 内置 **双通道 OTA 更新**：
 
 通道可在 **设置 > 系统更新** 中随时切换。
 
-### 开发新版本
-
-```bash
-# 1. 修改代码 → 提交
-git add .
-git commit -m "v1.1.0: 新功能..."
-
-# 2. 打标签
-git tag v1.1.0
-git push origin main --tags
-
-# 3. 上传 Release
-gh release create v1.1.0 \
-  --title "YUNSH OS v1.1.0" \
-  --notes "更新内容..." \
-  output/YUNSH-OS-v1.1.0.img.xz
-
-# 测试版（勾 --prerelease）
-gh release create v1.1.0-beta \
-  --title "YUNSH OS v1.1.0 Beta" \
-  --prerelease \
-  output/YUNSH-OS-v1.1.0-beta.img.xz
-```
-
 ## 构建镜像
 
 ```bash
