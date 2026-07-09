@@ -1,6 +1,6 @@
 # YUNSH OS v1.0 — AR 眼镜操作系统
 
-面向 YUNSH V1 AR 眼镜的定制系统，基于 **Raspberry Pi OS Lite (Debian 13 Trixie)**。
+面向 YUNSH V1 AR 眼镜的定制系统，基于 Raspberry Pi OS Lite (Debian 13 Trixie)。
 
 ```
 ┌───────────────────────────────────────┐
@@ -42,7 +42,9 @@
 
 ### 预构建镜像（推荐）
 
-从 [GitHub Releases](https://github.com/ljcccc999/yunsh-os/releases) 下载最新镜像：
+从 [GitHub Releases](https://github.com/ljcccc999/yunsh-os/releases) 下载最新镜像 `.img.xz` 文件。
+
+**Mac 烧录：**
 
 ```bash
 # 1. 解压
@@ -51,97 +53,36 @@ xz -d -k YUNSH-OS-v1.0.0.img.xz
 # 2. 查看 SD 卡设备
 diskutil list
 
-# 3. 烧录（/dev/rdisk2 替换为你的设备）
+# 3. 烧录（/dev/rdisk2 替换为你的设备名）
 sudo dd if=YUNSH-OS-v1.0.0.img of=/dev/rdisk2 bs=1m status=progress
 ```
 
-### 哈希校验
+**Windows 烧录：** 使用 [Raspberry Pi Imager](https://www.raspberrypi.com/software/) 或 [balenaEtcher](https://etcher.balena.io/)。
+
+**哈希校验：**
 ```bash
 shasum -a 256 -c YUNSH-OS-v1.0.0.img.xz.sha256
 ```
 
-## 目录结构
+## OTA 系统更新
 
-```
-yunsh-os/
-├── boot/               # 启动配置 (config.txt, kms-config.json)
-├── scripts/            # 构建 & 刷写脚本
-│   ├── build-image-from-rpi-os.sh   # 从 RPi OS 构建镜像
-│   ├── yunsh-boot-activate.sh       # 首启动激活脚本 (内置 Qt6)
-│   └── flash-mac.sh                 # Mac 端刷写脚本
-├── system/             # 系统守护进程
-│   ├── yunsh-update-daemon.py       # OTA 更新守护进程
-│   ├── yunsh-updater.py             # OTA 更新器 (A/B分区)
-│   ├── yunsh-firstboot.sh           # 首启动安装脚本
-│   ├── yunsh-boot-activate.sh       # 首启动激活脚本
-│   ├── yunsh-network-daemon.py      # 网络管理
-│   ├── yunsh-bluetooth-daemon.py    # 蓝牙管理
-│   ├── yunsh-install-progress.sh    # 安装进度显示
-│   ├── S01yunsh-boot               # 启动 service
-│   └── S02yunsh-update             # 更新 service
-├── ui/                 # Qt6 QML 用户界面
-│   ├── main.qml                     # 主入口
-│   ├── ActivationScreen.qml         # 激活向导
-│   ├── HomeScreen.qml               # 主屏幕
-│   ├── SettingsScreen.qml           # 设置
-│   ├── UpdateScreen.qml             # 系统更新
-│   ├── NetworkScreen.qml            # Wi-Fi 管理
-│   ├── BluetoothScreen.qml          # 蓝牙管理
-│   ├── StatusBar.qml                # 状态栏
-│   ├── ControlCenter.qml            # 控制中心
-│   ├── VirtualKeyboard.qml          # 虚拟键盘
-│   ├── GlassCard.qml / GlassPanel.qml # 毛玻璃组件
-│   ├── Screensaver.qml              # 待机屏幕
-│   ├── AppDock.qml / AppIcon.qml    # 应用坞
-│   ├── YunshBrowser.qml             # 浏览器
-│   ├── YunshMetaverse.qml           # 元宇宙
-│   └── icons/                       # SVG 图标集
-├── compositor/         # C++ 显示合成器 (DRM/EGL/GLES)
-├── android/            # Waydroid 配置
-│   ├── waydroid.cfg                 # Waydroid 配置
-│   ├── yunsh-android-bridge.py      # 安卓桥接
-│   └── install-appstore.sh          # 安装应用宝
-└── logo/               # YUNSH 品牌 Logo
-```
-
-## OTA 更新系统
-
-YUNSH OS 内置 **双通道 OTA 更新**：
+YUNSH OS 内置 OTA 更新，开机联网后自动检查：
 
 | 功能 | 说明 |
 |------|------|
-| **Stable 通道** | 仅接收正式版（Release 非 prerelease） |
-| **Beta 通道** | 接收测试版 + 正式版（含 prerelease） |
-| **大版本开关** | 关闭后跳过主版本号升级（如 v1→v2） |
-| **A/B 分区** | `mmcblk0p2` (A) / `mmcblk0p3` (B)，故障安全回退 |
-| **全量更新** | 下载完整镜像 → 写入备用分区 → 标记切换 |
+| **Stable 通道** | 仅接收正式版（默认） |
+| **Beta 通道** | 可接收测试版更新 |
+| **大版本开关** | 关闭后不提示主版本升级 |
+| **自动检查** | 开机后定期检测新版本 |
 
-通道可在 **设置 > 系统更新** 中随时切换。
-
-## 构建镜像
-
-```bash
-# 配置
-export RPIZ_IMAGE="raspios-lite.img"
-export OUTPUT_IMAGE="output/YUNSH-OS-v1.0.0.img"
-
-# 构建
-./scripts/build-image-from-rpi-os.sh
-```
-
-构建流程：
-1. 下载 Raspberry Pi OS Lite (arm64)
-2. 注入 Qt6 运行时 + QML 模块
-3. 注入 YUNSH 激活脚本 + UI 文件
-4. 配置首启动 systemd 服务
-5. 压缩为 `.img.xz` 输出
+可在 **设置 > 系统更新** 中切换通道和开关。
 
 ## 硬件要求
 
 | 要求 | 规格 |
 |------|------|
 | **主板** | Raspberry Pi 4B (2GB+/4GB/8GB) 或 Pi 5 |
-| **显示** | 1080p Micro-OLED AR 眼镜（HDMI） |
+| **显示** | 1080p Micro-OLED AR 眼镜（HDMI 输入） |
 | **输入** | USB 鼠标 + 键盘（或触控板） |
 | **存储** | 16GB+ SD 卡（建议 A2 级别） |
 | **电源** | 5V/3A USB-C |
