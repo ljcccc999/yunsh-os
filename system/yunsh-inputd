@@ -1,0 +1,47 @@
+#!/bin/sh
+# YUNSH OS v1.0 - Input Daemon
+# Handles USB mouse and keyboard input via libinput/evdev
+
+echo "YUNSH: Input daemon starting..."
+
+# Wait for input devices
+sleep 2
+
+# Detect and handle input events
+# This is a simple wrapper that forwards events to the compositor
+
+# Open evdev devices
+for dev in /dev/input/event*; do
+    [ -e "$dev" ] || continue
+    echo "YUNSH: Input device: $(cat /sys/class/input/$(basename $dev)/device/name 2>/dev/null || echo $dev)"
+done
+
+# Main event loop - forward to compositor via socket
+COMPOSITOR_SOCKET="/tmp/yunsh-compositor.sock"
+
+monitor_input() {
+    # Use evtest to monitor input events and forward over socket
+    for dev in /dev/input/event*; do
+        [ -e "$dev" ] || continue
+        (
+            evtest --grab "$dev" 2>/dev/null | while read line; do
+                if [ -S "$COMPOSITOR_SOCKET" ]; then
+                    echo "$line" | nc -U "$COMPOSITOR_SOCKET" -w 0 2>/dev/null || true
+                fi
+            done
+        ) &
+    done
+    
+    # Wait
+    wait
+}
+
+# Monitor for hotplug events
+udevadm monitor --subsystem-match=input --property | while read line; do
+    if echo "$line" | grep -q "add\|remove"; then
+        echo "YUNSH: Input device changed"
+        # Re-scan devices
+    fi
+done &
+
+monitor_input

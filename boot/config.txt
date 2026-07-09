@@ -1,0 +1,49 @@
+# YUNSH OS v1.0 - Raspberry Pi Boot Config
+# 1080p output for AR glasses, black=transparent
+
+# GPU memory
+gpu_mem=256
+
+# Force 1080p output
+hdmi_group=2
+hdmi_mode=82
+hdmi_pixel_freq_limit=400000000
+hdmi_drive=2
+hdmi_force_hotplug=1
+hdmi_ignore_edid=0xa5000080
+hdmi_timings=1920 0 44 8 200 1080 0 4 4 6 0 0 1 60 0 165000000
+
+# Display settings
+disable_overscan=1
+framebuffer_width=1920
+framebuffer_height=1080
+framebuffer_depth=32
+framebuffer_ignore_alpha=0
+
+# Enable 64-bit kernel
+arm_64bit=1
+
+# Boot
+kernel=Image.gz
+kernel_address=0x80000
+
+# GPU
+dtoverlay=vc4-kms-v3d
+max_framebuffers=2
+
+# Enable DRM
+dtoverlay=vc4-fkms-v3d
+
+# Serial console for debugging
+enable_uart=1
+
+# Performance
+arm_freq=1500
+gpu_freq=600
+force_turbo=1
+
+# Audio
+dtparam=audio=on
+
+# USB
+dtoverlay=dwc2,dr_mode=host

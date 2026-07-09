@@ -1,0 +1,6 @@
+output/
+build/qt-merged/
+build/qt-debs/
+*.img
+*.img.xz
+raspios-lite.img

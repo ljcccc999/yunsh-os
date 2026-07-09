@@ -1,0 +1,13 @@
+{
+    "device": "/dev/dri/card0",
+    "format": "argb8888",
+    "hwcursor": false,
+    "pbuffers": true,
+    "outputs": [
+        {
+            "name": "HDMI1",
+            "mode": "1920x1080",
+            "rate": 60
+        }
+    ]
+}

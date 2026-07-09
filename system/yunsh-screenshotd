@@ -1,0 +1,63 @@
+#!/bin/bash
+# YUNSH OS v1.0 - Screenshot daemon
+# Usage: yunsh-screenshotd [full|region x y w h]
+set -e
+
+SCREENSHOTS_DIR="$HOME/Pictures/Screenshots"
+mkdir -p "$SCREENSHOTS_DIR"
+
+TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
+OUTPUT_FILE="$SCREENSHOTS_DIR/Screenshot_${TIMESTAMP}.png"
+
+capture_fullscreen() {
+    echo "Capturing full screen..."
+    # Use Python + Pillow to capture framebuffer
+    python3 -c "
+import struct, sys
+with open('/dev/fb0', 'rb') as f:
+    data = f.read()
+# FB format: 1920x1080, 32bpp ARGB
+width, height = 1920, 1080
+try:
+    from PIL import Image
+    img = Image.frombuffer('RGBA', (width, height), data, 'raw', 'BGRA', 0, 1)
+    img.save('$OUTPUT_FILE')
+    print('Saved: $OUTPUT_FILE')
+except ImportError:
+    print('Pillow not available, saving raw')
+    with open('$OUTPUT_FILE.raw', 'wb') as out:
+        out.write(data)
+" 2>/dev/null || {
+    # Fallback: dd the raw framebuffer
+    dd if=/dev/fb0 of="$OUTPUT_FILE.raw" bs=8192 count=$((1920*1080*4/8192 + 1)) 2>/dev/null
+}
+
+# Copy to clipboard
+if command -v xclip &>/dev/null; then
+    xclip -selection clipboard -t image/png -i "$OUTPUT_FILE" 2>/dev/null || true
+fi
+cp "$OUTPUT_FILE" /tmp/yunsh-clipboard.png 2>/dev/null || true
+echo "Screenshot saved to $OUTPUT_FILE"
+}
+
+capture_region() {
+    local x=$1 y=$2 w=$3 h=$4
+    echo "Capturing region: ${x},${y} ${w}x${h}"
+    # Capture full framebuffer first, then crop
+    python3 -c "
+from PIL import Image
+with open('/dev/fb0', 'rb') as f:
+    data = f.read()
+img = Image.frombuffer('RGBA', (1920, 1080), data, 'raw', 'BGRA', 0, 1)
+cropped = img.crop(($x, $y, $x+$w, $y+$h))
+cropped.save('$OUTPUT_FILE')
+print('Saved region: $OUTPUT_FILE')
+" 2>/dev/null || capture_fullscreen
+cp "$OUTPUT_FILE" /tmp/yunsh-clipboard.png 2>/dev/null || true
+}
+
+case "${1:-full}" in
+    full) capture_fullscreen ;;
+    region) capture_region $2 $3 $4 $5 ;;
+    *) echo "Usage: yunsh-screenshotd [full|region x y w h]" ;;
+esac

@@ -1,0 +1,43 @@
+#!/bin/sh
+# YUNSH OS v1.0 - Power Management Daemon
+# Handles battery monitoring and power saving
+
+PIDFILE="/var/run/yunsh-powerd.pid"
+BATTERY_PATH="/sys/class/power_supply"
+
+echo "YUNSH: Power daemon starting..."
+
+# Check battery status
+check_battery() {
+    for bat in $BATTERY_PATH/*; do
+        [ -d "$bat" ] || continue
+        if [ -f "$bat/type" ] && grep -q "Battery" "$bat/type" 2>/dev/null; then
+            local level="unknown"
+            local status="unknown"
+            
+            [ -f "$bat/capacity" ] && level=$(cat "$bat/capacity")
+            [ -f "$bat/status" ] && status=$(cat "$bat/status")
+            
+            echo "YUNSH: Battery: ${level}% (${status})"
+            
+            # Low battery warning
+            if [ "$level" -lt 15 ] && [ "$status" = "Discharging" ]; then
+                echo "YUNSH: Low battery! Please charge."
+                # Notify user via compositor
+                echo "low_battery $level" | nc -U /tmp/yunsh-compositor.sock -w 0 2>/dev/null || true
+            fi
+            
+            # Critical battery - shutdown
+            if [ "$level" -lt 5 ] && [ "$status" = "Discharging" ]; then
+                echo "YUNSH: Critical battery! Shutting down..."
+                /sbin/shutdown -h now
+            fi
+        fi
+    done
+}
+
+# Main loop - check every 30 seconds
+while true; do
+    check_battery
+    sleep 30
+done

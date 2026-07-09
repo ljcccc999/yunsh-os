@@ -1,0 +1,145 @@
+name: Build YUNSH OS v1.0 Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type: full (Buildroot) or quick (RPi OS base)'
+        required: true
+        default: 'quick'
+        type: choice
+        options:
+          - quick
+          - full
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            build-essential git wget flex bison bc rsync cmake python3-pip \
+            dosfstools mtools parted e2fsprogs xz-utils
+
+      - name: Install Python deps
+        run: pip3 install Pillow
+
+      - name: Download RPi OS Lite (quick mode)
+        if: ${{ github.event.inputs.build_type == 'quick' || github.event.inputs.build_type == '' }}
+        run: |
+          mkdir -p output
+          wget -q -O output/rpi-os-lite.img.xz \
+            https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2024-11-19/2024-11-19-raspios-bookworm-arm64-lite.img.xz
+          xz -d output/rpi-os-lite.img.xz
+          ls -lh output/
+
+      - name: Setup YUNSH overlay on RPi OS
+        if: ${{ github.event.inputs.build_type == 'quick' || github.event.inputs.build_type == '' }}
+        run: |
+          # Mount the RPi OS image
+          sudo mkdir -p /mnt/rpi /mnt/rpi-boot
+          
+          # Find partition offsets
+          OFFSET_BOOT=$(sudo fdisk -l output/rpi-os-lite.img | grep '\.img1' | awk '{print $2}')
+          OFFSET_ROOT=$(sudo fdisk -l output/rpi-os-lite.img | grep '\.img2' | awk '{print $2}')
+          SECTOR_SIZE=512
+          
+          echo "Boot partition offset: $OFFSET_BOOT"
+          echo "Root partition offset: $OFFSET_ROOT"
+          
+          # Mount partitions
+          sudo mount -o loop,offset=$((OFFSET_BOOT * SECTOR_SIZE)) output/rpi-os-lite.img /mnt/rpi-boot
+          sudo mount -o loop,offset=$((OFFSET_ROOT * SECTOR_SIZE)) output/rpi-os-lite.img /mnt/rpi
+          
+          # Process YUNSH logo
+          mkdir -p logo
+          python3 scripts/process-logo.py || true
+          
+          # Create overlay directory structure
+          sudo mkdir -p /mnt/rpi/usr/share/yunsh/{logo,ui,icons,apps}
+          sudo mkdir -p /mnt/rpi/usr/bin
+          sudo mkdir -p /mnt/rpi/etc/init.d
+          
+          # Copy logo
+          if [ -d logo ]; then
+            sudo cp -r logo/* /mnt/rpi/usr/share/yunsh/logo/ 2>/dev/null || true
+          fi
+          
+          # Copy UI files
+          sudo cp ui/*.qml /mnt/rpi/usr/share/yunsh/ui/ 2>/dev/null || true
+          if [ -d ui/icons ]; then
+            sudo cp ui/icons/*.svg /mnt/rpi/usr/share/yunsh/icons/ 2>/dev/null || true
+          fi
+          
+          # Copy system scripts
+          sudo cp system/S01yunsh-boot /mnt/rpi/etc/init.d/
+          sudo chmod +x /mnt/rpi/etc/init.d/S01yunsh-boot
+          
+          sudo cp system/yunsh-inputd /mnt/rpi/usr/bin/
+          sudo cp system/yunsh-powerd /mnt/rpi/usr/bin/
+          sudo chmod +x /mnt/rpi/usr/bin/yunsh-inputd /mnt/rpi/usr/bin/yunsh-powerd
+          
+          # Create boot config
+          sudo cp boot/config.txt /mnt/rpi-boot/config.txt 2>/dev/null || true
+          
+          # Set up auto-boot into YUNSH
+          sudo bash -c 'echo "YUNSH OS v1.0.0" > /m/rpi/etc/hostname'
+          
+          # Enable auto-login and start YUNSH
+          sudo bash -c 'cat >> /mnt/rpi/etc/systemd/system/getty@tty1.service.d/autologin.conf << "EOL"
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin root --noclear %I $TERM
+EOL
+'
+          
+          # Install Qt6 dependencies
+          sudo chroot /mnt/rpi apt-get update || true
+          sudo chroot /mnt/rpi apt-get install -y qt6-base-dev qt6-declarative-dev libqt6svg6 || true
+          
+          # Unmount
+          sudo umount /mnt/rpi
+          sudo umount /mnt/rpi-boot
+          
+          # Copy as final image
+          cp output/rpi-os-lite.img output/YUNSH-OS-v1.0.0.img
+
+      - name: Build full YUNSH OS from Buildroot
+        if: ${{ github.event.inputs.build_type == 'full' }}
+        run: |
+          # Clone Buildroot
+          git clone --depth 1 --branch 2024.02 https://github.com/buildroot/buildroot.git
+          cp buildroot/configs/yunsh_v1_defconfig buildroot/configs/
+          mkdir -p buildroot/board/yunsh/{boot,kernel}
+          cp kernel/yunsh_defconfig buildroot/board/yunsh/kernel/
+          cp boot/config.txt buildroot/board/yunsh/boot/
+          
+          cd buildroot
+          make yunsh_v1_defconfig
+          make -j$(nproc) 2>&1 | tail -50
+          
+          # Copy output
+          mkdir -p ../output
+          cp output/images/yunsh-os.img ../output/YUNSH-OS-v1.0.0.img || true
+
+      - name: Compress and upload image
+        run: |
+          ls -lh output/YUNSH-OS-v1.0.0.img
+          xz -k output/YUNSH-OS-v1.0.0.img
+          sha256sum output/YUNSH-OS-v1.0.0.img > output/YUNSH-OS-v1.0.0.img.sha256
+          sha256sum output/YUNSH-OS-v1.0.0.img.xz > output/YUNSH-OS-v1.0.0.img.xz.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: YUNSH-OS-v1.0.0
+          path: output/
+          compression-level: 0

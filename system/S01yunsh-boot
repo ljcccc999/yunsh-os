@@ -1,0 +1,76 @@
+#!/bin/sh
+# YUNSH OS v1.0 - Boot initialization script
+# Runs at system startup to bring up all YUNSH services
+
+export PATH=/usr/bin:/usr/sbin:/bin:/sbin
+export HOME=/root
+
+echo "=========================================="
+echo "  YUNSH OS v1.0 - Starting up..."
+echo "  Hardware: Raspberry Pi 4B/5 + AR Glasses"
+echo "=========================================="
+
+# Set up environment
+modprobe drm
+modprobe vc4
+modprobe v3d
+
+# Wait for DRM to be ready
+for i in $(seq 1 10); do
+    if [ -e /dev/dri/card0 ]; then
+        echo "YUNSH: DRM device ready"
+        break
+    fi
+    sleep 1
+done
+
+# Initialize display
+echo 0 > /sys/class/graphics/fbcon/cursor_blink 2>/dev/null || true
+echo 0 > /sys/class/vtconsole/vtcon1/bind 2>/dev/null || true
+
+# Set transparent background for console
+setterm -term linux -background black -foreground white -clear all > /dev/tty0 2>/dev/null || true
+
+# Start input daemon (USB mouse/keyboard support)
+echo "YUNSH: Starting input daemon..."
+/usr/bin/yunsh-inputd &
+
+# Start power management
+echo "YUNSH: Starting power management..."
+/usr/bin/yunsh-powerd &
+
+# Wait for network
+echo "YUNSH: Waiting for network..."
+for i in $(seq 1 30); do
+    if ip link show eth0 2>/dev/null | grep -q "UP"; then
+        echo "YUNSH: Network ready"
+        break
+    fi
+    if ip link show wlan0 2>/dev/null | grep -q "UP"; then
+        echo "YUNSH: WiFi ready"
+        break
+    fi
+    sleep 1
+done
+
+# Start OTA update daemon
+echo "YUNSH: Starting OTA update daemon..."
+/usr/bin/yunsh-update-daemon.py --daemon &
+
+# Start Waydroid Android container (background)
+echo "YUNSH: Starting Android container..."
+/usr/bin/yunsh-android-bridge.py &
+sleep 3
+
+# Install App Store on first boot
+if [ ! -f /var/lib/yunsh/.appstore-installed ]; then
+    echo "YUNSH: First boot - installing App Store..."
+    /usr/bin/install-appstore.sh &
+    touch /var/lib/yunsh/.appstore-installed
+fi
+
+# Start YUNSH compositor (main display)
+echo "YUNSH: Starting display compositor..."
+/usr/bin/yunsh-compositor &
+
+echo "YUNSH: Boot sequence complete"

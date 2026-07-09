@@ -1,0 +1,30 @@
+#!/bin/bash
+# YUNSH OS v1.0 - Factory Reset
+# Clears activation + user data, keeps UI files intact
+
+set -e
+
+echo "YUNSH OS v1.0 - Factory Reset"
+
+# Remove activation flag (shows wizard on next boot)
+rm -f /etc/yunsh/.activated
+
+# Clear user configs (but keep installed UI/system files)
+rm -rf /home/* 2>/dev/null || true
+rm -rf /root/.cache 2>/dev/null || true
+rm -rf /tmp/yunsh-* 2>/dev/null || true
+
+# Clear logs (optional)
+echo "" > /var/log/yunsh-update.log 2>/dev/null || true
+echo "" > /var/log/yunsh-network.log 2>/dev/null || true
+echo "" > /var/log/yunsh-bluetooth.log 2>/dev/null || true
+
+# Waydroid user data (apps, settings)
+waydroid session stop 2>/dev/null || true
+rm -rf /var/lib/waydroid/data/* 2>/dev/null || true
+
+echo "✅ Factory reset complete!"
+echo "Rebooting..."
+
+sleep 2
+reboot
