@@ -2,6 +2,8 @@
 
 面向 YUNSH V1 AR 眼镜的定制系统，基于 **Raspberry Pi OS Lite (Debian 13 Trixie)**。
 
+> ⬇️ **[下载最新镜像](https://github.com/ljcccc999/yunsh-os/releases)** — 前往 Releases 页面下载 `.img.xz` 文件
+
 ```
 ┌───────────────────────────────────────┐
 │         YUNSH OS v1.0                  │
