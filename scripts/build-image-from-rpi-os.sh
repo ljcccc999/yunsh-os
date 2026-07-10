@@ -209,6 +209,37 @@ SPLASHGEN
 echo "   splash: logo → YUNSH OS ✓"
 
 # ════════════════════════════════════════════════════════
+# STEP 4c: Download 应用宝 APK (pre-package in image)
+# ════════════════════════════════════════════════════════
+echo "=== Downloading 应用宝 APK ==="
+APPS_DIR="${YUNSH_DIR}/build/apps"
+mkdir -p "${APPS_DIR}"
+APK_FILE="${APPS_DIR}/appstore.apk"
+
+# Try multiple download URLs
+APK_DOWNLOADED=false
+for url in \
+    "https://dlied6.myapp.com/myapp/1104466820/sgame/20191217/com.tencent.android.qqdownloader_latest.apk" \
+    "https://appdownload.myapp.com/myapp/1104466820/sgame/20191217/com.tencent.android.qqdownloader.apk" \
+    "https://sj.qq.com/" ; do
+    echo "  Trying: $url"
+    if curl -sSL --connect-timeout 15 --max-time 120 -o "${APK_FILE}" "$url" 2>/dev/null; then
+        file_size=$(stat -f%z "${APK_FILE}" 2>/dev/null || stat -c%s "${APK_FILE}" 2>/dev/null || echo 0)
+        if [ "$file_size" -gt 1000000 ]; then
+            echo "  ✅ 下载成功: $(ls -lh ${APK_FILE} | awk '{print $5}')"
+            APK_DOWNLOADED=true
+            break
+        fi
+    fi
+done
+
+if [ "$APK_DOWNLOADED" = false ]; then
+    echo "  ⚠ 下载失败，将使用运行时下载方式"
+    # Create placeholder - firstboot will download it
+    echo "placeholder" > "${APK_FILE}"
+fi
+
+# ════════════════════════════════════════════════════════
 # STEP 5: Modify BOOT partition (FAT32 — macOS native)
 # ════════════════════════════════════════════════════════
 echo ""
@@ -355,6 +386,23 @@ add_file "${YUNSH_DIR}/system/yunsh-factory-reset" "/usr/bin/yunsh-factory-reset
 add_file "${YUNSH_DIR}/system/yunsh-install-progress.sh" "/usr/bin/yunsh-install-progress.sh"
 add_file "${YUNSH_DIR}/system/yunsh-inputd" "/usr/bin/yunsh-inputd"
 add_file "${YUNSH_DIR}/system/yunsh-powerd" "/usr/bin/yunsh-powerd"
+
+# Inject app launcher daemon
+add_file "${YUNSH_DIR}/system/yunsh-appd.py" "/usr/bin/yunsh-appd"
+
+# Inject 应用宝 APK (pre-downloaded)
+echo "" >> "${DEBUGFS_SCRIPT}"
+echo "# === 应用宝 APK ===" >> "${DEBUGFS_SCRIPT}"
+APK_FILE="${YUNSH_DIR}/build/apps/appstore.apk"
+if [ -f "$APK_FILE" ] && [ "$(stat -f%z "$APK_FILE" 2>/dev/null || stat -c%s "$APK_FILE" 2>/dev/null)" -gt 1000000 ]; then
+    add_file "$APK_FILE" "/usr/share/yunsh/apps/appstore.apk"
+    echo "   应用宝 APK 已注入 (real)"
+else
+    # Create a placeholder - firstboot will try to download
+    echo "placeholder" > "${YUNSH_DIR}/build/apps/appstore.apk"
+    add_file "${YUNSH_DIR}/build/apps/appstore.apk" "/usr/share/yunsh/apps/appstore.apk"
+    echo "   应用宝 APK 占位 (将在首次启动时下载)"
+fi
 
 # Copy firstboot to /usr/bin/ too (for fallback)
 add_file "${YUNSH_DIR}/boot/yunsh-firstboot.sh" "/usr/bin/yunsh-firstboot.sh"
@@ -549,6 +597,10 @@ WantedBy=sysinit.target
 SPLASHSVC
 add_file "${SPLASH_SVC}" "/etc/systemd/system/yunsh-splash.service"
 
+# App Launcher daemon
+APPD_SVC="${BUILD_DIR}/yunsh-appd.service"
+add_file "${APPD_SVC}" "/etc/systemd/system/yunsh-appd.service"
+
 # ─── Auto-login for tty1 ──────────────────────────
 echo "" >> "${DEBUGFS_SCRIPT}"
 echo "# === Auto-login ===" >> "${DEBUGFS_SCRIPT}"
@@ -596,6 +648,7 @@ echo "set_inode_field /usr/bin/yunsh-powerd mode 0755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-firstboot.sh mode 0755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-ui-launcher mode 0755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-splash mode 0755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-appd mode 0755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /etc/rc.local mode 0755" >> "${DEBUGFS_SCRIPT}"
 
 # ─── Remove RPi OS default first-boot services ────
@@ -631,7 +684,7 @@ rm -f "${BOOT_PARTITION_IMG}" "${ROOT_PARTITION_IMG}" \
       "${LAUNCHER_FILE}" "${SPLASH_FILE}" "${UPDATE_CONF}" \
       "${SVC_FILE}" "${NSVC_FILE}" "${BSVC_FILE}" "${USVC_FILE}" \
       "${SPLASH_SVC}" "${AUTOLOGIN_FILE}" "${RCLOCAL_FILE}" \
-      "${HOSTNAME_FILE}" "${DEBUGFS_SCRIPT}"
+      "${HOSTNAME_FILE}" "${DEBUGFS_SCRIPT}" "${APPD_SVC}"
 
 # ─── Done ──────────────────────────────────────────
 echo ""

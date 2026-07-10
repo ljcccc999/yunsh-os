@@ -288,8 +288,15 @@ ApplicationWindow {
     }
     
     function launchApp(appId) {
-        var cmd = "/usr/bin/yunsh-launcher " + appId + " &"
-        console.log("Launching: " + cmd)
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8590/launch", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                console.log("App launch [" + appId + "]: " + xhr.responseText)
+            }
+        }
+        xhr.send(JSON.stringify({action: "launch", appId: appId}))
     }
     
     // ─── Mouse movement resets idle timer ──────────

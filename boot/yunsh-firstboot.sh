@@ -76,40 +76,45 @@ pip3 install waydroid-tools 2>/dev/null || true
 waydroid init -s GAPPS -f 2>/dev/null || true
 
 show_progress 90 "安装 应用宝..."
-if [ -x /usr/bin/install-appstore.sh ]; then
-    /usr/bin/install-appstore.sh
+
+# ───── Wait for Waydroid init to finish ─────
+sleep 5
+
+# Install 应用宝 into Waydroid
+if [ -f /usr/share/yunsh/apps/appstore.apk ]; then
+    APK_SIZE=$(stat -c%s /usr/share/yunsh/apps/appstore.apk 2>/dev/null || stat -f%z /usr/share/yunsh/apps/appstore.apk 2>/dev/null || echo 0)
+    if [ "$APK_SIZE" -gt 100000 ]; then
+        echo "安装 应用宝 到 Waydroid..."
+        waydroid app install /usr/share/yunsh/apps/appstore.apk 2>/dev/null || echo "⚠ 应用宝 安装失败"
+    else
+        echo "⚠ APK 无效（大小: $APK_SIZE），尝试在线下载..."
+        curl -sSL --connect-timeout 15 --max-time 60 -o /tmp/appstore.apk \
+            "https://dlied6.myapp.com/myapp/1104466820/sgame/20191217/com.tencent.android.qqdownloader_latest.apk" \
+            2>/dev/null && \
+        waydroid app install /tmp/appstore.apk 2>/dev/null || \
+        echo "⚠ 在线下载安装失败，可在系统中手动安装"
+        rm -f /tmp/appstore.apk
+    fi
 else
-    cat > /usr/bin/install-appstore.sh << 'INSTALL_AS'
-#!/bin/bash
-echo "Downloading 应用宝..."
-APK_URL="https://dlied6.myapp.com/myapp/1104466820/sgame/20191217/com.tencent.android.qqdownloader_latest.apk"
-wget -q -O /usr/share/yunsh/apps/appstore.apk "$APK_URL" 2>/dev/null || {
-    echo "Download failed - install manually: https://sj.qq.com/"
-    exit 1
-}
-echo "Installing into Waydroid..."
-waydroid app install /usr/share/yunsh/apps/appstore.apk || true
-echo "应用宝 installed!"
-INSTALL_AS
-    chmod +x /usr/bin/install-appstore.sh
-    /usr/bin/install-appstore.sh
+    echo "⚠ 预装 APK 未找到，跳过"
 fi
 
-# ──────────────────────────────────────────────
-echo "============================================"
-echo "  YUNSH OS v1.0 - 首次安装"
-echo "============================================"
 
-show_progress 8 "更新软件源..."
+# ───── Enable Waydroid system services ─────
+systemctl enable waydroid-container.service 2>/dev/null || true
+systemctl enable waydroid.service 2>/dev/null || true
 
-show_progress 95 "完成系统配置..."
+# ───── Enable YUNSH app daemon ─────
+systemctl enable yunsh-appd.service 2>/dev/null || true
+
+# ───── Final system config ────────────────
 echo "yunsh-v1" > /etc/hostname
 hostname yunsh-v1
 
+# ───── Mark firstboot complete ────────────
 show_progress 100 "✅ 安装完成！正在重启..."
 touch /etc/yunsh/.packages_installed
 sync
 sleep 2
 
-# Reboot to enter YUNSH UI
 reboot
