@@ -2,6 +2,8 @@
 
 面向 YUNSH V1 AR 眼镜的定制系统，基于 **Raspberry Pi OS Lite (Debian 13 Trixie)**。
 
+> ⬇️ **[下载最新镜像](https://github.com/ljcccc999/yunsh-os/releases)** — 前往 Releases 页面下载 `.img.xz` 文件
+
 ```
 ┌───────────────────────────────────────┐
 │         YUNSH OS v1.0                  │
@@ -240,46 +242,39 @@ yunsh-os/
   ↓
 Raspberry Pi Bootloader
   ↓
-config.txt 配置 → KMS 显示驱动
+config.txt (1080p, KMS) 配置
   ↓
-Linux 6.6 内核启动
+Linux 6.6 内核启动 → systemd
   ↓
-systemd 启动 S01yunsh-boot（首启动检测）
+yunsh-os.service → yunsh-ui-launcher
   ↓
 ┌─ 检测 /etc/yunsh/.activated ──────┐
 │                                    │
-├─ 未激活 ──────────────────────────┤
-│  yunsh-boot-activate.sh 运行       │
-│    ↓                              │
-│  qt6-qmltooling 启动               │
-│    ↓                              │
-│  ActivationScreen.qml（激活向导）    │
-│    ├ 欢迎页面                       │
-│    ├ 选择语言                       │
-│    ├ 配置 Wi-Fi                     │
-│    ├ 输入激活码（可选）               │
-│    └ 点击"开始初始化"                │
-│    ↓                              │
-│  yunsh-firstboot.sh 运行           │
-│    ├ 安装 Waydroid                 │
-│    ├ 安装应用宝                     │
-│    ├ 安装浏览器                     │
-│    └ 下载 UI 更新                   │
-│    ↓                              │
-│  写入 /etc/yunsh/.activated        │
-│  重启                              │
+├─ 未激活（首次开机） ───────────────┤
+│  yunsh-firstboot.sh 运行            │
+│    ├ 更新源 & 安装 Qt6               │
+│    ├ 安装 Waydroid 容器              │
+│    ├ 安装应用宝                      │
+│    └ 安装蓝牙/网络/字体等依赖         │
+│  ↑ 需要联网首次安装                  │
+│    ↓                               │
+│  写入 .activated 标志                │
+│  重启                               │
 │                                    │
-├─ 已激活 ──────────────────────────┤
-│  yunsh-network-daemon.py 启动      │
-│  yunsh-bluetooth-daemon.py 启动    │
-│  yunsh-update-daemon.py 启动       │
-│  yunsh-screenshotd 启动            │
-│  yunsh-powerd 启动                 │
-│    ↓                              │
-│  开始 qt6-qmltooling 主界面        │
-│    ↓                              │
-│  HomeScreen.qml 显示               │
-│  → 进入 YUNSH OS 桌面              │
+├─ 已激活 ───────────────────────────┤
+│  qml main.qml (Qt6 QML 渲染器)      │
+│    ↓                               │
+│  ActivationScreen.qml 激活向导       │
+│    ├ 欢迎页面 (visionOS 毛玻璃)      │
+│    ├ 选择语言/键盘                    │
+│    ├ 连接 Wi-Fi                      │
+│    └ 初始化进度条                     │
+│    ↓                               │
+│  HomeScreen.qml → YUNSH 桌面        │
+│    ├ 状态栏 + 控制中心               │
+│    ├ 设置 / 浏览器 / Metaverse       │
+│    ├ 应用宝 / 文件管理器             │
+│    └ 后台 daemon (网络/蓝牙/更新)    │
 └────────────────────────────────────┘
 ```
 
@@ -349,155 +344,64 @@ yunsh-updater.py 启动
       reboot → 从新分区启动
 ```
 
-#### Qt6 镜像内置策略
+### 镜像构建策略
 
-为了首启动不需要连网，以下内容直接烧录到镜像中：
+YUNSH OS 镜像在 macOS 上通过以下方式构建：
 
-**内置到根文件系统（`/usr/lib/`）：**
-- `libQt6Qml.so.6` — Qt6 QML 核心运行时
-- `libQt6Quick.so.6` — Qt6 Quick 模块
-- `libQt6QmlModels.so.6` — QML 模型模块
-- `libQt6Network.so.6` — 网络模块
-- 其他 Qt6 依赖库（约 45MB）
+**构建流程：**
 
-**内置到根文件系统（`/usr/lib/`）：**
-- `qml/QtQml/` — QML 核心模块
-- `qml/QtQuick/` — Quick 基础模块
-- `qml/QtQuick/Controls/Basic/` — 基础控件
-- `qml/QtQuick/Controls/Fusion/` — Fusion 主题
-- `qml/QtQuick/Controls/Imagine/` — Imagine 主题
-- `qml/QtQuick/Layouts/` — 布局模块
-- `qml/QtQuick/Window/` — 窗口模块
-- `qml/QtQuick/Dialogs/` — 对话框模块
+```
+RPi OS Lite 镜像
+  ↓ cp 复制工作副本
+  ↓ hdiutil 挂载 boot 分区 (FAT32)
+  ├─ 写入 config.txt (1080p, KMS, 显示配置)
+  └─ 复制 yunsh-firstboot.sh
+  ↓ 提取 root 分区 (ext4)
+  ├─ debugfs 批量注入:
+  │ ├ 23 个 QML UI 文件       → /usr/share/yunsh/ui/
+  │ ├ 9 个 SVG 图标            → /usr/share/yunsh/icons/
+  │ ├ 6 个 Logo PNG            → /usr/share/yunsh/logo/
+  │ ├ 10 个系统脚本/daemon     → /usr/bin/
+  │ ├ 5 个 systemd 服务文件   → /etc/systemd/system/
+  │ ├ 启动器/闪屏/rc.local     → /usr/bin/
+  │ ├ autologin 配置           → /etc/systemd/system/
+  │ └ hostname → yunsh-v1      → /etc/hostname
+  ├─ symlink 启用 yunsh-os.service
+  └─ 设置 0755 可执行权限
+  ↓ dd 写回 ext4 → 成品镜像
+```
 
-**内置到根文件系统（`/usr/bin/`）：**
-- `qt6-qmltooling` — QML 场景查看器（用于启动 UI）
-
-**内置到根文件系统（`/etc/yunsh/`）：**
-- 所有 `.qml` UI 文件
-- SVG 图标集
-- 启动脚本
-- Logo 图片
-
-**首启动从 GitHub 下载：**
-- Waydroid 安卓兼容层
-- 应用宝（Android 应用商店）
-- 浏览器 WebEngine 组件
-- 其他可选组件
+**关键依赖：** macOS 上需安装 `e2fsprogs`（`brew install e2fsprogs`）来提供 `debugfs` 工具，用于直接操作 ext4 分区。
 
 ### 构建镜像
 
 #### 前置条件
 
-- **操作系统：** macOS 或 Linux
+- **操作系统：** macOS
 - **依赖工具：**
-  - `e2fsprogs`（macOS: `brew install e2fsprogs`）
-  - `xz`（macOS: `brew install xz`）
-  - `wget` 或 `curl`
+  - `e2fsprogs`（`brew install e2fsprogs`）— 提供 `debugfs` 用于 ext4 文件操作
+  - `xz`（macOS 自带或 `brew install xz`）
 - **基础镜像：** Raspberry Pi OS Lite (Debian 13 Trixie) arm64
+  - 下载后放到 `build/` 目录
+  - curl -LO https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-最新版本/文件
 
-#### 构建命令
-
-```bash
-# 1. 配置要用的镜像文件
-export RPIZ_IMAGE="raspios-lite.img"       # 输入：RPi OS 官方镜像
-export OUTPUT_IMAGE="output/YUNSH-OS-v1.0.0.img"  # 输出：YUNSH 系统镜像
-
-# 2. 执行构建脚本
-./scripts/build-image-from-rpi-os.sh
-```
-
-#### 构建流程（分步说明）
-
-1. **准备基础镜像**
-   - 下载 Raspberry Pi OS Lite (arm64)
-   - 确认镜像分区结构（FAT boot + ext4 rootfs）
-
-2. **注入 Qt6 运行时**
-   - 从 Debian Trixie 包仓库下载 Qt6 arm64 `.deb`
-   - 解压并复制到 ext4 分区的 `/usr/lib/aarch64-linux-gnu/`
-   - 复制 QML 模块到 `/usr/lib/aarch64-linux-gnu/qml/`
-   - 复制 `qt6-qmltooling` 到 `/usr/bin/`
-
-3. **注入系统文件**
-   - `yunsh-boot-activate.sh` → `/usr/bin/`
-   - 所有 `.qml` UI 文件 → `/etc/yunsh/ui/`
-   - SVG 图标 → `/etc/yunsh/ui/icons/`
-   - Logo 图片 → `/etc/yunsh/logo/`
-   - `yunsh-firstboot.sh` → `/usr/bin/`
-   - 系统守护进程 → `/usr/bin/`
-
-4. **配置 systemd 服务**
-   - `S01yunsh-boot` → `/etc/init.d/`（首启动激活）
-   - `S02yunsh-update` → `/etc/init.d/`（更新检查）
-   - rclocal 配置
-
-5. **压缩输出**
-   ```bash
-   xz -z output/YUNSH-OS-v1.0.0.img
-   ```
-   生成 `output/YUNSH-OS-v1.0.0.img.xz`（约 570MB）
-
-6. **生成校验文件**
-   ```bash
-   shasum -a 256 output/YUNSH-OS-v1.0.0.img.xz > output/YUNSH-OS-v1.0.0.img.xz.sha256
-   ```
-
-#### 手动注入方法（debugfs）
-
-构建脚本底层使用 `debugfs`（来自 e2fsprogs）直接操作 ext4 分区镜像，无需 mount：
+### 构建命令
 
 ```bash
-# 1. 获取 ext4 分区偏移量
-fdisk -lu raspi-os.img
-# 分区 2 起始扇区 × 512 = 字节偏移
-
-# 2. 提取 ext4 分区
-dd if=raspi-os.img of=rootfs.ext4 bs=512 skip=1064960 count=4751360
-
-# 3. 用 debugfs 注入文件
-debugfs -w rootfs.ext4 << EOF
-mkdir /etc/yunsh
-mkdir /etc/yunsh/ui
-write /path/to/ActivationScreen.qml /etc/yunsh/ui/ActivationScreen.qml
-write /usr/bin/yunsh-boot-activate.sh /usr/bin/yunsh-boot-activate.sh
-EOF
-
-# 4. 写回镜像
-dd if=rootfs.ext4 of=raspi-os.img bs=512 seek=1064960 count=4751360 conv=notrunc
+# 1. 下载并放置 RPi OS Lite 镜像到 build/ 目录
+# 2. 执行构建（macOS）
+bash scripts/build-image-from-rpi-os.sh
+# 3. 烧录到 SD 卡
+sudo dd if=output/YUNSH-OS-v1.0.0.img of=/dev/rdisk2 bs=1m status=progress
 ```
 
-### 发布新版本
+### 首次开机
 
-#### 通过 GitHub 网页发布（推荐）
-
-1. 打开 https://github.com/ljcccc999/yunsh-os/releases/new
-2. 填写版本标签：`v1.1.0`
-3. 编写更新说明（中文）
-4. 上传构建好的 `.img.xz` 文件（≤ 2GB）
-5. 测试版勾选 **☐ Set as a pre-release**
-6. 点击 **Publish release**
-
-#### 版本命名规范
-
-| 版本类型 | 标签示例 | 说明 |
-|---------|---------|------|
-| 正式版 | `v1.0.0` | 稳定发布 |
-| 小版本更新 | `v1.1.0` | 功能新增或修复 |
-| 大版本更新 | `v2.0.0` | 重大架构变更 |
-| 测试版 | `v1.1.0-beta` | 预览版 |
-
-**版本号比较规则：**
+第一次开机需要联网（装 Qt6/Waydroid 等依赖），之后全程离线。
+自动流程：
 ```
-v1.0.0 → v1.1.0  → 非大版本（次版本号变化）
-v1.0.0 → v2.0.0  → 大版本（主版本号变化）
+通电 → 自动安装 → 自动重启 → 自动进入 YUNSH 激活向导 → 进入桌面
 ```
-
-#### 通道分发逻辑
-
-- **Stable 通道** → 只返回 GitHub Release 中 **非 prerelease** 的最新版
-- **Beta 通道** → 返回最新的 5 个 Release，取版本号最高的（包含 prerelease）
-- 所以发测试版记得勾 **Set as a pre-release**，这样 Stable 用户不会收到
 
 ### 开发注意事项
 
