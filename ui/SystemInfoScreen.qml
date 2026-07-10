@@ -26,6 +26,31 @@ Rectangle {
 
     signal backToSettings()
 
+    // Read version config from /etc/yunsh/version.conf
+    function loadVersionConfig() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", "file:///etc/yunsh/version.conf", true)
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 0 || xhr.status === 200) {
+                    var text = xhr.responseText
+                    var lines = text.split('\n')
+                    for (var i = 0; i < lines.length; i++) {
+                        var line = lines[i].trim()
+                        if (line.indexOf('VERSION=') === 0) {
+                            osVersion = "YUNSH OS " + line.substring(8)
+                        } else if (line.indexOf('BUILD=') === 0) {
+                            buildNumber = line.substring(6)
+                        }
+                    }
+                }
+            }
+        }
+        xhr.send()
+    }
+
+    Component.onCompleted: loadVersionConfig()
+
     // Header
     Rectangle {
         anchors.top: parent.top

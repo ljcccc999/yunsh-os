@@ -100,7 +100,7 @@ echo "yunsh-v1" > /etc/hostname
 hostname yunsh-v1
 
 show_progress 100 "✅ 安装完成！正在重启..."
-touch /etc/yunsh/.activated
+touch /etc/yunsh/.packages_installed
 sync
 sleep 2
 

@@ -18,6 +18,30 @@ Rectangle {
     signal openNetworkSettings()
     signal openBluetoothSettings()
     signal openSystemInfo()
+
+    property string osVersionName: "YUNSH OS v1.0.0"
+
+    function loadVersionConfig() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", "file:///etc/yunsh/version.conf", true)
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                if (xhr.status === 0 || xhr.status === 200) {
+                    var text = xhr.responseText
+                    var lines = text.split('\n')
+                    for (var i = 0; i < lines.length; i++) {
+                        var line = lines[i].trim()
+                        if (line.indexOf('VERSION=') === 0) {
+                            osVersionName = "YUNSH OS " + line.substring(8)
+                        }
+                    }
+                }
+            }
+        }
+        xhr.send()
+    }
+
+    Component.onCompleted: loadVersionConfig()
     signal openDisplaySettings()
     signal openSoundSettings()
     signal openLanguageSettings()
@@ -179,7 +203,7 @@ Rectangle {
                 iconSource: "/usr/share/yunsh/icons/about.svg"
                 iconSize: 18
                 title: "关于本机"
-                subtitle: "YUNSH OS v1.0.0 · 内存 · 存储"
+                subtitle: osVersionName + " · 内存 · 存储"
                 showArrow: true
                 onClicked: settingsScreen.openSystemInfo()
             }
@@ -200,7 +224,7 @@ Rectangle {
                 iconSource: "/usr/share/yunsh/icons/update.svg"
                 iconSize: 18
                 title: "系统更新"
-                subtitle: "YUNSH OS v1.0.0 · 点击检查"
+                subtitle: osVersionName + " · 点击检查"
                 showArrow: true
                 onClicked: settingsScreen.openUpdatePage()
             }

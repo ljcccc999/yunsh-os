@@ -287,12 +287,12 @@ cat > "${LAUNCHER_FILE}" << 'LAUNCHER'
 # YUNSH OS v1.0 - UI Launcher
 cd /usr/share/yunsh/ui
 
-# First boot: run activation wizard
-if [ ! -f /etc/yunsh/.activated ]; then
-    # Run the first-boot setup script in background with progress
+# First boot: install packages
+if [ ! -f /etc/yunsh/.packages_installed ]; then
+    # Run the first-boot setup script
     if [ -x /usr/bin/yunsh-firstboot.sh ]; then
         /usr/bin/yunsh-firstboot.sh
-        touch /etc/yunsh/.activated
+        touch /etc/yunsh/.packages_installed
         sync
     fi
 fi
@@ -340,6 +340,16 @@ update_channel=stable
 # update_channel: stable | beta
 UC
 add_file "${UPDATE_CONF}" "/etc/yunsh/update.conf"
+
+# ─── Version config ──────────────────────────────
+echo "" >> "${DEBUGFS_SCRIPT}"
+echo "# === Version Config ===" >> "${DEBUGFS_SCRIPT}"
+VERSION_CONF="${BUILD_DIR}/yunsh-version.conf"
+cat > "${VERSION_CONF}" << 'VERCONF'
+VERSION=v1.0.0
+BUILD=2026.07.10.01
+VERCONF
+add_file "${VERSION_CONF}" "/etc/yunsh/version.conf"
 
 # ─── Systemd services ─────────────────────────────
 echo "" >> "${DEBUGFS_SCRIPT}"
