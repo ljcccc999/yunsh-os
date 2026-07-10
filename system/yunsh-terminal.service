@@ -1,0 +1,13 @@
+[Unit]
+Description=YUNSH OS Terminal Daemon (PTY bash)
+After=network.target yunsh-os.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/yunsh-terminal
+Restart=on-failure
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target

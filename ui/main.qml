@@ -59,7 +59,7 @@ ApplicationWindow {
             onOpenSystemUpdateUI: switchTo(updateScreen)
             onOpenNetwork: switchTo(networkScreen)
             onOpenBluetooth: switchTo(bluetoothScreen)
-            onOpenTerminal: launchTerminal()
+            onOpenTerminal: switchTo(terminalScreen)
             onShowControlCenter: controlCenter.show()
             onTakeScreenshot: takeScreenshot()
             onOpenAppLibrary: { /* future: app library */ }
@@ -171,6 +171,13 @@ ApplicationWindow {
                 anchors.fill: parent; visible: true; z: 10
                 onBackToHome: switchToHome()
             }
+        }
+        
+        // ===== TERMINAL =====
+        TerminalScreen {
+            id: terminalScreen
+            anchors.fill: parent
+            onBackToHome: switchToHome()
         }
         
         // ===== SCREENSHOT OVERLAY =====
@@ -298,19 +305,6 @@ ApplicationWindow {
             }
         }
         xhr.send(JSON.stringify({action: "launch", appId: appId}))
-    }
-
-    function launchTerminal() {
-        // Write trigger file → launcher picks it up, runs bash, restarts
-        var xhr = new XMLHttpRequest()
-        xhr.open("PUT", "file:///tmp/yunsh-launch-terminal")
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState === XMLHttpRequest.DONE) {
-                console.log("Terminal trigger written, exiting QML...")
-                Qt.quit()
-            }
-        }
-        xhr.send("terminal")
     }
     
     // ─── Mouse movement resets idle timer ──────────

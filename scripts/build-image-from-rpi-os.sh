@@ -390,6 +390,9 @@ add_file "${YUNSH_DIR}/system/yunsh-powerd" "/usr/bin/yunsh-powerd"
 # Inject app launcher daemon
 add_file "${YUNSH_DIR}/system/yunsh-appd.py" "/usr/bin/yunsh-appd"
 
+# Inject terminal daemon
+add_file "${YUNSH_DIR}/system/yunsh-terminal.py" "/usr/bin/yunsh-terminal"
+
 # Inject 应用宝 APK (pre-downloaded)
 echo "" >> "${DEBUGFS_SCRIPT}"
 echo "# === 应用宝 APK ===" >> "${DEBUGFS_SCRIPT}"
@@ -442,23 +445,7 @@ QT_QUICK_BACKEND=software \
 qml main.qml
 QML_EXIT=$?
 
-# Phase 4: Terminal mode (launch on demand)
-if [ -f /tmp/yunsh-launch-terminal ]; then
-    rm -f /tmp/yunsh-launch-terminal
-    echo ""
-    echo "═══════════════════════════════════════"
-    echo "  YUNSH OS Terminal"
-    echo "  Type 'exit' to return to YUNSH UI"
-    echo "═══════════════════════════════════════"
-    echo ""
-    /bin/bash
-    echo ""
-    echo "Returning to YUNSH UI..."
-    sleep 1
-    exec "$0"
-fi
-
-# Phase 5: If .activated was just created, restart launcher to enter home screen
+# Phase 4: If .activated was just created, restart launcher to enter home screen
 if [ -f /etc/yunsh/.activated ] && [ ! -f /etc/yunsh/.save_user_creds.sh ]; then
     exec "$0"
 fi
@@ -617,6 +604,10 @@ add_file "${SPLASH_SVC}" "/etc/systemd/system/yunsh-splash.service"
 APPD_SVC="${YUNSH_DIR}/system/yunsh-appd.service"
 add_file "${APPD_SVC}" "/etc/systemd/system/yunsh-appd.service"
 
+# Terminal daemon
+TERM_SVC="${YUNSH_DIR}/system/yunsh-terminal.service"
+add_file "${TERM_SVC}" "/etc/systemd/system/yunsh-terminal.service"
+
 # ─── Auto-login for tty1 ──────────────────────────
 echo "" >> "${DEBUGFS_SCRIPT}"
 echo "# === Auto-login ===" >> "${DEBUGFS_SCRIPT}"
@@ -665,6 +656,7 @@ echo "set_inode_field /usr/bin/yunsh-firstboot.sh mode 0755" >> "${DEBUGFS_SCRIP
 echo "set_inode_field /usr/bin/yunsh-ui-launcher mode 0755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-splash mode 0755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-appd mode 0755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-terminal mode 0755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /etc/rc.local mode 0755" >> "${DEBUGFS_SCRIPT}"
 
 # ─── Remove RPi OS default first-boot services ────

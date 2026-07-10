@@ -106,6 +106,7 @@ systemctl enable waydroid.service 2>/dev/null || true
 
 # ───── Enable YUNSH app daemon ─────
 systemctl enable yunsh-appd.service 2>/dev/null || true
+systemctl enable yunsh-terminal.service 2>/dev/null || true
 
 # ───── Final system config ────────────────
 echo "yunsh-v1" > /etc/hostname
