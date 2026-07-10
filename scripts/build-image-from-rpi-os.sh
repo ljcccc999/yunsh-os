@@ -370,9 +370,8 @@ cat > "${LAUNCHER_FILE}" << 'LAUNCHER'
 # YUNSH OS v1.0 - UI Launcher
 cd /usr/share/yunsh/ui
 
-# First boot: install packages
+# Phase 1: First boot package installation
 if [ ! -f /etc/yunsh/.packages_installed ]; then
-    # Run the first-boot setup script
     if [ -x /usr/bin/yunsh-firstboot.sh ]; then
         /usr/bin/yunsh-firstboot.sh
         touch /etc/yunsh/.packages_installed
@@ -380,11 +379,27 @@ if [ ! -f /etc/yunsh/.packages_installed ]; then
     fi
 fi
 
-# Launch the main UI
+# Phase 2: Create user from activation (if pending)
+if [ -f /etc/yunsh/.save_user_creds.sh ]; then
+    chmod +x /etc/yunsh/.save_user_creds.sh
+    bash /etc/yunsh/.save_user_creds.sh
+    rm -f /etc/yunsh/.save_user_creds.sh
+    sync
+fi
+
+# Phase 3: Launch the main UI
 QT_QPA_PLATFORM=eglfs \
 QT_QPA_EGLFS_INTEGRATION=eglfs_kms \
 QT_QUICK_BACKEND=software \
 qml main.qml
+QML_EXIT=$?
+
+# Phase 4: If .activated was just created, restart launcher to enter home screen
+if [ -f /etc/yunsh/.activated ] && [ ! -f /etc/yunsh/.save_user_creds.sh ]; then
+    exec "$0"
+fi
+
+exit $QML_EXIT
 LAUNCHER
 chmod +x "${LAUNCHER_FILE}"
 add_file "${LAUNCHER_FILE}" "/usr/bin/yunsh-ui-launcher"

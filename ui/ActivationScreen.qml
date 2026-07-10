@@ -6,6 +6,9 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
+// File I/O helper for writing user credentials
+import Qt.labs.platform 1.1
+
 Rectangle {
     id: activationScreen
     anchors.fill: parent
@@ -18,12 +21,17 @@ Rectangle {
     signal skipActivation()
 
     // ─── State ───────────────────────────────────────
-    property int currentStep: 0  // 0=welcome, 1=language, 2=wifi, 3=initializing
-    readonly property int totalSteps: 4
+    property int currentStep: 0  // 0=welcome, 1=language, 2=wifi, 3=account, 4=initializing
+    readonly property int totalSteps: 5
 
     property string selectedLanguage: "简体中文"
     property string selectedKeyboard: "拼音"
     property string wifiSSID: ""
+    property string accountUsername: "yunsh"
+    property string accountPassword: ""
+    property string accountConfirmPassword: ""
+    property bool accountValid: false
+    property string accountError: ""
 
     // ─── Background layers ──────────────────────────
     // Ambient glow (visionOS atmospheric)
@@ -451,18 +459,18 @@ Rectangle {
                         Text { anchors.centerIn: parent; text: "跳过"; color: "#8888A0"; font.pixelSize: 14 }
                         MouseArea {
                             anchors.fill: parent; hoverEnabled: true
-                            onClicked: currentStep = 3
+                            onClicked: currentStep = 4
                         }
                     }
                     
                     Rectangle {
                         width: 160; height: 44; radius: 22
-                        color: wifiBtn.containsMouse ? Qt.rgba(0/255, 212/255, 255/255, 0.25) : Qt.rgba(0/255, 212/255, 255/255, 0.15)
+                        color: wifiNextBtn.containsMouse ? Qt.rgba(0/255, 212/255, 255/255, 0.25) : Qt.rgba(0/255, 212/255, 255/255, 0.15)
                         border.color: Qt.rgba(0/255, 212/255, 255/255, 0.12); border.width: 1
                         Text { anchors.centerIn: parent; text: "下一步"; color: "#00D4FF"; font.pixelSize: 14; font.weight: Font.Medium }
                         MouseArea {
-                            id: wifiBtn; anchors.fill: parent; hoverEnabled: true
-                            onClicked: currentStep = 3
+                            id: wifiNextBtn; anchors.fill: parent; hoverEnabled: true
+                            onClicked: currentStep = 4
                         }
                     }
                 }
@@ -471,18 +479,179 @@ Rectangle {
     }
 
     // ════════════════════════════════════════════════════
-    // STEP 3: Initializing...
+    // STEP 3: Create Account
     // ════════════════════════════════════════════════════
     Item {
         anchors.fill: parent
         visible: currentStep === 3
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: 520; height: 480
+            radius: 32
+            color: Qt.rgba(15/255, 15/255, 32/255, 0.5)
+            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
+            border.width: 1
+
+            Column {
+                anchors.centerIn: parent
+                spacing: 16
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "创建账户"
+                    color: "#FFFFFF"; font.pixelSize: 22; font.weight: Font.Medium
+                }
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "设置用户名和密码来保护您的设备"
+                    color: Qt.rgba(255/255, 255/255, 255/255, 0.4)
+                    font.pixelSize: 12
+                    bottomPadding: 16
+                }
+
+                // Username field
+                Column {
+                    spacing: 6
+                    Row {
+                        spacing: 8
+                        Text { text: "用户名"; color: Qt.rgba(255/255, 255/255, 255/255, 0.6); font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
+                    }
+                    Rectangle {
+                        width: 380; height: 44; radius: 12
+                        color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+                        border.color: accountUsernameInput.activeFocus ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                        border.width: 1
+                        TextInput {
+                            id: accountUsernameInput
+                            anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
+                            verticalAlignment: TextInput.AlignVCenter
+                            color: "#FFFFFF"; font.pixelSize: 15
+                            placeholderText: "yunsh"
+                            placeholderTextColor: Qt.rgba(255/255, 255/255, 255/255, 0.2)
+                            onTextChanged: {
+                                accountUsername = text.length > 0 ? text : "yunsh"
+                            }
+                        }
+                    }
+                }
+
+                // Password field
+                Column {
+                    spacing: 6
+                    Row {
+                        spacing: 8
+                        Text { text: "密码"; color: Qt.rgba(255/255, 255/255, 255/255, 0.6); font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
+                    }
+                    Rectangle {
+                        width: 380; height: 44; radius: 12
+                        color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+                        border.color: accountPassInput.activeFocus ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                        border.width: 1
+                        TextInput {
+                            id: accountPassInput
+                            anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
+                            verticalAlignment: TextInput.AlignVCenter
+                            color: "#FFFFFF"; font.pixelSize: 15
+                            echoMode: TextInput.Password
+                            placeholderText: "输入密码"
+                            placeholderTextColor: Qt.rgba(255/255, 255/255, 255/255, 0.2)
+                            onTextChanged: accountPassword = text
+                        }
+                    }
+                }
+
+                // Confirm password field
+                Column {
+                    spacing: 6
+                    Row {
+                        spacing: 8
+                        Text { text: "确认密码"; color: Qt.rgba(255/255, 255/255, 255/255, 0.6); font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
+                    }
+                    Rectangle {
+                        width: 380; height: 44; radius: 12
+                        color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+                        border.color: accountConfirmInput.activeFocus ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                        border.width: 1
+                        TextInput {
+                            id: accountConfirmInput
+                            anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
+                            verticalAlignment: TextInput.AlignVCenter
+                            color: "#FFFFFF"; font.pixelSize: 15
+                            echoMode: TextInput.Password
+                            placeholderText: "再次输入密码"
+                            placeholderTextColor: Qt.rgba(255/255, 255/255, 255/255, 0.2)
+                            onTextChanged: accountConfirmPassword = text
+                        }
+                    }
+                }
+
+                // Error message
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: accountError
+                    color: "#FF4444"; font.pixelSize: 12
+                    visible: accountError.length > 0
+                }
+
+                // Buttons
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 12
+
+                    Rectangle {
+                        width: 160; height: 44; radius: 22
+                        color: Qt.rgba(255/255, 255/255, 255/255, 0.03)
+                        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04); border.width: 1
+                        Text { anchors.centerIn: parent; text: "跳过"; color: "#8888A0"; font.pixelSize: 14 }
+                        MouseArea {
+                            anchors.fill: parent; hoverEnabled: true
+                            onClicked: {
+                                accountUsername = "yunsh"
+                                accountPassword = "yunsh123"
+                                currentStep = 4
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        width: 160; height: 44; radius: 22
+                        color: accountNextBtn.containsMouse && (accountPassword.length > 0 && accountPassword === accountConfirmPassword) ? Qt.rgba(0/255, 212/255, 255/255, 0.25) : Qt.rgba(0/255, 212/255, 255/255, 0.15)
+                        border.color: Qt.rgba(0/255, 212/255, 255/255, 0.12); border.width: 1
+                        Text { anchors.centerIn: parent; text: "继续"; color: (accountPassword.length > 0 && accountPassword === accountConfirmPassword) ? "#00D4FF" : "#555566"; font.pixelSize: 14; font.weight: Font.Medium }
+                        MouseArea {
+                            id: accountNextBtn; anchors.fill: parent; hoverEnabled: true
+                            onClicked: {
+                                accountError = ""
+                                if (accountPassword.length < 4) {
+                                    accountError = "密码至少需要4个字符"
+                                } else if (accountPassword !== accountConfirmPassword) {
+                                    accountError = "两次密码不一致"
+                                } else {
+                                    currentStep = 4
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════
+    // STEP 4: Initializing...
+    // ════════════════════════════════════════════════════
+    Item {
+        anchors.fill: parent
+        visible: currentStep === 4
 
         property int progressValue: 0
         property int _timerCount: 0
 
         Timer {
             interval: 80
-            running: currentStep === 3 && progressValue < 100
+            running: currentStep === 4 && progressValue < 100
             repeat: true
             onTriggered: {
                 _timerCount++
