@@ -598,7 +598,7 @@ SPLASHSVC
 add_file "${SPLASH_SVC}" "/etc/systemd/system/yunsh-splash.service"
 
 # App Launcher daemon
-APPD_SVC="${BUILD_DIR}/yunsh-appd.service"
+APPD_SVC="${YUNSH_DIR}/system/yunsh-appd.service"
 add_file "${APPD_SVC}" "/etc/systemd/system/yunsh-appd.service"
 
 # ─── Auto-login for tty1 ──────────────────────────

@@ -1,0 +1,13 @@
+[Unit]
+Description=YUNSH OS App Launcher Daemon
+After=network.target yunsh-os.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/yunsh-appd
+Restart=on-failure
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
