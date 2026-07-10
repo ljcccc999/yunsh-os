@@ -4,3 +4,5 @@ build/qt-debs/
 *.img
 *.img.xz
 raspios-lite.img
+build/splash
+build/logo

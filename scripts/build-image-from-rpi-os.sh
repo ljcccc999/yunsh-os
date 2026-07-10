@@ -138,6 +138,66 @@ echo "Boot partition: sector $BOOT_START-$BOOT_END (offset ${BOOT_OFFSET})"
 echo "Root partition: sector $ROOT_START-$ROOT_END (offset ${ROOT_OFFSET})"
 
 # ════════════════════════════════════════════════════════
+# STEP 4b: Generate boot splash screen
+# ════════════════════════════════════════════════════════
+echo "=== Generating boot splash screen ==="
+mkdir -p "${YUNSH_DIR}/build/splash"
+# Generate splash using Python + PIL
+python3 << 'SPLASHGEN' 2>&1
+import os, struct
+from PIL import Image, ImageDraw, ImageFont
+
+logo = Image.open("logo/logo-512.png").convert("RGBA")
+logo_size = 256
+W, H = 1920, 1080
+splash = Image.new("RGB", (W, H), (0, 0, 0))
+
+logo_small = logo.resize((256, 256), Image.LANCZOS)
+lx, ly = (W-256)//2, (H-256)//2 - 80
+if logo_small.mode == "RGBA":
+    r, g, b, a = logo_small.split()
+    splash.paste(logo_small, (lx, ly), mask=a)
+else:
+    splash.paste(logo_small, (lx, ly))
+
+draw = ImageDraw.Draw(splash)
+try:
+    font_lg = ImageFont.truetype("/System/Library/Fonts/SFNSDisplay.ttf", 48)
+    font_sm = ImageFont.truetype("/System/Library/Fonts/SFNSDisplay.ttf", 20)
+except:
+    font_lg = font_sm = ImageFont.load_default()
+
+text = "YUNSH OS"
+bbox = draw.textbbox((0, 0), text, font=font_lg)
+draw.text(((W - (bbox[2]-bbox[0]))//2, ly+256+40), text, fill=(0, 212, 255), font=font_lg)
+
+sub = "v1.0.0"
+bbox = draw.textbbox((0, 0), sub, font=font_sm)
+draw.text(((W - (bbox[2]-bbox[0]))//2, ly+256+100), sub, fill=(100, 100, 140), font=font_sm)
+
+status = "正在启动..."
+bbox = draw.textbbox((0, 0), status, font=font_sm)
+draw.text(((W - (bbox[2]-bbox[0]))//2, H-80), status, fill=(60, 60, 90), font=font_sm)
+
+os.makedirs("build/splash", exist_ok=True)
+splash.save("build/splash/yunsh-splash-1080p.bmp", "BMP")
+splash_720 = splash.resize((1280, 720), Image.LANCZOS)
+splash_720.save("build/splash/yunsh-splash-720p.bmp", "BMP")
+
+# Raw framebuffer dump (BGRA 32bpp)
+fb_data = bytearray()
+for y in range(H):
+    for x in range(W):
+        r, g, b = splash.getpixel((x, y))
+        fb_data.extend([b, g, r, 0])
+
+with open("build/splash/yunsh-splash.raw", "wb") as f:
+    f.write(fb_data)
+print(f"Splash generated: logo+text on 1920x1080 black")
+SPLASHGEN
+echo "   splash screen generated ✓"
+
+# ════════════════════════════════════════════════════════
 # STEP 5: Modify BOOT partition (FAT32 — macOS native)
 # ════════════════════════════════════════════════════════
 echo ""
@@ -183,6 +243,9 @@ framebuffer_height=1080
 framebuffer_depth=32
 framebuffer_ignore_alpha=0
 
+# Boot splash (custom logo via framebuffer)
+disable_splash=1
+
 # RPi 5 / general
 arm_64bit=1
 hdmi_force_hotplug=1
@@ -190,9 +253,19 @@ RPI5CONFIG
     echo "   config.txt updated"
 fi
 
-# 5b. Copy YUNSH boot scripts to boot partition
-echo "→ Copying YUNSH boot scripts to /boot/"
+# 5b. Copy YUNSH boot scripts + splash to boot partition
+echo "→ Copying YUNSH boot files to /boot/"
 cp "${YUNSH_DIR}/boot/yunsh-firstboot.sh" "${BOOT_MOUNT}/yunsh-firstboot.sh" 2>/dev/null || true
+# Copy splash files for framebuffer display
+if [ -f "${YUNSH_DIR}/build/splash/yunsh-splash.raw" ]; then
+    cp "${YUNSH_DIR}/build/splash/yunsh-splash.raw" "${BOOT_MOUNT}/yunsh-splash.raw" 2>/dev/null || true
+    echo "   splash.raw copied"
+fi
+if [ -f "${YUNSH_DIR}/build/splash/yunsh-splash-720p.bmp" ]; then
+    cp "${YUNSH_DIR}/build/splash/yunsh-splash-720p.bmp" "${BOOT_MOUNT}/yunsh-splash-720p.bmp" 2>/dev/null || true
+    cp "${YUNSH_DIR}/build/splash/yunsh-splash-1080p.bmp" "${BOOT_MOUNT}/yunsh-splash-1080p.bmp" 2>/dev/null || true
+    echo "   splash BMPs copied"
+fi
 
 # Unmount boot
 sync
@@ -306,20 +379,10 @@ LAUNCHER
 chmod +x "${LAUNCHER_FILE}"
 add_file "${LAUNCHER_FILE}" "/usr/bin/yunsh-ui-launcher"
 
-# ─── Create splash script ─────────────────────────
+# ─── Create splash script (framebuffer) ────────────
 SPLASH_FILE="${BUILD_DIR}/yunsh-splash"
-cat > "${SPLASH_FILE}" << 'SPLASH'
-#!/bin/bash
-echo -e "\e[32m"
-echo "  YYYY  UU   UU  NNNN   SSS  H   H"
-echo "   YY   UU   UU  NN NN  SS    H   H"
-echo "   YY   UU   UU  NN NN  SSS   HHHHH"
-echo "   YY   UU   UU  NN NN    SS  H   H"
-echo "   YY    UUUUU   NN NN  SSS   H   H"
-echo -e "\e[0m"
-echo "  YUNSH OS v1.0"
-echo "  AR Glasses Operating System"
-SPLASH
+# Use the framebuffer splash from system/ (already written)
+cp "${YUNSH_DIR}/system/yunsh-splash" "${SPLASH_FILE}"
 chmod +x "${SPLASH_FILE}"
 echo "" >> "${DEBUGFS_SCRIPT}"
 echo "# === YUNSH Splash ===" >> "${DEBUGFS_SCRIPT}"
@@ -440,18 +503,21 @@ WantedBy=multi-user.target
 USVC
 add_file "${USVC_FILE}" "/etc/systemd/system/yunsh-update.service"
 
-# Splash service
+# Splash service (early boot logo on framebuffer)
 SPLASH_SVC="${BUILD_DIR}/yunsh-splash.service"
 cat > "${SPLASH_SVC}" << 'SPLASHSVC'
 [Unit]
 Description=YUNSH Splash Screen
 DefaultDependencies=no
-Before=display-manager.service
+After=local-fs.target
+Before=multi-user.target
 
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/yunsh-splash
 RemainAfterExit=yes
+StandardOutput=null
+StandardError=null
 
 [Install]
 WantedBy=sysinit.target
