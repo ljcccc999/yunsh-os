@@ -189,9 +189,12 @@ def load_config() -> dict:
 # ---------------------------------------------------------------------------
 # Download
 # ---------------------------------------------------------------------------
-def download_image(url: str, dest: str, expected_sha256: str = "") -> str:
+def download_image(url: str, dest: str, expected_sha256: str = "",
+                 api_download: bool = False) -> str:
     """
     Download a firmware image from *url* to *dest*.
+    If *api_download* is True, uses api.github.com with Accept header
+    (GFW-safe download path).
     Shows progress percentage on stdout.
     Returns the path to the downloaded file.
     Raises on failure.
@@ -199,7 +202,18 @@ def download_image(url: str, dest: str, expected_sha256: str = "") -> str:
     logger.info("Downloading: %s", url)
     logger.info("Destination: %s", dest)
 
-    req = urllib.request.Request(url, headers={"User-Agent": "YUNSH-OS-Updater/1.0"})
+    if api_download:
+        # GFW-safe: use api.github.com with Accept: application/octet-stream
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "YUNSH-OS-Updater/1.0",
+            "Accept": "application/octet-stream",
+        })
+        # api.github.com redirects to a signed S3 URL (objects.githubusercontent.com)
+        # which is accessible in China
+    else:
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "YUNSH-OS-Updater/1.0",
+        })
 
     with urllib.request.urlopen(req, timeout=300) as resp:
         total = int(resp.headers.get("Content-Length", 0))
@@ -507,9 +521,11 @@ def auto_update():
     logger.info("Current: slot %s (%s) | Inactive: slot %s (%s)",
                 current_slot, current_dev, inactive_slot, inactive_dev)
 
-    # Download
+    # Download (use api.github.com if available — GFW-safe path)
+    api_download = download_url.startswith("https://api.github.com/")
     try:
-        download_image(download_url, DOWNLOAD_PATH, expected_sha256)
+        download_image(download_url, DOWNLOAD_PATH, expected_sha256,
+                       api_download=api_download)
     except (ValueError, urllib.error.URLError, OSError) as exc:
         logger.error("Download failed: %s", exc)
         _write_json(RESULT_PATH, {

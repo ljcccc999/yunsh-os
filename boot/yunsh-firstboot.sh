@@ -30,6 +30,23 @@ echo "============================================"
 echo "  YUNSH OS v1.0 - 首次安装"
 echo "============================================"
 
+# ───── 使用国内镜像加速 ────────────────────
+MIRROR_DEBIAN="https://mirrors.tuna.tsinghua.edu.cn/debian"
+MIRROR_RPI="https://mirrors.tuna.tsinghua.edu.cn/raspberrypi"
+
+if grep -q "deb.debian.org" /etc/apt/sources.list 2>/dev/null; then
+    echo "切换到清华镜像源..."
+    # Debian 主源
+    sed -i 's|http://deb.debian.org/debian|'"$MIRROR_DEBIAN"'|g' /etc/apt/sources.list 2>/dev/null || true
+    sed -i 's|https://deb.debian.org/debian|'"$MIRROR_DEBIAN"'|g' /etc/apt/sources.list 2>/dev/null || true
+    # Raspberry Pi 源
+    if [ -f /etc/apt/sources.list.d/raspi.list ]; then
+        sed -i 's|http://archive.raspberrypi.com/debian|'"$MIRROR_RPI"'|g' /etc/apt/sources.list.d/raspi.list 2>/dev/null || true
+        sed -i 's|https://archive.raspberrypi.com/debian|'"$MIRROR_RPI"'|g' /etc/apt/sources.list.d/raspi.list 2>/dev/null || true
+    fi
+    apt-get update -qq 2>/dev/null || true
+fi
+
 show_progress 8 "更新软件源..."
 apt-get update -qq 2>/dev/null || true
 

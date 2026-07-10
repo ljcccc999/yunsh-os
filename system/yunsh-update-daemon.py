@@ -174,11 +174,13 @@ def _parse_release(data: dict) -> dict:
     assets = data.get("assets", [])
     download_url = ""
     sha256 = ""
+    asset_id = ""
     for asset in assets:
         name = asset.get("name", "").lower()
         if name.endswith(".img") or name.endswith(".img.xz"):
             if not download_url:
                 download_url = asset.get("browser_download_url", "")
+                asset_id = asset.get("id", "")
         if name.endswith(".sha256") or name.endswith(".sha256sum"):
             sha256 = _fetch_sha256(asset.get("browser_download_url", ""))
     if not sha256 and body:
@@ -193,6 +195,7 @@ def _parse_release(data: dict) -> dict:
         "sha256": sha256,
         "published_at": published,
         "prerelease": prerelease,
+        "asset_id": asset_id,
     }
 
 
@@ -478,6 +481,13 @@ class UpdateDaemon:
             ),
         }
         info.update(release)
+
+        # Replace download_url with api.github.com URL (GFW-safe)
+        if release.get("asset_id"):
+            api_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/assets/{release['asset_id']}"
+            info["download_url"] = api_url
+            info["api_download"] = True
+
         write_update_info(info)
 
         self._state = "idle"
@@ -500,25 +510,39 @@ class UpdateDaemon:
             logger.info("No update available (current=%s latest=%s)", cur or "?", latest)
 
     def _perform_download(self) -> dict:
-        """Download the update image — placeholder for real threaded implementation."""
+        """Download the update image via api.github.com (GFW-safe)."""
         self._state = "downloading"
-        url = self._latest_release.get("download_url", "")
-        sha256_expected = self._latest_release.get("sha256", "")
+        release = self._latest_release
+        if not release:
+            self._state = "error"
+            return {"error": "no release data"}
+
+        asset_id = release.get("asset_id", "")
+        version = release.get("version", "")
         write_status(
             state="downloading",
-            latest_version=self._latest_release.get("version", ""),
+            latest_version=version,
         )
-        logger.info("Starting download: %s", url)
-        # The actual download is delegated to yunsh-updater.py
-        # Here we just record intent
+
+        if not asset_id:
+            logger.warning("No asset_id available, cannot download via API")
+            self._state = "error"
+            return {"error": "no asset_id for API download"}
+
+        # Download via api.github.com (not blocked in China)
+        api_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/assets/{asset_id}"
+        logger.info("Downloading via API: %s", api_url)
+
+        # yunsh-updater.py will handle the actual download with this URL
         result = {
             "status": "ok",
             "message": "download delegated to yunsh-updater.py",
-            "url": url,
-            "sha256": sha256_expected,
-            "version": self._latest_release.get("version", ""),
+            "url": api_url,
+            "api_download": True,  # signal to use API auth header
+            "sha256": release.get("sha256", ""),
+            "version": version,
+            "asset_id": asset_id,
         }
-        # In production, spawn a thread or subprocess here
         self._state = "idle"
         write_status(state="idle")
         return result
