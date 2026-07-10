@@ -684,7 +684,7 @@ rm -f "${BOOT_PARTITION_IMG}" "${ROOT_PARTITION_IMG}" \
       "${LAUNCHER_FILE}" "${SPLASH_FILE}" "${UPDATE_CONF}" \
       "${SVC_FILE}" "${NSVC_FILE}" "${BSVC_FILE}" "${USVC_FILE}" \
       "${SPLASH_SVC}" "${AUTOLOGIN_FILE}" "${RCLOCAL_FILE}" \
-      "${HOSTNAME_FILE}" "${DEBUGFS_SCRIPT}" "${APPD_SVC}"
+      "${HOSTNAME_FILE}" "${DEBUGFS_SCRIPT}"
 
 # ─── Done ──────────────────────────────────────────
 echo ""
