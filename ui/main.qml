@@ -86,52 +86,84 @@ ApplicationWindow {
         }
         
         // ===== SETTINGS =====
-        SettingsScreen {
+        Item {
             id: settingsScreen
-            anchors.fill: parent
-            visible: false
-            z: 50
-            
-            onBackToHome: switchToHome()
-            onOpenUpdatePage: switchTo(updateScreen)
-            onOpenUpdateHistory: switchTo(updateHistoryScreen)
-            onOpenNetworkSettings: switchTo(networkScreen)
-            onOpenBluetoothSettings: switchTo(bluetoothScreen)
-            onOpenSystemInfo: switchTo(systemInfoScreen)
-            onOpenDisplaySettings: { /* display settings: brightness/theme - TBD */ }
-            onOpenSoundSettings: { /* sound settings: volume/output - TBD */ }
-            onOpenLanguageSettings: { /* language/input settings - TBD */ }
-            onOpenDateTimeSettings: { /* date/time/timezone settings - TBD */ }
+            anchors.fill: parent; visible: false; z: 50
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(0/255, 0/255, 0/255, 0.3)
+            }
+            SettingsScreen {
+                anchors.fill: parent; visible: true
+                onBackToHome: switchToHome()
+                onOpenUpdatePage: switchTo(updateScreen)
+                onOpenUpdateHistory: switchTo(updateHistoryScreen)
+                onOpenNetworkSettings: switchTo(networkScreen)
+                onOpenBluetoothSettings: switchTo(bluetoothScreen)
+                onOpenSystemInfo: switchTo(systemInfoScreen)
+                onOpenDisplaySettings: { /* display settings: brightness/theme - TBD */ }
+                onOpenSoundSettings: { /* sound settings: volume/output - TBD */ }
+                onOpenLanguageSettings: { /* language/input settings - TBD */ }
+                onOpenDateTimeSettings: { /* date/time/timezone settings - TBD */ }
+            }
         }
         
-        // ===== SYSTEM INFO (About) =====
-        SystemInfoScreen {
+        // ===== SYSTEM INFO =====
+        Item {
             id: systemInfoScreen
             anchors.fill: parent; visible: false; z: 55
-            onBackToSettings: switchTo(settingsScreen)
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(0/255, 0/255, 0/255, 0.3)
+            }
+            SystemInfoScreen {
+                anchors.fill: parent; visible: true
+                onBackToSettings: switchTo(settingsScreen)
+            }
         }
         
-        // ===== ABOUT (legacy) =====
-        AboutScreen {
+        // ===== ABOUT =====
+        Item {
             id: aboutScreen
             anchors.fill: parent; visible: false; z: 50
-            onBackToHome: switchToHome()
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(0/255, 0/255, 0/255, 0.3)
+            }
+            AboutScreen {
+                anchors.fill: parent; visible: true
+                onBackToHome: switchToHome()
+            }
         }
         
         // ===== NETWORK/Wi-Fi =====
-        NetworkScreen {
+        Item {
             id: networkScreen
             anchors.fill: parent; visible: false; z: 55
-            onBackToSettings: switchTo(settingsScreen)
-            onBackToHome: switchToHome()
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(0/255, 0/255, 0/255, 0.3)
+            }
+            NetworkScreen {
+                anchors.fill: parent; visible: true
+                onBackToSettings: switchTo(settingsScreen)
+                onBackToHome: switchToHome()
+            }
         }
         
         // ===== BLUETOOTH =====
-        BluetoothScreen {
+        Item {
             id: bluetoothScreen
             anchors.fill: parent; visible: false; z: 55
-            onBackToSettings: switchTo(settingsScreen)
-            onBackToHome: switchToHome()
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(0/255, 0/255, 0/255, 0.3)
+            }
+            BluetoothScreen {
+                anchors.fill: parent; visible: true
+                onBackToSettings: switchTo(settingsScreen)
+                onBackToHome: switchToHome()
+            }
         }
         
         // ===== UPDATE =====
@@ -192,10 +224,17 @@ ApplicationWindow {
         }
         
         // ===== TERMINAL =====
-        TerminalScreen {
+        Item {
             id: terminalScreen
-            anchors.fill: parent
-            onBackToHome: switchToHome()
+            anchors.fill: parent; visible: false; z: 60
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(0/255, 0/255, 0/255, 0.3)
+            }
+            TerminalScreen {
+                anchors.fill: parent; visible: true
+                onBackToHome: switchToHome()
+            }
         }
 
         // ===== PHOTOS =====
@@ -245,6 +284,7 @@ ApplicationWindow {
         updateHistoryScreen.visible = false
         browserScreen.visible = false
         metaverseScreen.visible = false
+        terminalScreen.visible = false
         photosScreen.visible = false
         screen.visible = true
     }
@@ -254,6 +294,7 @@ ApplicationWindow {
         updateHistoryScreen.visible = false
         browserScreen.visible = false
         metaverseScreen.visible = false
+        terminalScreen.visible = false
         photosScreen.visible = false
         settingsScreen.visible = false
         aboutScreen.visible = false

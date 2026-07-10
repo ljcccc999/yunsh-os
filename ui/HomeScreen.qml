@@ -1,5 +1,5 @@
-// YUNSH OS v1.0 - Home Screen (visionOS / iOS-style)
-// Pure app grid pages + YUNSH logo + dock
+// YUNSH OS v1.0 - Home Screen (visionOS Ultimate)
+// Dynamic app pages (iOS-style), glass clock widget, floating dock
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
@@ -25,14 +25,45 @@ Item {
     signal openAppLibrary()
     signal showControlCenter()
     signal takeScreenshot()
-    
-    // Pure black background (transparent in AR glasses)
+
+    // ─── App Model (dynamic, auto-paginates) ────────────
+    property var appList: [
+        { name: "设置", icon: "settings.svg",        color: "#00D4FF",   action: "settings" },
+        { name: "Browser", icon: "settings.svg",      color: "#4CAF50",   action: "browser" },
+        { name: "Metaverse", icon: "metaverse.svg",   color: "#9C27B0",   action: "metaverse" },
+        { name: "应用宝", icon: "appstore.svg",        color: "#FF9800",   action: "appstore" },
+        { name: "文件", icon: "files.svg",             color: "#2196F3",   action: "files" },
+        { name: "终端", icon: "terminal.svg",          color: "#00D4FF",   action: "terminal" },
+        { name: "相册", icon: "photos.svg",            color: "#FFC107",   action: "photos" }
+    ]
+
+    readonly property int columns: 4
+    readonly property int rows: 2
+    readonly property int appsPerPage: columns * rows
+
+    function appCount() { return appList.length }
+    function pageCount() { return Math.ceil(appList.length / appsPerPage) }
+
+    function handleAppAction(action) {
+        switch(action) {
+            case "settings":    homeScreen.openSettings(); break
+            case "browser":     homeScreen.openBrowser(); break
+            case "metaverse":   homeScreen.openMetaverse(); break
+            case "appstore":    homeScreen.openAppStore(); break
+            case "files":       homeScreen.openFileManager(); break
+            case "terminal":    homeScreen.openTerminal(); break
+            case "photos":      homeScreen.openPhotos(); break
+            default:            console.log("Unknown app:", action)
+        }
+    }
+
+    // ─── Background ──────────────────────────────
     Rectangle {
         anchors.fill: parent
         color: "#000000"
     }
-    
-    // Subtle ambient glow (visionOS atmospheric effect)
+
+    // Subtle ambient glow
     Rectangle {
         anchors.centerIn: parent
         width: parent.width * 0.6
@@ -40,7 +71,7 @@ Item {
         radius: width / 2
         color: Qt.rgba(0/255, 100/255, 255/255, 0.02)
     }
-    
+
     // Status Bar
     StatusBar {
         id: statusBar
@@ -49,11 +80,10 @@ Item {
         anchors.right: parent.right
         visible: showStatusBar
         z: 100
-        
         onScreenshotTriggered: homeScreen.takeScreenshot()
     }
-    
-    // Main content - YUNSH logo + swipeable app pages
+
+    // ─── Main Content ────────────────────────────
     Item {
         id: mainContent
         anchors.top: statusBar.bottom
@@ -65,81 +95,102 @@ Item {
             anchors.fill: parent
             spacing: 8
 
-            // ── YUNSH Logo ──
+            // ── VisionOS Orb Clock ──
             Item {
                 width: parent.width
-                height: 48
-                anchors.horizontalCenter: undefined  // reset centering
+                height: 56
 
-                Row {
+                Item {
                     anchors.centerIn: parent
-                    spacing: 10
 
-                    // Atom logo
-                    Item {
-                        width: 28; height: 28
-                        anchors.verticalCenter: parent.verticalCenter
+                    // Glass orb background
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: orbContent.width + 36
+                        height: 36; radius: 18
+                        color: Qt.rgba(12/255, 12/255, 25/255, 0.35)
+                        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                        border.width: 1
 
-                        // Electron orbit ring
+                        // Frost layer
                         Rectangle {
-                            anchors.centerIn: parent
-                            width: 28; height: 14
-                            radius: 14
-                            color: "transparent"
-                            border.color: Qt.rgba(0/255, 212/255, 255/255, 0.18)
-                            border.width: 1.5
-                            transform: Rotation { angle: -30 }
+                            anchors.fill: parent; radius: 18
+                            color: Qt.rgba(255/255, 255/255, 255/255, 0.02)
                         }
+
+                        // Top highlight rim
                         Rectangle {
-                            anchors.centerIn: parent
-                            width: 28; height: 14
-                            radius: 14
-                            color: "transparent"
-                            border.color: Qt.rgba(0/255, 212/255, 255/255, 0.18)
-                            border.width: 1.5
-                            transform: Rotation { angle: 30 }
+                            anchors.top: parent.top
+                            anchors.left: parent.left; anchors.leftMargin: 10
+                            anchors.right: parent.right; anchors.rightMargin: 10
+                            height: 1; radius: 1
+                            color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
                         }
-                        Rectangle {
-                            anchors.centerIn: parent
-                            width: 28; height: 14
-                            radius: 14
-                            color: "transparent"
-                            border.color: Qt.rgba(0/255, 212/255, 255/255, 0.18)
-                            border.width: 1.5
-                            transform: Rotation { angle: 90 }
-                        }
-                        // Electron dot
-                        Rectangle {
-                            anchors.centerIn: parent
-                            width: 4; height: 4; radius: 2
-                            color: "#00D4FF"
+
+                        layer.enabled: true
+                        layer.effect: DropShadowEffect {
+                            radius: 20; samples: 40
+                            color: Qt.rgba(0/255, 0/255, 0/255, 0.3)
+                            verticalOffset: 4
                         }
                     }
 
-                    Column {
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: -2
+                    Row {
+                        id: orbContent
+                        anchors.centerIn: parent
+                        spacing: 12
+
+                        // YUNSH brand
+                        Column {
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: -2
+                            Text {
+                                text: "YUNSH"; color: "#FFFFFF"
+                                font.pixelSize: 15; font.weight: Font.Bold
+                                font.letterSpacing: 2.5
+                            }
+                            Text {
+                                text: "OS"; color: Qt.rgba(255/255, 255/255, 255/255, 0.25)
+                                font.pixelSize: 9; font.letterSpacing: 5
+                            }
+                        }
+
+                        // Separator
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 1; height: 18
+                            color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
+                        }
+
+                        // Time
                         Text {
-                            text: "YUNSH"
+                            id: clockText
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: {
+                                var d = new Date()
+                                return d.toLocaleTimeString(Qt.locale("zh_CN"), "HH:mm")
+                            }
                             color: "#FFFFFF"
-                            font.pixelSize: 18
-                            font.weight: Font.Bold
-                            font.letterSpacing: 3
+                            font.pixelSize: 16
+                            font.weight: Font.Light
                         }
-                        Text {
-                            text: "OS"
-                            color: Qt.rgba(255/255, 255/255, 255/255, 0.3)
-                            font.pixelSize: 10
-                            font.letterSpacing: 6
-                        }
+                    }
+                }
+
+                Clock { id: clock }
+                Timer {
+                    interval: 1000; running: true; repeat: true
+                    onTriggered: {
+                        var d = new Date()
+                        clockText.text = d.toLocaleTimeString(Qt.locale("zh_CN"), "HH:mm")
                     }
                 }
             }
 
-            // ── Swipeable App Pages ──
+            // ── Dynamic App Pages ──
             Item {
                 width: parent.width
-                height: parent.height - 56  // subtract logo area
+                height: parent.height - 64
 
                 SwipeView {
                     id: swipeView
@@ -147,126 +198,61 @@ Item {
                     interactive: true
                     clip: true
 
-                    // ─── Page 1: Main Apps ─────────────
-                    Item {
-                        Grid {
-                            anchors.centerIn: parent
-                            spacing: 28
-                            columns: 4
+                    Repeater {
+                        model: pageCount()
 
-                            AppIcon {
-                                appName: "设置"
-                                appIcon: "/usr/share/yunsh/icons/settings.svg"
-                                iconColor: Qt.rgba(0/255, 212/255, 255/255, 0.5)
-                                onClicked: homeScreen.openSettings()
-                            }
-                            AppIcon {
-                                appName: "Browser"
-                                appIcon: "/usr/share/yunsh/icons/settings.svg"
-                                iconColor: Qt.rgba(76/255, 175/255, 80/255, 0.5)
-                                onClicked: homeScreen.openBrowser()
-                            }
-                            AppIcon {
-                                appName: "Metaverse"
-                                appIcon: "/usr/share/yunsh/icons/metaverse.svg"
-                                iconColor: Qt.rgba(156/255, 39/255, 176/255, 0.5)
-                                onClicked: homeScreen.openMetaverse()
-                            }
-                            AppIcon {
-                                appName: "应用宝"
-                                appIcon: "/usr/share/yunsh/icons/appstore.svg"
-                                iconColor: Qt.rgba(255/255, 152/255, 0/255, 0.5)
-                                onClicked: homeScreen.openAppStore()
-                            }
-                            AppIcon {
-                                appName: "文件"
-                                appIcon: "/usr/share/yunsh/icons/files.svg"
-                                iconColor: Qt.rgba(33/255, 150/255, 243/255, 0.5)
-                                onClicked: homeScreen.openFileManager()
-                            }
-                            AppIcon {
-                                appName: "Wi-Fi"
-                                appIcon: "/usr/share/yunsh/icons/wifi.svg"
-                                iconColor: Qt.rgba(0/255, 150/255, 255/255, 0.5)
-                                onClicked: homeScreen.openNetwork()
-                            }
-                            AppIcon {
-                                appName: "终端"
-                                appIcon: "/usr/share/yunsh/icons/terminal.svg"
-                                iconColor: Qt.rgba(0/255, 212/255, 255/255, 0.5)
-                                onClicked: homeScreen.openTerminal()
-                            }
-                            AppIcon {
-                                appName: "相册"
-                                appIcon: "/usr/share/yunsh/icons/photos.svg"
-                                iconColor: Qt.rgba(255/255, 193/255, 7/255, 0.5)
-                                onClicked: homeScreen.openPhotos()
-                            }
-                            AppIcon {
-                                appName: "摄像头"
-                                appIcon: "/usr/share/yunsh/icons/camera.svg"
-                                iconColor: Qt.rgba(0/255, 150/255, 255/255, 0.5)
-                                visible: false  // placeholder
-                            }
-                        }
-
-                        // Version text at bottom
-                        Text {
-                            anchors.bottom: parent.bottom
-                            anchors.bottomMargin: 16
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: "YUNSH OS v1.0.0"
-                            color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
-                            font.pixelSize: 11
-                        }
-                    }
-
-                    // ─── Page 2: Waydroid / Library ─────────────
-                    Item {
-                        Column {
-                            anchors.centerIn: parent
-                            spacing: 24
-
-                            Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: "已安装应用"
-                                color: Qt.rgba(255/255, 255/255, 255/255, 0.5)
-                                font.pixelSize: 20
-                                font.weight: Font.Light
-                            }
-
-                            Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: "通过应用宝安装 Android 应用"
-                                color: Qt.rgba(255/255, 255/255, 255/255, 0.2)
-                                font.pixelSize: 12
-                            }
+                        Item {
+                            property int pageIndex: index
+                            property int startIdx: pageIndex * appsPerPage
+                            property int endIdx: Math.min(startIdx + appsPerPage, appList.length)
 
                             Grid {
-                                anchors.horizontalCenter: parent.horizontalCenter
+                                anchors.centerIn: parent
                                 spacing: 28
-                                columns: 4
+                                columns: columns
 
-                                AppIcon {
-                                    appName: "应用宝"
-                                    appIcon: "/usr/share/yunsh/icons/appstore.svg"
-                                    iconColor: Qt.rgba(255/255, 152/255, 0/255, 0.5)
-                                    onClicked: homeScreen.openAppStore()
+                                Repeater {
+                                    model: endIdx - startIdx
+
+                                    AppIcon {
+                                        appName: appList[startIdx + index].name
+                                        appIcon: "/usr/share/yunsh/icons/" + appList[startIdx + index].icon
+                                        iconColor: {
+                                            var c = appList[startIdx + index].color
+                                            var r = parseInt(c.substring(1,3), 16)
+                                            var g = parseInt(c.substring(3,5), 16)
+                                            var b = parseInt(c.substring(5,7), 16)
+                                            return Qt.rgba(r/255, g/255, b/255, 0.5)
+                                        }
+                                        onClicked: handleAppAction(appList[startIdx + index].action)
+                                    }
                                 }
+                            }
+
+                            // Version text on first page only
+                            Text {
+                                anchors.bottom: parent.bottom
+                                anchors.bottomMargin: 16
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: "YUNSH OS v1.0.0"
+                                color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
+                                font.pixelSize: 11
+                                visible: pageIndex === 0
                             }
                         }
                     }
                 }
 
-                // Page indicator
+                // Page indicator — auto-adjusts
                 PageIndicator {
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.bottom: parent.bottom
                     anchors.bottomMargin: 0
-                    count: swipeView.count
+                    count: pageCount()
                     currentIndex: swipeView.currentIndex
                     interactive: true
                     spacing: 6
+                    visible: pageCount() > 1
 
                     delegate: Rectangle {
                         width: index === swipeView.currentIndex ? 10 : 6
@@ -275,29 +261,35 @@ Item {
                         Behavior on width { NumberAnimation { duration: 120 } }
                     }
                 }
+
+                // Single dot when only 1 page
+                Rectangle {
+                    anchors.bottom: parent.bottom; anchors.bottomMargin: 0
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 6; height: 6; radius: 3
+                    color: Qt.rgba(255/255, 255/255, 255/255, 0.1)
+                    visible: pageCount() <= 1
+                }
             }
         }
     }
-    
+
     // ===== FLOATING SCREENSHOT BUTTON =====
     Rectangle {
         id: screenshotFloatingBtn
         anchors.right: parent.right; anchors.rightMargin: 24
         anchors.bottom: dockArea.top; anchors.bottomMargin: 16
-        width: 48; height: 48
-        radius: 24
-        z: 50
+        width: 48; height: 48; radius: 24; z: 50
         color: mouseArea.containsMouse ? Qt.rgba(0/255, 212/255, 255/255, 0.18) : Qt.rgba(0/255, 212/255, 255/255, 0.08)
         border.color: mouseArea.containsMouse ? Qt.rgba(0/255, 212/255, 255/255, 0.2) : Qt.rgba(0/255, 212/255, 255/255, 0.06)
         border.width: 1
-        
+
         Rectangle {
             anchors.fill: parent; radius: 24
             color: "transparent"
-            border.color: Qt.rgba(0/255, 212/255, 255/255, 0.05)
-            border.width: 2
+            border.color: Qt.rgba(0/255, 212/255, 255/255, 0.05); border.width: 2
         }
-        
+
         Image {
             anchors.centerIn: parent
             source: "/usr/share/yunsh/icons/screenshot.svg"
@@ -305,39 +297,27 @@ Item {
             sourceSize.width: 48; sourceSize.height: 48
             fillMode: Image.PreserveAspectFit
         }
-        
+
         MouseArea {
-            id: mouseArea
-            anchors.fill: parent
-            hoverEnabled: true
+            id: mouseArea; anchors.fill: parent; hoverEnabled: true
             onClicked: homeScreen.takeScreenshot()
         }
-        
+
         Behavior on color { ColorAnimation { duration: 120 } }
     }
-    
-    // Dock
+
+    // ===== DOCK =====
     Item {
         id: dockArea
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: 8
+        anchors.bottom: parent.bottom; anchors.bottomMargin: 8
         anchors.left: parent.left; anchors.leftMargin: 40
         anchors.right: parent.right; anchors.rightMargin: 40
-        height: 80
-        visible: showDock
-        z: 100
-        
+        height: 80; visible: showDock; z: 100
+
         AppDock {
             anchors.fill: parent
             onAppLaunched: function(appId) {
-                switch(appId) {
-                    case "settings": homeScreen.openSettings(); break;
-                    case "appstore": homeScreen.openAppStore(); break;
-                    case "about": homeScreen.openAbout(); break;
-                    case "browser": homeScreen.openBrowser(); break;
-                    case "metaverse": homeScreen.openMetaverse(); break;
-                    case "update": homeScreen.openSystemUpdateUI(); break;
-                }
+                handleAppAction(appId)
             }
             onOpenAppLibrary: homeScreen.openAppLibrary()
         }
