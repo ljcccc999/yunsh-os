@@ -20,10 +20,24 @@ TextField {
         padding: 4
 
         background: Rectangle {
-            color: "#1e1e3a"
-            radius: 10
-            border.color: Qt.rgba(0/255, 212/255, 255/255, 0.15)
+            color: Qt.rgba(12/255, 12/255, 25/255, 0.75)
+            radius: 12
+            border.color: Qt.rgba(0/255, 212/255, 255/255, 0.12)
             border.width: 1
+
+            // Frost
+            Rectangle {
+                anchors.fill: parent; radius: 12
+                color: Qt.rgba(255/255, 255/255, 255/255, 0.02)
+            }
+            // Top highlight
+            Rectangle {
+                anchors.top: parent.top
+                anchors.left: parent.left; anchors.leftMargin: 8
+                anchors.right: parent.right; anchors.rightMargin: 8
+                height: 1; radius: 1
+                color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+            }
         }
 
         Row {
