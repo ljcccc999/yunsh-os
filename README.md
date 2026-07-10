@@ -142,12 +142,10 @@ yunsh-os/
 │   ├── flash-mac.sh                 # Mac 端一键刷写
 │   ├── process-logo.sh              # 品牌 Logo 处理
 │   └── process-logo.py              # Logo 处理辅助脚本
-│
-├── system/                  # 系统守护进程
 │   ├── yunsh-update-daemon.py       # OTA 更新守护进程（后台检查更新）
 │   ├── yunsh-updater.py             # OTA 更新器（A/B 分区写入）
 │   ├── yunsh-firstboot.sh           # 首启动安装脚本
-│   ├── yunsh-boot-activate.sh       # 首启动激活脚本
+│   ├── yunsh-boot-activate.sh       # 首启动激活脚本（旧）
 │   ├── yunsh-network-daemon.py      # 网络管理守护进程
 │   ├── yunsh-bluetooth-daemon.py    # 蓝牙管理守护进程
 │   ├── yunsh-install-progress.sh    # 安装进度显示
@@ -227,8 +225,7 @@ yunsh-os/
 │   └── logo-full.png
 │
 ├── .gitignore
-├── README.md                 # 本文件
-└── BUILD.md                  # 构建指南（已合并到本文件）
+└── README.md                 # 本文件
 ```
 
 ### 系统架构
@@ -391,14 +388,6 @@ RPi OS Lite 镜像
 bash scripts/build-image-from-rpi-os.sh
 # 3. 烧录到 SD 卡
 sudo dd if=output/YUNSH-OS-v1.0.0.img of=/dev/rdisk2 bs=1m status=progress
-```
-
-### 首次开机
-
-第一次开机需要联网（装 Qt6/Waydroid 等依赖），之后全程离线。
-自动流程：
-```
-通电 → 自动安装 → 自动重启 → 自动进入 YUNSH 激活向导 → 进入桌面
 ```
 
 ### 开发注意事项
