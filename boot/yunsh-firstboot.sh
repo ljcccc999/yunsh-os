@@ -25,15 +25,7 @@ show_progress() {
     fi
 }
 
-# ─── Create default user ────────────────────────────
-echo "Creating default user..."
-if ! id -u yunsh &>/dev/null; then
-    useradd -m -s /bin/bash yunsh
-    echo 'yunsh:yunsh123' | chpasswd
-    usermod -aG sudo,audio,video,input,render yunsh
-fi
-
-# ── 开始安装 ──
+# ──────────────────────────────────────────────
 echo "============================================"
 echo "  YUNSH OS v1.0 - 首次安装"
 echo "============================================"
@@ -102,6 +94,13 @@ INSTALL_AS
     chmod +x /usr/bin/install-appstore.sh
     /usr/bin/install-appstore.sh
 fi
+
+# ──────────────────────────────────────────────
+echo "============================================"
+echo "  YUNSH OS v1.0 - 首次安装"
+echo "============================================"
+
+show_progress 8 "更新软件源..."
 
 show_progress 95 "完成系统配置..."
 echo "yunsh-v1" > /etc/hostname
