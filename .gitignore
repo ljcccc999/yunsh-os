@@ -6,3 +6,4 @@ build/qt-debs/
 raspios-lite.img
 build/splash
 build/logo
+build/apps/
