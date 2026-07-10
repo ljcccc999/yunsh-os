@@ -25,7 +25,15 @@ show_progress() {
     fi
 }
 
-# ──────────────────────────────────────────────
+# ─── Create default user ────────────────────────────
+echo "Creating default user..."
+if ! id -u yunsh &>/dev/null; then
+    useradd -m -s /bin/bash yunsh
+    echo 'yunsh:yunsh123' | chpasswd
+    usermod -aG sudo,audio,video,input,render yunsh
+fi
+
+# ── 开始安装 ──
 echo "============================================"
 echo "  YUNSH OS v1.0 - 首次安装"
 echo "============================================"

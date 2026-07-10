@@ -583,6 +583,11 @@ echo "set_inode_field /usr/bin/yunsh-ui-launcher mode 0755" >> "${DEBUGFS_SCRIPT
 echo "set_inode_field /usr/bin/yunsh-splash mode 0755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /etc/rc.local mode 0755" >> "${DEBUGFS_SCRIPT}"
 
+# ─── Remove RPi OS default first-boot services ────
+echo "" >> "${DEBUGFS_SCRIPT}"
+echo "# === Remove RPi OS first-boot services ===" >> "${DEBUGFS_SCRIPT}"
+echo "rm /etc/systemd/system/multi-user.target.wants/userconfig.service" >> "${DEBUGFS_SCRIPT}"
+
 # ─── Run debugfs ─────────────────────────────────
 echo ""
 echo "=== Running debugfs injection ==="
