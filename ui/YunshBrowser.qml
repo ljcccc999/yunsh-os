@@ -13,10 +13,11 @@ Item {
 
     signal backToHome()
 
-    property url currentUrl: "https://yunsh.com"
+    property url currentUrl: "https://www.bing.com"
     property bool isLoading: false
     property int loadProgress: 0
     property string pageTitle: ""
+    property string _pendingDomain: ""  // original domain input, for http fallback
 
     // Pure black background
     Rectangle { anchors.fill: parent; color: "#000000" }
@@ -125,15 +126,19 @@ Item {
                         onAccepted: {
                             var text = urlInput.text.trim()
                             if (text.length === 0) return
-                            // Auto-add https:// if no protocol
+                            // Auto-add protocol if missing
                             if (!text.startsWith("http://") && !text.startsWith("https://")) {
-                                // Check if it looks like a domain (contains dot)
+                                // Check if it looks like a domain (contains dot like .com/.org/.cn)
                                 if (text.indexOf(".") >= 0 && text.indexOf(" ") < 0) {
+                                    browserScreen._pendingDomain = text
                                     text = "https://" + text
                                 } else {
-                                    // Search via Google
-                                    text = "https://www.google.com/search?q=" + encodeURIComponent(text)
+                                    // Search via Bing
+                                    browserScreen._pendingDomain = ""
+                                    text = "https://www.bing.com/search?q=" + encodeURIComponent(text)
                                 }
+                            } else {
+                                browserScreen._pendingDomain = ""
                             }
                             webView.url = text
                             urlInput.text = text
@@ -195,9 +200,18 @@ Item {
                 loadProgress = 100
                 pageTitle = webView.title
                 urlInput.text = webView.url.toString()
+                browserScreen._pendingDomain = ""
             } else if (loadRequest.status === WebEngineLoadRequest.LoadFailedStatus) {
                 isLoading = false
                 console.log("Page load failed:", loadRequest.errorString)
+
+                // Auto fallback: https → http
+                if (browserScreen._pendingDomain.length > 0) {
+                    console.log("HTTPS failed, retrying with HTTP for:", browserScreen._pendingDomain)
+                    var domain = browserScreen._pendingDomain
+                    browserScreen._pendingDomain = ""  // prevent infinite loop
+                    webView.url = "http://" + domain
+                }
             }
         }
 
@@ -244,7 +258,7 @@ Item {
                 spacing: 2; width: 60
                 Text { anchors.horizontalCenter: parent.horizontalCenter; text: "⌂"; color: "#00D4FF"; font.pixelSize: 16 }
                 Text { anchors.horizontalCenter: parent.horizontalCenter; text: "首页"; color: "#00D4FF"; font.pixelSize: 10 }
-                MouseArea { anchors.fill: parent; onClicked: webView.url = "https://yunsh.com" }
+                MouseArea { anchors.fill: parent; onClicked: webView.url = "https://www.bing.com" }
             }
 
             // Copy URL
