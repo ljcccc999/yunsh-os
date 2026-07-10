@@ -18,11 +18,6 @@ APP_MAP = {
         "package": "com.tencent.android.qqdownloader",
         "name": "应用宝"
     },
-    "terminal": {
-        "type": "command",
-        "command": "openvt -c 2 -f -l /bin/bash",
-        "name": "终端"
-    },
 }
 
 
@@ -67,11 +62,6 @@ class AppHandler(BaseHTTPRequestHandler):
                 time.sleep(1)
                 result = subprocess.run(
                     ["waydroid", "app", "launch", app["package"]],
-                    capture_output=True, text=True, timeout=30
-                )
-            elif app["type"] == "command":
-                result = subprocess.run(
-                    app["command"], shell=True,
                     capture_output=True, text=True, timeout=30
                 )
             else:

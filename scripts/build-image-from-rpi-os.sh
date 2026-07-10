@@ -442,7 +442,23 @@ QT_QUICK_BACKEND=software \
 qml main.qml
 QML_EXIT=$?
 
-# Phase 4: If .activated was just created, restart launcher to enter home screen
+# Phase 4: Terminal mode (launch on demand)
+if [ -f /tmp/yunsh-launch-terminal ]; then
+    rm -f /tmp/yunsh-launch-terminal
+    echo ""
+    echo "═══════════════════════════════════════"
+    echo "  YUNSH OS Terminal"
+    echo "  Type 'exit' to return to YUNSH UI"
+    echo "═══════════════════════════════════════"
+    echo ""
+    /bin/bash
+    echo ""
+    echo "Returning to YUNSH UI..."
+    sleep 1
+    exec "$0"
+fi
+
+# Phase 5: If .activated was just created, restart launcher to enter home screen
 if [ -f /etc/yunsh/.activated ] && [ ! -f /etc/yunsh/.save_user_creds.sh ]; then
     exec "$0"
 fi
