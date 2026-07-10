@@ -1,42 +1,68 @@
 #!/bin/bash
-# YUNSH OS Boot Splash
-# Shows YUNSH logo on framebuffer during boot
-# Pure bash, no external dependencies
+# YUNSH OS Boot Splash — Apple-style two-phase display
+# Phase 1: atom logo only (1.5s)
+# Phase 2: atom logo + "YUNSH OS" text
+# Pure bash + cat, no external dependencies
 
 FB_DEV="/dev/fb0"
-SPLASH_FILE="/boot/yunsh-splash.raw"
 
 # Wait for framebuffer
 for i in $(seq 1 30); do
     [ -c "$FB_DEV" ] && break
     sleep 0.1
 done
+[ -c "$FB_DEV" ] || exit 0
 
-# Write splash to framebuffer
-if [ -f "$SPLASH_FILE" ]; then
-    cat "$SPLASH_FILE" > "$FB_DEV" 2>/dev/null || true
-elif [ -f "/boot/yunsh-splash-1080p.bmp" ]; then
-    # Fallback: use Python3 to parse BMP if available
+# Phase 1: Atom logo only (Apple style — just the mark)
+if [ -f "/boot/yunsh-splash-logo.raw" ]; then
+    cat "/boot/yunsh-splash-logo.raw" > "$FB_DEV" 2>/dev/null
+elif [ -f "/boot/yunsh-splash-logo.bmp" ]; then
     command -v python3 >/dev/null 2>&1 && python3 -c "
 import sys, struct
-path = '/boot/yunsh-splash-1080p.bmp'
-with open(path, 'rb') as f:
-    d = f.read()
-off = struct.unpack('<I', d[10:14])[0]
-w = struct.unpack('<i', d[18:22])[0]
-h = abs(struct.unpack('<i', d[22:26])[0])
-bpp = struct.unpack('<H', d[28:30])[0]
-row = ((bpp * w + 31)//32)*4
-out = bytearray(w*h*4)
+p = '/boot/yunsh-splash-logo.bmp'
+with open(p,'rb') as f: d=f.read()
+off=struct.unpack('<I',d[10:14])[0]
+w=struct.unpack('<i',d[18:22])[0]
+h=abs(struct.unpack('<i',d[22:26])[0])
+bpp=struct.unpack('<H',d[28:30])[0]
+row=((bpp*w+31)//32)*4
+out=bytearray(w*h*4)
 for y in range(h):
-    sy = h-1-y
+    sy=h-1-y
     for x in range(w):
-        po = off + sy*row + x*(bpp//8)
-        r, g, b = d[po+2], d[po+1], d[po]
-        pi = (y*w + x)*4
-        out[pi:pi+4] = bytes([b, g, r, 0])
+        po=off+sy*row+x*(bpp//8)
+        r,g,b=d[po+2],d[po+1],d[po]
+        pi=(y*w+x)*4
+        out[pi:pi+4]=bytes([b,g,r,0])
 sys.stdout.buffer.write(out)
-" > "$FB_DEV" 2>/dev/null || true
+" > "$FB_DEV" 2>/dev/null
+fi
+
+# Phase 2: After 1.5s, show logo + "YUNSH OS" text
+sleep 1.5
+
+if [ -f "/boot/yunsh-splash-full.raw" ]; then
+    cat "/boot/yunsh-splash-full.raw" > "$FB_DEV" 2>/dev/null
+elif [ -f "/boot/yunsh-splash-full.bmp" ]; then
+    command -v python3 >/dev/null 2>&1 && python3 -c "
+import sys, struct
+p = '/boot/yunsh-splash-full.bmp'
+with open(p,'rb') as f: d=f.read()
+off=struct.unpack('<I',d[10:14])[0]
+w=struct.unpack('<i',d[18:22])[0]
+h=abs(struct.unpack('<i',d[22:26])[0])
+bpp=struct.unpack('<H',d[28:30])[0]
+row=((bpp*w+31)//32)*4
+out=bytearray(w*h*4)
+for y in range(h):
+    sy=h-1-y
+    for x in range(w):
+        po=off+sy*row+x*(bpp//8)
+        r,g,b=d[po+2],d[po+1],d[po]
+        pi=(y*w+x)*4
+        out[pi:pi+4]=bytes([b,g,r,0])
+sys.stdout.buffer.write(out)
+" > "$FB_DEV" 2>/dev/null
 fi
 
 exit 0

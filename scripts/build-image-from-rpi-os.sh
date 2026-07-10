@@ -144,58 +144,69 @@ echo "=== Generating boot splash screen ==="
 mkdir -p "${YUNSH_DIR}/build/splash"
 # Generate splash using Python + PIL
 python3 << 'SPLASHGEN' 2>&1
-import os, struct
+import os
 from PIL import Image, ImageDraw, ImageFont
 
 logo = Image.open("logo/logo-512.png").convert("RGBA")
-logo_size = 256
 W, H = 1920, 1080
-splash = Image.new("RGB", (W, H), (0, 0, 0))
+lw, lh = 220, 220  # logo size
+bg = Image.new("RGB", (W, H), (0, 0, 0))
 
-logo_small = logo.resize((256, 256), Image.LANCZOS)
-lx, ly = (W-256)//2, (H-256)//2 - 80
+logo_small = logo.resize((lw, lh), Image.LANCZOS)
+lx, ly = (W-lw)//2, (H-lh)//2 - 40
+
 if logo_small.mode == "RGBA":
     r, g, b, a = logo_small.split()
-    splash.paste(logo_small, (lx, ly), mask=a)
+    bg.paste(logo_small, (lx, ly), mask=a)
 else:
-    splash.paste(logo_small, (lx, ly))
+    bg.paste(logo_small, (lx, ly))
 
-draw = ImageDraw.Draw(splash)
+draw = ImageDraw.Draw(bg)
 try:
-    font_lg = ImageFont.truetype("/System/Library/Fonts/SFNSDisplay.ttf", 48)
-    font_sm = ImageFont.truetype("/System/Library/Fonts/SFNSDisplay.ttf", 20)
+    font_lg = ImageFont.truetype("/System/Library/Fonts/SFNSDisplay.ttf", 44)
 except:
-    font_lg = font_sm = ImageFont.load_default()
+    font_lg = ImageFont.load_default()
 
 text = "YUNSH OS"
 bbox = draw.textbbox((0, 0), text, font=font_lg)
-draw.text(((W - (bbox[2]-bbox[0]))//2, ly+256+40), text, fill=(0, 212, 255), font=font_lg)
-
-sub = "v1.0.0"
-bbox = draw.textbbox((0, 0), sub, font=font_sm)
-draw.text(((W - (bbox[2]-bbox[0]))//2, ly+256+100), sub, fill=(100, 100, 140), font=font_sm)
-
-status = "正在启动..."
-bbox = draw.textbbox((0, 0), status, font=font_sm)
-draw.text(((W - (bbox[2]-bbox[0]))//2, H-80), status, fill=(60, 60, 90), font=font_sm)
+draw.text(((W - (bbox[2]-bbox[0]))//2, ly+lh+50), text, fill=(0, 212, 255), font=font_lg)
 
 os.makedirs("build/splash", exist_ok=True)
-splash.save("build/splash/yunsh-splash-1080p.bmp", "BMP")
-splash_720 = splash.resize((1280, 720), Image.LANCZOS)
-splash_720.save("build/splash/yunsh-splash-720p.bmp", "BMP")
 
-# Raw framebuffer dump (BGRA 32bpp)
-fb_data = bytearray()
-for y in range(H):
-    for x in range(W):
-        r, g, b = splash.getpixel((x, y))
-        fb_data.extend([b, g, r, 0])
+# Generate raw fb dumps
+for name, has_text in [("yunsh-splash-logo", False), ("yunsh-splash-full", True)]:
+    img = Image.new("RGB", (W, H), (0, 0, 0))
+    if logo_small.mode == "RGBA":
+        r, g, b, a = logo_small.split()
+        img.paste(logo_small, (lx, ly), mask=a)
+    else:
+        img.paste(logo_small, (lx, ly))
+    if has_text:
+        d = ImageDraw.Draw(img)
+        try:
+            ft = ImageFont.truetype("/System/Library/Fonts/SFNSDisplay.ttf", 44)
+        except:
+            ft = ImageFont.load_default()
+        bb = d.textbbox((0, 0), text, font=ft)
+        d.text(((W - (bb[2]-bb[0]))//2, ly+lh+50), text, fill=(0, 212, 255), font=ft)
+    # Raw BGRA
+    fb = bytearray()
+    for y in range(H):
+        for x in range(W):
+            r, g, b = img.getpixel((x, y))
+            fb.extend([b, g, r, 0])
+    with open(f"build/splash/{name}.raw", "wb") as f:
+        f.write(fb)
+    # Also save BMP for fallback
+    img.save(f"build/splash/{name}.bmp", "BMP")
+    print(f"  {name}.raw + .bmp generated")
 
-with open("build/splash/yunsh-splash.raw", "wb") as f:
-    f.write(fb_data)
-print(f"Splash generated: logo+text on 1920x1080 black")
+# 720p version (full only)
+img_720 = bg.resize((1280, 720), Image.LANCZOS)
+img_720.save("build/splash/yunsh-splash-full-720p.bmp", "BMP")
+print("Splash generated ✓")
 SPLASHGEN
-echo "   splash screen generated ✓"
+echo "   splash: logo → YUNSH OS ✓"
 
 # ════════════════════════════════════════════════════════
 # STEP 5: Modify BOOT partition (FAT32 — macOS native)
@@ -256,16 +267,15 @@ fi
 # 5b. Copy YUNSH boot scripts + splash to boot partition
 echo "→ Copying YUNSH boot files to /boot/"
 cp "${YUNSH_DIR}/boot/yunsh-firstboot.sh" "${BOOT_MOUNT}/yunsh-firstboot.sh" 2>/dev/null || true
-# Copy splash files for framebuffer display
-if [ -f "${YUNSH_DIR}/build/splash/yunsh-splash.raw" ]; then
-    cp "${YUNSH_DIR}/build/splash/yunsh-splash.raw" "${BOOT_MOUNT}/yunsh-splash.raw" 2>/dev/null || true
-    echo "   splash.raw copied"
-fi
-if [ -f "${YUNSH_DIR}/build/splash/yunsh-splash-720p.bmp" ]; then
-    cp "${YUNSH_DIR}/build/splash/yunsh-splash-720p.bmp" "${BOOT_MOUNT}/yunsh-splash-720p.bmp" 2>/dev/null || true
-    cp "${YUNSH_DIR}/build/splash/yunsh-splash-1080p.bmp" "${BOOT_MOUNT}/yunsh-splash-1080p.bmp" 2>/dev/null || true
-    echo "   splash BMPs copied"
-fi
+# Copy splash files for framebuffer display (two-phase: logo → logo+text)
+echo "→ Copying splash files to /boot/"
+for sf in yunsh-splash-logo.raw yunsh-splash-logo.bmp yunsh-splash-full.raw yunsh-splash-full.bmp yunsh-splash-full-720p.bmp; do
+    src="${YUNSH_DIR}/build/splash/$sf"
+    if [ -f "$src" ]; then
+        cp "$src" "${BOOT_MOUNT}/$sf" 2>/dev/null
+        echo "   ✓ $sf"
+    fi
+done
 
 # Unmount boot
 sync
