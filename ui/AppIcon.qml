@@ -1,33 +1,33 @@
 // YUNSH OS v1.0 - App Icon Component (visionOS Style)
-// Circular glass icon with glow effect
+// Perfect circle + glassmorphism + hover glow
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 
 Item {
     id: appIcon
-    
+
     property string appName: ""
     property string appIcon: ""
     property string appPackage: ""
     property bool isSystemApp: false
     property color iconColor: Qt.rgba(20/255, 20/255, 35/255, 0.5)
-    
+
     signal clicked()
-    
+
     width: 88
     height: 100
-    
+
     Column {
         anchors.centerIn: parent
         spacing: 8
-        
-        // visionOS circular icon with glow
+
+        // Glass circle icon
         Item {
-            width: 64
-            height: 64
+            width: 72
+            height: 72
             anchors.horizontalCenter: parent.horizontalCenter
-            
+
             // Outer glow ring
             Rectangle {
                 anchors.centerIn: parent
@@ -36,71 +36,74 @@ Item {
                 border.color: Qt.rgba(0/255, 212/255, 255/255, 0.06)
                 border.width: 1
             }
-            
-            // Icon circle - visionOS style
+
+            // Perfect circle with glassmorphism
             Rectangle {
                 id: iconCircle
                 anchors.centerIn: parent
                 width: 60
                 height: 60
-                radius: 18
-                color: Qt.rgba(18/255, 18/255, 32/255, 0.45)
-                border.color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+                radius: 30  // perfect circle
+                color: Qt.rgba(18/255, 18/255, 32/255, 0.55)
+                border.color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
                 border.width: 1
-                
-                // Subtle inner glow
+
+                // Frost layer
                 Rectangle {
-                    anchors.fill: parent; radius: 18
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.02)
+                    anchors.fill: parent; radius: 30
+                    color: Qt.rgba(255/255, 255/255, 255/255, 0.03)
                 }
-                
-                // Depth shadow inside
+
+                // Top highlight (visionOS edge light)
                 Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: -4
-                    radius: 20
-                    color: "transparent"
-                    border.color: Qt.rgba(0, 0, 0, 0)
-                    layer.enabled: true
-                    layer.effect: DropShadowEffect {
-                        radius: 12
-                        samples: 25
-                        color: Qt.rgba(0, 0, 0, 0.3)
-                        horizontalOffset: 0
-                        verticalOffset: 2
-                    }
+                    anchors.top: parent.top; anchors.topMargin: 2
+                    anchors.left: parent.left; anchors.leftMargin: 6
+                    anchors.right: parent.right; anchors.rightMargin: 6
+                    height: 1; radius: 1
+                    color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
                 }
-                
+
+                // Shadow at bottom
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left; anchors.leftMargin: 4
+                    anchors.right: parent.right; anchors.rightMargin: 4
+                    height: 2; radius: 1
+                    color: Qt.rgba(0/255, 0/255, 0/255, 0.15)
+                }
+
                 // Icon image
                 Image {
                     id: iconImg
                     source: appIcon
-                    width: 32
-                    height: 32
+                    width: 28
+                    height: 28
                     anchors.centerIn: parent
                     sourceSize.width: 64
                     sourceSize.height: 64
                     fillMode: Image.PreserveAspectFit
                 }
-                
-                // Glow effect on hover
+
+                // Glow on hover
                 Rectangle {
                     id: glowEffect
-                    anchors.fill: parent; radius: 18
+                    anchors.fill: parent; radius: 30
                     color: Qt.rgba(0/255, 212/255, 255/255, 0.0)
                     visible: false
                 }
             }
-            
-            // Glow animation
-            PropertyAnimation {
-                id: glowAnim
-                target: glowEffect
-                property: "color"
-                duration: 200
+
+            // Drop shadow for depth
+            layer.enabled: true
+            layer.effect: DropShadowEffect {
+                radius: 16
+                samples: 32
+                color: Qt.rgba(0/255, 0/255, 0/255, 0.3)
+                horizontalOffset: 0
+                verticalOffset: 4
             }
         }
-        
+
         // App name
         Text {
             text: appName
@@ -115,26 +118,26 @@ Item {
             opacity: 0.85
         }
     }
-    
-    // Click handler with visionOS hover
+
+    // Click + hover
     MouseArea {
         anchors.fill: parent
         onClicked: appIcon.clicked()
         hoverEnabled: true
-        
+
         onEntered: {
             iconCircle.scale = 1.1
-            iconCircle.color = Qt.rgba(25/255, 25/255, 45/255, 0.55)
+            iconCircle.color = Qt.rgba(25/255, 25/255, 45/255, 0.65)
             glowEffect.visible = true
-            glowEffect.color = Qt.rgba(0/255, 212/255, 255/255, 0.08)
+            glowEffect.color = Qt.rgba(0/255, 212/255, 255/255, 0.1)
         }
         onExited: {
             iconCircle.scale = 1.0
-            iconCircle.color = Qt.rgba(18/255, 18/255, 32/255, 0.45)
+            iconCircle.color = Qt.rgba(18/255, 18/255, 32/255, 0.55)
             glowEffect.color = Qt.rgba(0/255, 212/255, 255/255, 0.0)
             glowEffect.visible = false
         }
-        
+
         Behavior on scale {
             NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
         }
