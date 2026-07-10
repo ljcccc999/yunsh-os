@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Frame -->
+  <rect x="2" y="4" width="20" height="16" rx="3" ry="3"/>
+  <!-- Flower shape -->
+  <circle cx="9" cy="10" r="2.5"/>
+  <!-- Mountain/landscape -->
+  <path d="M22 16l-5-5-3 3-4-4-8 6"/>
+</svg>

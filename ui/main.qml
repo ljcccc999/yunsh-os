@@ -60,6 +60,7 @@ ApplicationWindow {
             onOpenNetwork: switchTo(networkScreen)
             onOpenBluetooth: switchTo(bluetoothScreen)
             onOpenTerminal: switchTo(terminalScreen)
+            onOpenPhotos: switchTo(photosScreen)
             onShowControlCenter: controlCenter.show()
             onTakeScreenshot: takeScreenshot()
             onOpenAppLibrary: { /* future: app library */ }
@@ -137,6 +138,11 @@ ApplicationWindow {
         Rectangle {
             id: updateScreen
             anchors.fill: parent; visible: false; z: 60; color: "#000000"
+            // Glass backdrop
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(0/255, 0/255, 0/255, 0.3)
+            }
             UpdateScreen {
                 anchors.fill: parent; visible: true; z: 10
                 onBackToHome: switchToHome()
@@ -147,6 +153,10 @@ ApplicationWindow {
         Rectangle {
             id: updateHistoryScreen
             anchors.fill: parent; visible: false; z: 60; color: "#000000"
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(0/255, 0/255, 0/255, 0.3)
+            }
             UpdateHistoryScreen {
                 anchors.fill: parent; visible: true; z: 10
                 onBackToUpdates: switchTo(settingsScreen)
@@ -157,6 +167,10 @@ ApplicationWindow {
         Rectangle {
             id: browserScreen
             anchors.fill: parent; visible: false; z: 60; color: "#000000"
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(0/255, 0/255, 0/255, 0.3)
+            }
             YunshBrowser {
                 anchors.fill: parent; visible: true; z: 10
                 onBackToHome: switchToHome()
@@ -167,6 +181,10 @@ ApplicationWindow {
         Rectangle {
             id: metaverseScreen
             anchors.fill: parent; visible: false; z: 60; color: "#000000"
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(0/255, 0/255, 0/255, 0.3)
+            }
             YunshMetaverse {
                 anchors.fill: parent; visible: true; z: 10
                 onBackToHome: switchToHome()
@@ -178,6 +196,20 @@ ApplicationWindow {
             id: terminalScreen
             anchors.fill: parent
             onBackToHome: switchToHome()
+        }
+
+        // ===== PHOTOS =====
+        Rectangle {
+            id: photosScreen
+            anchors.fill: parent; visible: false; z: 60; color: "#000000"
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(0/255, 0/255, 0/255, 0.3)
+            }
+            PhotosScreen {
+                anchors.fill: parent; visible: true; z: 10
+                onBackToHome: switchToHome()
+            }
         }
         
         // ===== SCREENSHOT OVERLAY =====
@@ -213,6 +245,7 @@ ApplicationWindow {
         updateHistoryScreen.visible = false
         browserScreen.visible = false
         metaverseScreen.visible = false
+        photosScreen.visible = false
         screen.visible = true
     }
     
@@ -221,6 +254,7 @@ ApplicationWindow {
         updateHistoryScreen.visible = false
         browserScreen.visible = false
         metaverseScreen.visible = false
+        photosScreen.visible = false
         settingsScreen.visible = false
         aboutScreen.visible = false
         systemInfoScreen.visible = false
