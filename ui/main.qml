@@ -97,10 +97,10 @@ ApplicationWindow {
             onOpenNetworkSettings: switchTo(networkScreen)
             onOpenBluetoothSettings: switchTo(bluetoothScreen)
             onOpenSystemInfo: switchTo(systemInfoScreen)
-            onOpenDisplaySettings: { /* placeholder */ }
-            onOpenSoundSettings: { /* placeholder */ }
-            onOpenLanguageSettings: { /* placeholder */ }
-            onOpenDateTimeSettings: { /* placeholder */ }
+            onOpenDisplaySettings: { /* display settings: brightness/theme - TBD */ }
+            onOpenSoundSettings: { /* sound settings: volume/output - TBD */ }
+            onOpenLanguageSettings: { /* language/input settings - TBD */ }
+            onOpenDateTimeSettings: { /* date/time/timezone settings - TBD */ }
         }
         
         // ===== SYSTEM INFO (About) =====

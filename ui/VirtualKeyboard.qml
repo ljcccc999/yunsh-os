@@ -243,10 +243,11 @@ Rectangle {
                     }
                 }
                 
-                // Dictation (placeholder)
+                // Dictation (voice input, coming soon)
                 SpecialKey {
                     text: "🎤"
                     width: 48
+                    opacity: 0.3
                     onClicked: { /* future: voice dictation */ }
                 }
                 
