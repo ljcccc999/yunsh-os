@@ -59,6 +59,7 @@ ApplicationWindow {
             onOpenSystemUpdateUI: switchTo(updateScreen)
             onOpenNetwork: switchTo(networkScreen)
             onOpenBluetooth: switchTo(bluetoothScreen)
+            onOpenTerminal: launchApp("terminal")
             onShowControlCenter: controlCenter.show()
             onTakeScreenshot: takeScreenshot()
             onOpenAppLibrary: { /* future: app library */ }

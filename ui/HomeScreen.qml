@@ -20,6 +20,7 @@ Item {
     signal openSystemUpdateUI()
     signal openNetwork()
     signal openBluetooth()
+    signal openTerminal()
     signal openAppLibrary()
     signal showControlCenter()
     signal takeScreenshot()
@@ -144,6 +145,13 @@ Item {
                 appIcon: "/usr/share/yunsh/icons/about.svg"
                 iconColor: Qt.rgba(96/255, 125/255, 139/255, 0.5)
                 onClicked: homeScreen.openAbout()
+            }
+            
+            AppIcon {
+                appName: "终端"
+                appIcon: "/usr/share/yunsh/icons/terminal.svg"
+                iconColor: Qt.rgba(0/255, 212/255, 255/255, 0.5)
+                onClicked: homeScreen.openTerminal()
             }
         }
         

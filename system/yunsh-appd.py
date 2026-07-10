@@ -11,11 +11,17 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 PORT = 8590
 
-# Map internal app IDs to Waydroid package names
+# Map internal app IDs to launch actions
 APP_MAP = {
     "appstore": {
+        "type": "waydroid",
         "package": "com.tencent.android.qqdownloader",
         "name": "应用宝"
+    },
+    "terminal": {
+        "type": "command",
+        "command": "openvt -c 2 -f -l /bin/bash",
+        "name": "终端"
     },
 }
 
@@ -52,17 +58,25 @@ class AppHandler(BaseHTTPRequestHandler):
 
         app = APP_MAP[app_id]
         try:
-            # Ensure Waydroid session is running
-            subprocess.run(
-                ["waydroid", "session", "start"],
-                capture_output=True, timeout=30
-            )
-            time.sleep(1)
+            if app["type"] == "waydroid":
+                # Ensure Waydroid session is running
+                subprocess.run(
+                    ["waydroid", "session", "start"],
+                    capture_output=True, timeout=30
+                )
+                time.sleep(1)
+                result = subprocess.run(
+                    ["waydroid", "app", "launch", app["package"]],
+                    capture_output=True, text=True, timeout=30
+                )
+            elif app["type"] == "command":
+                result = subprocess.run(
+                    app["command"], shell=True,
+                    capture_output=True, text=True, timeout=30
+                )
+            else:
+                return {"status": "error", "message": f"Unknown type: {app['type']}"}
 
-            result = subprocess.run(
-                ["waydroid", "app", "launch", app["package"]],
-                capture_output=True, text=True, timeout=30
-            )
             if result.returncode == 0:
                 return {"status": "ok", "message": f"Launched {app['name']}"}
             else:
