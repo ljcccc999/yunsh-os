@@ -1,34 +1,54 @@
 #!/bin/bash
 # YUNSH OS v1.0 - Factory Reset
-# Clears user data and caches, KEEPS activation state + settings
+# Resets to factory state: keeps system, removes all user data
 
 set -e
 
 echo "YUNSH OS v1.0 - Factory Reset"
+echo ""
 
-# Remove activation flag (shows wizard on next boot)
+# ─── Remove activation flag (shows wizard on next boot) ───
 rm -f /etc/yunsh/.activated
+echo "✓ 激活状态已重置"
 
-# Keep packages installed flag (don't re-download)
-# Keep user settings (language, Wi-Fi, Bluetooth configs)
-# NOT clearing: /etc/yunsh/*.conf
-# NOT clearing: home directories
+# ─── Keep system packages flag (don't reinstall) ───
+# /etc/yunsh/.packages_installed is preserved
 
-# Clear temporary caches
+# ─── Wipe user configurations (Wi-Fi, language, Bluetooth) ───
+rm -f /etc/yunsh/*.conf 2>/dev/null || true
+echo "✓ 配置已清除"
+
+# ─── Delete user accounts (created during activation) ───
+for userdir in /home/*; do
+    username=$(basename "$userdir")
+    if [ "$username" != "root" ] && [ -d "$userdir" ]; then
+        userdel -r "$username" 2>/dev/null || true
+    fi
+done
+echo "✓ 用户账号已删除"
+
+# ─── Clear caches and temp ───
 rm -rf /root/.cache 2>/dev/null || true
-rm -rf /tmp/yunsh-* 2>/dev/null || true
+rm -rf /tmp/* 2>/dev/null || true
+echo "✓ 缓存已清理"
 
-# Clear logs
+# ─── Clear logs ───
 : > /var/log/yunsh-update.log 2>/dev/null || true
 : > /var/log/yunsh-network.log 2>/dev/null || true
 : > /var/log/yunsh-bluetooth.log 2>/dev/null || true
+echo "✓ 日志已清理"
 
-# Waydroid user data (apps)
-waydroid session stop 2>/dev/null || true
+# ─── Waydroid user data ───
+if command -v waydroid &>/dev/null; then
+    waydroid session stop 2>/dev/null || true
+fi
 rm -rf /var/lib/waydroid/data/* 2>/dev/null || true
+echo "✓ Waydroid 数据已清理"
 
-echo "✅ Factory reset complete!"
-echo "Rebooting..."
+echo ""
+echo "✅ 恢复出厂设置完成！"
+echo "系统将重启并进入激活向导"
+echo ""
 
 sleep 2
 reboot
