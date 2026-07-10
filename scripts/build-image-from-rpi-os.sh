@@ -276,22 +276,7 @@ add_file "${YUNSH_DIR}/system/yunsh-powerd" "/usr/bin/yunsh-powerd"
 # Copy firstboot to /usr/bin/ too (for fallback)
 add_file "${YUNSH_DIR}/boot/yunsh-firstboot.sh" "/usr/bin/yunsh-firstboot.sh"
 
-# Set executable permissions on system scripts
-echo "" >> "${DEBUGFS_SCRIPT}"
-echo "# === Set executable permissions ===" >> "${DEBUGFS_SCRIPT}"
-echo "set_inode_field /usr/bin/yunsh-update-daemon mode 0o755" >> "${DEBUGFS_SCRIPT}"
-echo "set_inode_field /usr/bin/yunsh-updater mode 0o755" >> "${DEBUGFS_SCRIPT}"
-echo "set_inode_field /usr/bin/yunsh-network-daemon mode 0o755" >> "${DEBUGFS_SCRIPT}"
-echo "set_inode_field /usr/bin/yunsh-bluetooth-daemon mode 0o755" >> "${DEBUGFS_SCRIPT}"
-echo "set_inode_field /usr/bin/yunsh-screenshotd mode 0o755" >> "${DEBUGFS_SCRIPT}"
-echo "set_inode_field /usr/bin/yunsh-factory-reset mode 0o755" >> "${DEBUGFS_SCRIPT}"
-echo "set_inode_field /usr/bin/yunsh-install-progress.sh mode 0o755" >> "${DEBUGFS_SCRIPT}"
-echo "set_inode_field /usr/bin/yunsh-inputd mode 0o755" >> "${DEBUGFS_SCRIPT}"
-echo "set_inode_field /usr/bin/yunsh-powerd mode 0o755" >> "${DEBUGFS_SCRIPT}"
-echo "set_inode_field /usr/bin/yunsh-firstboot.sh mode 0o755" >> "${DEBUGFS_SCRIPT}"
-echo "set_inode_field /usr/bin/yunsh-ui-launcher mode 0o755" >> "${DEBUGFS_SCRIPT}"
-echo "set_inode_field /usr/bin/yunsh-splash mode 0o755" >> "${DEBUGFS_SCRIPT}"
-echo "set_inode_field /etc/rc.local mode 0o755" >> "${DEBUGFS_SCRIPT}"
+# (permissions moved to end of debugfs script)
 
 # ─── Create and inject launcher script ────────────
 echo "" >> "${DEBUGFS_SCRIPT}"
@@ -494,6 +479,23 @@ echo "rm /etc/hostname" >> "${DEBUGFS_SCRIPT}"
 HOSTNAME_FILE="${BUILD_DIR}/yunsh-hostname"
 echo "yunsh-v1" > "${HOSTNAME_FILE}"
 add_file "${HOSTNAME_FILE}" "/etc/hostname"
+
+# ─── Set executable permissions (must be after all file writes) ──
+echo "" >> "${DEBUGFS_SCRIPT}"
+echo "# === Set executable permissions ===" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-update-daemon mode 0755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-updater mode 0755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-network-daemon mode 0755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-bluetooth-daemon mode 0755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-screenshotd mode 0755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-factory-reset mode 0755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-install-progress.sh mode 0755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-inputd mode 0755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-powerd mode 0755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-firstboot.sh mode 0755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-ui-launcher mode 0755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-splash mode 0755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /etc/rc.local mode 0755" >> "${DEBUGFS_SCRIPT}"
 
 # ─── Run debugfs ─────────────────────────────────
 echo ""
