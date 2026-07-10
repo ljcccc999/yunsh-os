@@ -361,7 +361,7 @@ Rectangle {
                     border.color: Qt.rgba(0/255, 212/255, 255/255, 0.2)
                     border.width: 1
                     
-                    TextInput {
+                    EditableInput {
                         id: passwordInput
                         anchors.fill: parent
                         anchors.margins: 12

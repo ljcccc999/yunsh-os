@@ -1,7 +1,7 @@
 // YUNSH OS v1.0 - Terminal Screen
-// QML-based terminal with PTY backend (like macOS Terminal)
-// Long press on output → copy selected text
-// Long press on input → paste
+// QML-based terminal with PTY backend
+// iOS-style: long press to select text, show "复制/全选" popup
+// Long press on input → "粘贴" popup
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
@@ -18,6 +18,127 @@ Rectangle {
     property bool terminalReady: false
 
     signal backToHome()
+
+    // ─── Context Popup (reusable) ────────────────
+    Popup {
+        id: outputPopup
+        modal: false
+        closePolicy: Popup.CloseOnPressOutside
+
+        background: Rectangle {
+            color: "#1e1e3a"
+            radius: 10
+            border.color: Qt.rgba(0/255, 212/255, 255/255, 0.15)
+            border.width: 1
+        }
+
+        Row {
+            spacing: 1
+            padding: 4
+
+            Repeater {
+                model: outputPopup.menuModel || []
+
+                Rectangle {
+                    width: 64; height: 36
+                    radius: 6
+                    color: popBtn.containsMouse ?
+                        Qt.rgba(0/255, 212/255, 255/255, 0.15) : "transparent"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: modelData.label
+                        color: "#FFFFFF"
+                        font.pixelSize: 13
+                    }
+
+                    MouseArea {
+                        id: popBtn
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: {
+                            if (modelData.action === "copy") {
+                                outputText.copy()
+                                showToast("已复制 ✓")
+                            } else if (modelData.action === "selectAll") {
+                                outputText.selectAll()
+                            }
+                            outputPopup.close()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    property var outputMenuModel: [
+        {label: "复制", action: "copy"},
+        {label: "全选", action: "selectAll"}
+    ]
+
+    Popup {
+        id: inputPopup
+        modal: false
+        closePolicy: Popup.CloseOnPressOutside
+
+        background: Rectangle {
+            color: "#1e1e3a"
+            radius: 10
+            border.color: Qt.rgba(0/255, 212/255, 255/255, 0.15)
+            border.width: 1
+        }
+
+        Row {
+            spacing: 1
+            padding: 4
+
+            Repeater {
+                model: inputPopup.menuModel || []
+
+                Rectangle {
+                    width: 64; height: 36
+                    radius: 6
+                    color: popBtn2.containsMouse ?
+                        Qt.rgba(0/255, 212/255, 255/255, 0.15) : "transparent"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: modelData.label
+                        color: "#FFFFFF"
+                        font.pixelSize: 13
+                    }
+
+                    MouseArea {
+                        id: popBtn2
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: {
+                            if (modelData.action === "paste") {
+                                inputField.paste()
+                            } else if (modelData.action === "copy") {
+                                inputField.copy()
+                                showToast("已复制 ✓")
+                            } else if (modelData.action === "selectAll") {
+                                inputField.selectAll()
+                            }
+                            inputPopup.close()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    property var inputMenuModel: [
+        {label: "粘贴", action: "paste"},
+        {label: "全选", action: "selectAll"}
+    ]
+
+    property var inputMenuFullModel: [
+        {label: "粘贴", action: "paste"},
+        {label: "复制", action: "copy"},
+        {label: "全选", action: "selectAll"}
+    ]
 
     // ─── Title Bar ───────────────────────────────
     Rectangle {
@@ -77,6 +198,17 @@ Rectangle {
         anchors.bottom: inputBar.top
         color: "#0d0d1a"
 
+        // Tap on empty = dismiss popups
+        MouseArea {
+            anchors.fill: parent
+            propagateComposedEvents: true
+            onPressed: {
+                outputPopup.close()
+                inputPopup.close()
+                mouse.accepted = false
+            }
+        }
+
         Flickable {
             id: outputFlick
             anchors.fill: parent
@@ -102,24 +234,36 @@ Rectangle {
                 font.weight: Font.Normal
                 readOnly: true
                 selectByMouse: true
+                selectByKeyboard: true
                 wrapMode: TextEdit.Wrap
                 renderType: Text.QtRendering
                 textFormat: Text.PlainText
 
-                // Long press → copy selected text
+                // Selection color
+                selectionColor: Qt.rgba(0/255, 212/255, 255/255, 0.25)
+                selectedTextColor: "#FFFFFF"
+
+                // iOS-style: long press → if text selected show copy menu
+                // if no selection → start selection mode
                 MouseArea {
+                    id: outputTextArea
                     anchors.fill: parent
-                    acceptedButtons: Qt.RightButton | Qt.LeftButton
                     propagateComposedEvents: true
 
                     onPressAndHold: {
+                        // Check if there's already selected text
                         if (outputText.selectedText.length > 0) {
-                            outputText.copy()
-                            copyFeedback.start()
+                            // Show copy/select popup near the touch point
+                            outputPopup.menuModel = outputMenuModel
+                            outputPopup.x = Math.min(mouse.x, terminalScreen.width - outputPopup.width - 20)
+                            outputPopup.y = Math.min(mouse.y - 50, terminalScreen.height - inputBar.height - outputPopup.height - 60)
+                            outputPopup.open()
                         }
+                        // If no selection yet, let the TextEdit handle selection
+                        // (propagateComposedEvents passes it through)
                     }
 
-                    // Right click = paste into input
+                    // Right click → paste into input
                     onClicked: {
                         if (mouse.button === Qt.RightButton) {
                             inputField.paste()
@@ -129,15 +273,29 @@ Rectangle {
                     }
                 }
 
-                // Selection color
-                selectionColor: Qt.rgba(0/255, 212/255, 255/255, 0.25)
-                selectedTextColor: "#FFFFFF"
+                onSelectedTextChanged: {
+                    if (selectedText.length > 0) {
+                        // Auto-show copy popup when text is selected (like iOS)
+                        outputPopup.menuModel = outputMenuModel
+                        outputPopup.x = Math.min(
+                            outputFlick.contentX + outputFlick.width - outputPopup.width - 20,
+                            terminalScreen.width - outputPopup.width - 20
+                        )
+                        outputPopup.y = Math.min(
+                            outputFlick.contentY + 20,
+                            terminalScreen.height - inputBar.height - outputPopup.height - 60
+                        )
+                        outputPopup.open()
+                    } else {
+                        outputPopup.close()
+                    }
+                }
             }
         }
 
-        // Copy confirmation
+        // Toast notification
         Rectangle {
-            id: copyFeedback
+            id: toast
             anchors.centerIn: parent
             width: 120; height: 32; radius: 16
             color: Qt.rgba(0/255, 212/255, 255/255, 0.15)
@@ -147,24 +305,26 @@ Rectangle {
             z: 10
 
             Text {
+                id: toastText
                 anchors.centerIn: parent
-                text: "已复制 ✓"
+                text: ""
                 color: "#00D4FF"
                 font.pixelSize: 12
             }
 
             SequentialAnimation on opacity {
-                id: copyFeedbackAnim
+                id: toastAnim
                 running: false
-                PropertyAction { target: copyFeedback; property: "visible"; value: true }
-                PropertyAction { target: copyFeedback; property: "opacity"; value: 1 }
+                PropertyAction { target: toast; property: "visible"; value: true }
+                PropertyAction { target: toast; property: "opacity"; value: 1 }
                 PauseAnimation { duration: 800 }
                 NumberAnimation { property: "opacity"; to: 0; duration: 300 }
-                PropertyAction { target: copyFeedback; property: "visible"; value: false }
+                PropertyAction { target: toast; property: "visible"; value: false }
             }
 
-            function start() {
-                copyFeedbackAnim.restart()
+            function show(msg) {
+                toastText.text = msg
+                toastAnim.restart()
             }
         }
     }
@@ -206,14 +366,21 @@ Rectangle {
             placeholderText: "输入命令..."
             placeholderTextColor: Qt.rgba(255/255, 255/255, 255/255, 0.2)
 
-            // Long press → paste
+            // iOS-style: long press → paste popup
             MouseArea {
+                id: inputFieldArea
                 anchors.fill: parent
-                acceptedButtons: Qt.LeftButton
                 propagateComposedEvents: true
 
                 onPressAndHold: {
-                    inputField.paste()
+                    // Let go of any selection, show paste popup
+                    inputPopup.menuModel = inputMenuFullModel
+                    inputPopup.x = Math.min(
+                        mouse.x,
+                        terminalScreen.width - inputPopup.width - 20
+                    )
+                    inputPopup.y = parent.y - inputPopup.height - 10
+                    inputPopup.open()
                 }
 
                 onPressed: {
@@ -257,7 +424,6 @@ Rectangle {
     }
 
     // ─── Poll Timer ──────────────────────────────
-    property int pollCounter: 0
     property string lastOutput: ""
 
     Timer {
@@ -266,6 +432,10 @@ Rectangle {
         repeat: true
         running: terminalScreen.visible && terminalScreen.terminalReady
         onTriggered: pollOutput()
+    }
+
+    function showToast(msg) {
+        toast.show(msg)
     }
 
     function pollOutput() {
@@ -295,9 +465,6 @@ Rectangle {
         xhr.onreadystatechange = function() {
             if (xhr.readyState === XMLHttpRequest.DONE) {
                 terminalScreen.terminalReady = true
-                if (xhr.status === 200) {
-                    // Terminal is running
-                }
                 pollOutput()
             }
         }
@@ -329,7 +496,7 @@ Rectangle {
         onActivated: {
             if (outputText.selectedText.length > 0) {
                 outputText.copy()
-                copyFeedback.start()
+                showToast("已复制 ✓")
             }
         }
     }
@@ -350,7 +517,6 @@ Rectangle {
         sequence: "Ctrl+L"
         onActivated: {
             sendCommand("clear")
-            // Also clear local text
             outputText.text = ""
             terminalScreen.lastOutput = ""
         }

@@ -85,7 +85,7 @@ Item {
                     color: Qt.rgba(0, 0, 0, 0.3)
                     border.color: Qt.rgba(255, 255, 255, 0.05); border.width: 1
                     
-                    TextInput {
+                    EditableInput {
                         id: urlInput
                         anchors.fill: parent; anchors.margins: 8
                         color: "#FFFFFF"; font.pixelSize: 13

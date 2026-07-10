@@ -391,7 +391,7 @@ Rectangle {
                     border.color: wifiSSIDInput.activeFocus ? Qt.rgba(0/255, 212/255, 255/255, 0.2) : Qt.rgba(255/255, 255/255, 255/255, 0.04)
                     border.width: 1
                     
-                    TextInput {
+                    EditableInput {
                         id: wifiSSIDInput
                         anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
                         anchors.verticalCenter: parent.verticalCenter
@@ -402,13 +402,6 @@ Rectangle {
                         verticalAlignment: TextInput.AlignVCenter
                         
                         onTextChanged: wifiSSID = text
-                        
-                        // Click to focus → shows virtual keyboard automatically
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.IBeamCursor
-                            onClicked: wifiSSIDInput.forceActiveFocus()
-                        }
                     }
                 }
                 
@@ -427,7 +420,7 @@ Rectangle {
                     border.color: wifiPassInput.activeFocus ? Qt.rgba(0/255, 212/255, 255/255, 0.2) : Qt.rgba(255/255, 255/255, 255/255, 0.04)
                     border.width: 1
                     
-                    TextInput {
+                    EditableInput {
                         id: wifiPassInput
                         anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
                         anchors.verticalCenter: parent.verticalCenter
@@ -438,12 +431,6 @@ Rectangle {
                         echoMode: TextInput.Password
                         passwordCharacter: "●"
                         verticalAlignment: TextInput.AlignVCenter
-                        
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.IBeamCursor
-                            onClicked: wifiPassInput.forceActiveFocus()
-                        }
                     }
                 }
                 
@@ -523,7 +510,7 @@ Rectangle {
                         color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
                         border.color: accountUsernameInput.activeFocus ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.04)
                         border.width: 1
-                        TextInput {
+                        EditableInput {
                             id: accountUsernameInput
                             anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
                             verticalAlignment: TextInput.AlignVCenter
@@ -549,7 +536,7 @@ Rectangle {
                         color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
                         border.color: accountPassInput.activeFocus ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.04)
                         border.width: 1
-                        TextInput {
+                        EditableInput {
                             id: accountPassInput
                             anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
                             verticalAlignment: TextInput.AlignVCenter
@@ -574,7 +561,7 @@ Rectangle {
                         color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
                         border.color: accountConfirmInput.activeFocus ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.04)
                         border.width: 1
-                        TextInput {
+                        EditableInput {
                             id: accountConfirmInput
                             anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
                             verticalAlignment: TextInput.AlignVCenter
