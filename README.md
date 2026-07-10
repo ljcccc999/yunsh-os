@@ -90,7 +90,7 @@
 
 ---
 
-## 🔧 快速开始
+## 🚀 快速开始
 
 ### 下载镜像
 
@@ -123,42 +123,217 @@ sudo dd if=YUNSH-OS-v1.0.0.img of=/dev/rdisk2 bs=1m status=progress
 
 ---
 
-## 🏗 开发者
+## 👨‍💻 开发者指南
 
-### 构建环境 (macOS)
+### 环境要求
+
+- **操作系统**: macOS（构建主机，其他系统需要改脚本）
+- **依赖工具**:
+  - `e2fsprogs` → `brew install e2fsprogs`（提供 `debugfs`，用于 ext4 文件操作）
+  - `xz` → macOS 自带，或 `brew install xz`
+  - Python3 + Pillow → `pip3 install Pillow`（生成 splash 帧缓冲）
+
+### 完整构建流程
 
 ```bash
-# 依赖
-brew install e2fsprogs xz
-pip3 install Pillow
+# 1. 克隆仓库
+git clone git@github.com:ljcccc999/yunsh-os.git
+cd yunsh-os
 
-# 下载 RPi OS Lite arm64 到 build/ 目录
-# 构建
+# 2. 下载 RPi OS Lite arm64 镜像
+#    放到 build/ 目录，文件名例如 2026-05-27-raspios-bookworm-arm64-lite.img
+#    下载地址: https://www.raspberrypi.com/software/operating-systems/
+
+# 3. 执行构建
 bash scripts/build-image-from-rpi-os.sh
+
+# 4. 构建产物
+#    output/YUNSH-OS-v1.0.0.img  →  完整 ext4 镜像
+#    自动压缩为 output/YUNSH-OS-v1.0.0.img.xz (~570MB)
+
+# 5. 本地烧录测试
+sudo dd if=output/YUNSH-OS-v1.0.0.img of=/dev/rdisk2 bs=1m status=progress
 ```
 
-### 项目结构
+### 构建做了什么
 
+构建脚本在 macOS 上用 `debugfs` 直接操作 ext4 分区，不依赖 Docker 或虚拟机：
+
+1. 解包 RPi OS Lite 镜像 → 分离 boot (FAT32) 和 root (ext4) 分区
+2. `boot/config.txt` → 写 1080p KMS + `disable_splash=1`
+3. `debugfs` 向 ext4 批量注入:
+   - 29 个 QML 文件 → `/usr/share/yunsh/ui/`
+   - 11 个 SVG 图标 → `/usr/share/yunsh/icons/`
+   - 6 个 logo PNG → `/usr/share/yunsh/logo/`
+   - 10 个系统脚本 → `/usr/bin/`
+   - 7 个 systemd 服务 → `/etc/systemd/system/`
+   - 版本配置 → `/etc/yunsh/version.conf`
+4. `debugfs` symlink enable systemd 服务
+5. 设置所有文件 0755 权限
+6. 配置 autologin + hostname `yunsh-v1`
+7. 生成 splash 帧缓冲 (Python + PIL)
+8. 合并回成品镜像
+
+### 构建耗时
+
+| 阶段 | 时间 |
+|------|------|
+| 解包 + 挂载 | ~5s |
+| 注入文件 | ~15s |
+| 生成 splash | ~3s |
+| 合并镜像 | ~10s |
+| **总计** | **~35s** |
+
+### 自定义系统
+
+你可以修改以下内容来打造自己的 YUNSH OS：
+
+#### 改 UI
+```bash
+# 编辑 QML 文件后直接构建即可
+vim ui/HomeScreen.qml          # 主界面布局
+vim ui/SettingsScreen.qml      # 设置页面
+vim ui/YunshBrowser.qml        # 浏览器
+vim ui/ActivationScreen.qml    # 激活向导
+vim ui/StatusBar.qml           # 状态栏
+vim ui/AppIcon.qml             # 图标样式
 ```
-yunsh-os/
-├── boot/         启动配置 + firstboot 脚本
-├── scripts/      构建 & 烧录脚本
-├── system/       系统 daemon + 服务文件
-├── ui/           29 QML 文件 + 11 SVG 图标
-├── logo/         品牌 logo 多尺寸
-├── output/       构建输出 (.img.xz ~570MB)
-└── README.md
+
+#### 增加 App
+编辑 `ui/HomeScreen.qml` 的 `appList` 数组：
+```qml
+property var appList: [
+    { name: "设置", icon: "settings.svg", color: "#00D4FF", action: "settings" },
+    { name: "你的App", icon: "yourapp.svg", color: "#FF5722", action: "yourapp" }
+    // ↑ 超过 8 个自动新增一页
+]
 ```
 
-### 网络 (中国 GFW)
+#### 改开机画面
+```bash
+# 修改 splash 生成参数
+vim system/yunsh-fb-splash.py
 
-- `github.com:443` ❌ 阻断 → **用 SSH push**
-- `api.github.com` ✅ 可通（OTA 检查用）
-- `release-assets.githubusercontent.com` ✅ 可通（OTA 下载用）
-- firstboot 自动用 **清华镜像** 加速
+# 或直接换 logo
+cp your-logo.png logo/logo-256.png
+```
+
+#### 改 OTA 更新服务器
+编辑 `system/yunsh-update-daemon.py` 中的 `REPO` 变量：
+```python
+REPO = "你的用户名/你的仓库名"
+```
+
+#### 改 Firstboot 安装源
+编辑 `boot/yunsh-firstboot.sh` 中的镜像源配置：
+```bash
+REPLACE_URL="mirrors.your-mirror.com"
+```
+
+#### 改版本号
+编辑 `build/yunsh-version.conf`：
+```
+VERSION=v1.0.0
+BUILD=2026.07.10.01
+```
+
+### 贡献代码（Pull Request）
+
+如果你想把自己的改进合并到主仓库：
+
+1. **Fork 仓库**
+   ```
+   https://github.com/ljcccc999/yunsh-os → Fork
+   ```
+
+2. **Clone 你的 Fork**
+   ```bash
+   git clone git@github.com:你的用户名/yunsh-os.git
+   cd yunsh-os
+   git remote add upstream git@github.com:ljcccc999/yunsh-os.git
+   ```
+
+3. **创建分支，改代码，构建测试**
+   ```bash
+   git checkout -b feat/your-feature
+   # ... 修改 QML / 脚本 / 配置
+   bash scripts/build-image-from-rpi-os.sh  # 验证构建成功
+   ```
+
+4. **提交并推送**
+   ```bash
+   git add -A
+   git commit -m "feat: 你的功能描述"
+   git push origin feat/your-feature
+   ```
+
+5. **创建 Pull Request**
+   在 GitHub 上：你的 fork → Pull Request → `ljcccc999/yunsh-os` 的 `main` 分支
+
+6. **等待 Review**
+   代码审查通过后会合并到主仓库。
+
+### ⚠️ 注意事项
+
+- **不要直接往主仓库 push**（只有仓库拥有者可以创建 Release）
+- **构建产物不要提交**（`output/*.img*` 在 .gitignore 里）
+- **原版 RPi OS 镜像不要提交**（`build/*.img` 在 .gitignore 里，约 2.8GB）
+- **Git push 用 SSH**（HTTPS 可能被 GFW 阻断）
+  ```bash
+  # ~/.ssh/config
+  Host github.com
+      IdentityFile ~/.ssh/id_github
+      AddKeysToAgent yes
+  ```
+- **QML 语法**：使用 Qt Quick 2.15 + Qt Quick Controls 2.15
+- **WebEngine**：浏览器需要 `libqt6webengine-dev`，构建镜像已预装
+
+### 常见问题
+
+| 问题 | 解决 |
+|------|------|
+| `debugfs: command not found` | `brew install e2fsprogs` |
+| 构建后镜像烧录不启动 | 确认 SD 卡 ≥ 16GB，SHA256 校验文件 |
+| 激活向导不显示 | `sudo rm /etc/yunsh/.activated` 重启 |
+| 截图后相册无图 | 检查 `~/Pictures/Screenshots/` 目录是否存在 |
+| OTA 下载失败 | 确认 RPi 能访问 `api.github.com` |
+| WebEngine 白屏 | 尝试加 `--disable-gpu` 启动参数 |
+| GitHub push 被拒 | 用 SSH 方式，HTTPS 在国内不通 |
+
+### 网络注意事项（中国 GFW）
+
+| 域名 | 状态 |
+|------|------|
+| `github.com:443` | ❌ 阻断（push 走 SSH） |
+| `api.github.com` | ✅ 可用（OTA 更新检查） |
+| `release-assets.githubusercontent.com` | ✅ 可用（OTA 镜像下载） |
+| `objects.githubusercontent.com` | ✅ 可用 |
+| `mirrors.tuna.tsinghua.edu.cn` | ✅ 可用（firstboot 自动切换） |
+
+首次启动自动检测 `sources.list` 中的 `deb.debian.org`，替换为清华镜像加速。
 
 ---
 
 ## 📝 License
 
-© 2024 YUNSH Technology · Developer: Tim (LiuJiacheng)
+MIT License
+
+Copyright (c) 2024 YUNSH Technology
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
