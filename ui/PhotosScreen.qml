@@ -9,7 +9,7 @@ import Qt.labs.folderlistmodel 2.15
 Rectangle {
     id: photosScreen
     anchors.fill: parent
-    color: "#000000"
+    color: "transparent"
     z: 60
     
     property string photosDir: "file:///home/yunsh/Pictures/Screenshots"

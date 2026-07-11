@@ -5,14 +5,14 @@
 # Usage:  ./build-image-from-rpi-os.sh
 # Prereq: e2fsprogs via Homebrew (brew install e2fsprogs)
 # Input:  build/raspios-lite.img (download from Raspberry Pi)
-# Output: output/YUNSH-OS-v1.0.0.img
+# Output: output/YUNSH-OS-v1.0.1.img
 
 set -euo pipefail
 
 YUNSH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${YUNSH_DIR}/build"
 OUTPUT_DIR="${YUNSH_DIR}/output"
-IMAGE_NAME="YUNSH-OS-v1.0.0.img"
+IMAGE_NAME="YUNSH-OS-v1.0.1.img"
 
 # macOS Homebrew e2fsprogs (keg-only, link to Cellar directly)
 E2FSPROGS="/opt/homebrew/Cellar/e2fsprogs/1.47.4"
@@ -485,7 +485,7 @@ echo "" >> "${DEBUGFS_SCRIPT}"
 echo "# === Version Config ===" >> "${DEBUGFS_SCRIPT}"
 VERSION_CONF="${BUILD_DIR}/yunsh-version.conf"
 cat > "${VERSION_CONF}" << 'VERCONF'
-VERSION=v1.0.0
+VERSION=v1.0.1
 BUILD=2026.07.10.01
 VERCONF
 add_file "${VERSION_CONF}" "/etc/yunsh/version.conf"

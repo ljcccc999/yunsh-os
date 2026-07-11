@@ -9,7 +9,7 @@ Rectangle {
     id: settingsScreen
     anchors.fill: parent
     visible: false
-    color: "#000000"
+    color: "transparent"
     z: 50
     
     signal backToHome()
@@ -19,7 +19,7 @@ Rectangle {
     signal openBluetoothSettings()
     signal openSystemInfo()
 
-    property string osVersionName: "YUNSH OS v1.0.0"
+    property string osVersionName: "YUNSH OS v1.0.1"
 
     function loadVersionConfig() {
         var xhr = new XMLHttpRequest()

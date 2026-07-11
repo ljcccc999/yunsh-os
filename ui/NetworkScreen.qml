@@ -8,7 +8,7 @@ import QtQuick.Layouts 1.15
 Rectangle {
     id: networkScreen
     anchors.fill: parent
-    color: "#000000"  // Transparent in AR
+    color: "transparent"  // Transparent in AR
     visible: false
     z: 60
     

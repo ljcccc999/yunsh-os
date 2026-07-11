@@ -19,8 +19,8 @@ Item {
     property string pageTitle: ""
     property string _pendingDomain: ""  // original domain input, for http fallback
 
-    // Pure black background
-    Rectangle { anchors.fill: parent; color: "#000000" }
+    // Transparent background (GlassBackground shows through)
+    Rectangle { anchors.fill: parent; color: "transparent" }
 
     // ─── Top Bar ─────────────────────────────
     Rectangle {

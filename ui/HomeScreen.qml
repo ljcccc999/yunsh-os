@@ -57,10 +57,10 @@ Item {
         }
     }
 
-    // ─── Background ──────────────────────────────
+    // ─── Background (transparent - GlassBackground shows through) ─────
     Rectangle {
         anchors.fill: parent
-        color: "#000000"
+        color: "transparent"
     }
 
     // Subtle ambient glow
@@ -234,7 +234,7 @@ Item {
                                 anchors.bottom: parent.bottom
                                 anchors.bottomMargin: 16
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: "YUNSH OS v1.0.0"
+                                text: "YUNSH OS v1.0.1"
                                 color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
                                 font.pixelSize: 11
                                 visible: pageIndex === 0

@@ -18,12 +18,12 @@ echo "  YUNSH OS v1.0 - SD Card Flasher (macOS)"
 echo "============================================"
 
 # Find the image
-if [ -f "${SCRIPT_DIR}/YUNSH-OS-v1.0.0.img" ]; then
-    IMAGE_PATH="${SCRIPT_DIR}/YUNSH-OS-v1.0.0.img"
-elif [ -f "${SCRIPT_DIR}/../output/YUNSH-OS-v1.0.0.img" ]; then
-    IMAGE_PATH="${SCRIPT_DIR}/../output/YUNSH-OS-v1.0.0.img"
+if [ -f "${SCRIPT_DIR}/YUNSH-OS-v1.0.1.img" ]; then
+    IMAGE_PATH="${SCRIPT_DIR}/YUNSH-OS-v1.0.1.img"
+elif [ -f "${SCRIPT_DIR}/../output/YUNSH-OS-v1.0.1.img" ]; then
+    IMAGE_PATH="${SCRIPT_DIR}/../output/YUNSH-OS-v1.0.1.img"
 else
-    echo -e "${RED}ERROR: YUNSH-OS-v1.0.0.img not found!${NC}"
+    echo -e "${RED}ERROR: YUNSH-OS-v1.0.1.img not found!${NC}"
     echo "Usage: $0 [path/to/image.img]"
     exit 1
 fi

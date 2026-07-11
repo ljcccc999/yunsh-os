@@ -9,8 +9,8 @@ Item {
     
     signal backToHome()
     
-    // Pure black background
-    Rectangle { anchors.fill: parent; color: "#000000" }
+    // Transparent background (GlassBackground shows through)
+    Rectangle { anchors.fill: parent; color: "transparent" }
     
     // Floating glass panel - visionOS style
     Rectangle {

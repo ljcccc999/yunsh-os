@@ -33,7 +33,7 @@ Item {
         anchors.left: parent.left; anchors.leftMargin: -4
         anchors.right: parent.right; anchors.rightMargin: -4
         height: parent.height + 4
-        color: Qt.rgba(10/255, 10/255, 22/255, 0.2)
+        color: Qt.rgba(12/255, 12/255, 25/255, tintOpacity * 0.3)
     }
     
     // Bottom separator

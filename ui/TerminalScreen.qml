@@ -10,7 +10,7 @@ import QtQuick.Layouts 2.15
 Rectangle {
     id: terminalScreen
     anchors.fill: parent
-    color: "#1a1a2e"
+    color: "transparent"
     visible: false
     z: 60
 

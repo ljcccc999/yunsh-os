@@ -8,11 +8,11 @@ import QtQuick.Layouts 1.15
 Rectangle {
     id: systemInfoScreen
     anchors.fill: parent
-    color: "#000000"
+    color: "transparent"
     visible: false
     z: 60
 
-    property string osVersion: "YUNSH OS v1.0.0"
+    property string osVersion: "YUNSH OS v1.0.1"
     property string buildNumber: "2026.07.08.01"
     property string deviceModel: "Raspberry Pi 5"
     property string cpuInfo: "ARM Cortex-A76 × 4"

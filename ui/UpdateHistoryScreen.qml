@@ -29,10 +29,10 @@ Item {
         }
     ]
 
-    /* ---- Background ---- */
+    /* ---- Background (transparent - GlassBackground shows through) ---- */
     Rectangle {
         anchors.fill: parent
-        color: "#000000" // transparent in AR
+        color: "transparent"
     }
 
     /* ---- Header ---- */
