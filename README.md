@@ -177,6 +177,25 @@ shasum -a 256 YUNSH-OS-v1.0.1.img.xz
 
 ---
 
+## 🛠 构建
+
+**依赖**: macOS + `brew install e2fsprogs` + `pip3 install Pillow`
+
+```bash
+git clone git@github.com:ljcccc999/yunsh-os.git
+cd yunsh-os
+
+# 下载 RPi OS Lite arm64 镜像放到 build/ 目录
+# 然后执行构建
+bash scripts/build-image-from-rpi-os.sh
+```
+
+产物：`output/YUNSH-OS-v1.0.1.img.xz`（~570MB）
+
+**注意**: 构建产物和原版 RPi OS 镜像在 .gitignore 中，不会提交到仓库。
+
+---
+
 ## 📝 License
 
 © 2024 YUNSH Technology
