@@ -19,12 +19,24 @@ Rectangle {
     property bool isFullscreen: false
     property bool isMinimized: false
 
-    default property alias content: contentArea.data
+    // ─── Pin/Hover Mode ────────────────────────────────
+    // "pinned"  = fixed in space (drag to position, stays there)
+    // "following" = follows user's gaze (always in view)
+    property string pinMode: "pinned"
+
+    // Head rotation offset (used when pinned, set by IMU system)
+    property real headOffsetX: 0
+    property real headOffsetY: 0
+
+    signal pinModeChanged(string mode)
 
     signal closeClicked()
     signal minimizeClicked()
     signal fullscreenClicked()
     signal mouseEntered()
+    signal togglePinMode()
+
+    default property alias content: contentArea.data
 
     // Window frame glass
     color: "transparent"
@@ -150,6 +162,98 @@ Rectangle {
                 }
             }
 
+            // Pin toggle button (right side, visionOS style)
+            Rectangle {
+                id: pinButton
+                anchors.right: parent.right; anchors.rightMargin: 16
+                anchors.verticalCenter: parent.verticalCenter
+                width: 32; height: 32
+                radius: 8
+                color: macWindow.pinMode === "following"
+                    ? Qt.rgba(0/255, 212/255, 255/255, 0.15)
+                    : Qt.rgba(1, 1, 1, 0.04)
+                border.color: macWindow.pinMode === "following"
+                    ? Qt.rgba(0/255, 212/255, 255/255, 0.3)
+                    : Qt.rgba(1, 1, 1, 0.06)
+
+                // Pushpin icon (simple geometric)
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 14; height: 18
+                    radius: 3
+                    color: "transparent"
+                    border.width: 2
+                    border.color: macWindow.pinMode === "following"
+                        ? "#00D4FF"
+                        : Qt.rgba(1, 1, 1, 0.5)
+
+                    // Pin head (circle at bottom)
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.bottom: parent.bottom; anchors.bottomMargin: -4
+                        width: 6; height: 6; radius: 3
+                        color: macWindow.pinMode === "following"
+                            ? "#00D4FF"
+                            : Qt.rgba(1, 1, 1, 0.5)
+                    }
+
+                    // Line from pin head to top
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.top: parent.top; anchors.topMargin: 3
+                        anchors.bottom: parent.bottom; anchors.bottomMargin: 2
+                        width: 2
+                        color: macWindow.pinMode === "following"
+                            ? "#00D4FF"
+                            : Qt.rgba(1, 1, 1, 0.5)
+                    }
+                }
+
+                // Animated glow ring (following mode)
+                Rectangle {
+                    anchors.fill: parent
+                    radius: parent.radius
+                    color: "transparent"
+                    border.width: 1
+                    border.color: Qt.rgba(0/255, 212/255, 255/255, 0.15)
+                    visible: macWindow.pinMode === "following"
+
+                    NumberAnimation on opacity {
+                        loops: Animation.Infinite
+                        from: 0.0; to: 0.6; duration: 2000
+                    }
+                }
+
+                MouseArea {
+                    id: pinBtnMA
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onEntered: parent.color = macWindow.pinMode === "following"
+                        ? Qt.rgba(0/255, 212/255, 255/255, 0.25)
+                        : Qt.rgba(1, 1, 1, 0.08)
+                    onExited: parent.color = macWindow.pinMode === "following"
+                        ? Qt.rgba(0/255, 212/255, 255/255, 0.15)
+                        : Qt.rgba(1, 1, 1, 0.04)
+                    onClicked: {
+                        macWindow.togglePinMode()
+                        macWindow.pinModeChanged(macWindow.pinMode)
+                    }
+                }
+
+                // Tooltip
+                Text {
+                    id: pinTooltip
+                    anchors.top: parent.bottom; anchors.topMargin: 6
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: macWindow.pinMode === "following" ? "松开固定" : "视线跟随"
+                    color: Qt.rgba(1, 1, 1, 0.5)
+                    font.pixelSize: 10
+                    font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
+                    visible: pinBtnMA.containsMouse
+                }
+            }
+
             // Title text
             Text {
                 id: titleLabel
@@ -173,6 +277,7 @@ Rectangle {
 
         // ─── Drag to move (title bar area) ────────────
         MouseArea {
+            id: dragArea
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
@@ -328,5 +433,42 @@ Rectangle {
             state = "fullscreen"
             isFullscreen = true
         }
+    }
+
+    // ─── Pin mode logic ─────────────────────────────
+    onTogglePinMode: {
+        if (macWindow.pinMode === "pinned") {
+            // Switch to follow mode: window becomes gaze-following
+            macWindow.pinMode = "following"
+            // Store current position as offset for IMU reference
+            macWindow.headOffsetX = macWindow.x
+            macWindow.headOffsetY = macWindow.y
+        } else {
+            // Switch to pinned mode: fix in space
+            macWindow.pinMode = "pinned"
+        }
+    }
+
+    // When in follow mode, window smoothly moves to center-ish position
+    // (Actual IMU-driven offset would be applied externally via headOffsetX/Y)
+    onPinModeChanged: {
+        if (macWindow.pinMode === "following") {
+            // Smoothly animate to centered position
+            followAnimX.to = Math.max(50, (parent.width - macWindow.width) / 2)
+            followAnimY.to = Math.max(50, (parent.height - macWindow.height) / 2.5)
+            followAnimX.start()
+            followAnimY.start()
+        }
+    }
+
+    NumberAnimation {
+        id: followAnimX
+        target: macWindow; property: "x"
+        duration: 600; easing.type: Easing.OutCubic
+    }
+    NumberAnimation {
+        id: followAnimY
+        target: macWindow; property: "y"
+        duration: 600; easing.type: Easing.OutCubic
     }
 }
