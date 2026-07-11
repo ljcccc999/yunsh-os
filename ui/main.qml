@@ -300,9 +300,8 @@ ApplicationWindow {
         MacWindow {
             id: androidWindow
             appTitle: "Android App"
-            x: 0; y: 0; width: 1920; height: 1080
+            x: 130; y: 80; width: 700; height: 540
             visible: false
-            radius: 0
             onCloseClicked: { yunshOS.closeAppFromSwitcher("appstore"); yunshOS.closeAppFromSwitcher("files") }
             onMinimizeClicked: { androidWindow.visible = false; androidWindow.isMinimized = true; homeScreen.visible = true }
         }
