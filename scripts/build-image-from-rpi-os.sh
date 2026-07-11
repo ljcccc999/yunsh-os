@@ -680,6 +680,9 @@ echo "set_inode_field /usr/bin/yunsh-splash mode 0755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-appd mode 0755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-terminal mode 0755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-disk-helper mode 0755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-headtracking mode 0755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-headtracking-sim mode 0755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-bno085-reader mode 0755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /etc/rc.local mode 0755" >> "${DEBUGFS_SCRIPT}"
 
 # ─── Remove RPi OS default first-boot services ────
@@ -698,6 +701,12 @@ echo "Generated $(wc -l < "${DEBUGFS_SCRIPT}") commands"
 }
 
 echo "debugfs injection complete ✓"
+
+# ─── Run e2fsck to fix filesystem inconsistencies ────
+echo ""
+echo "=== Running e2fsck ==="
+"${E2FSPROGS}/sbin/e2fsck" -fy "${ROOT_PARTITION_IMG}" 2>&1 || true
+echo "e2fsck complete ✓"
 
 # ─── Step 7: Write modified root partition back ────
 echo ""
