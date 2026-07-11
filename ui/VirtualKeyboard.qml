@@ -8,6 +8,31 @@ Item {
     id: keyboardPanel
     visible: false
     z: 200
+    width: 1920
+    height: 1080
+
+    // ─── Dismiss backdrop ─────────────────────
+    // Only captures clicks outside the keyboard panel
+    // (clicks on the keyboard itself are consumed by RoundKey/Rect MouseAreas)
+    MouseArea {
+        id: dismissArea
+        anchors.fill: parent
+        enabled: keyboardPanel.visible
+        onClicked: {
+            // Check if click is outside the keyboard floating panel
+            var gx = mouseX
+            var gy = mouseY
+            var kw = keyboardPanel.panelWidth
+            var kh = keyboardPanel.panelHeight
+            var kx_ = keyboardPanel.x
+            var ky_ = keyboardPanel.y
+            if (gx < kx_ || gx > kx_ + kw || gy < ky_ || gy > ky_ + kh) {
+                keyboardPanel.hide()
+            }
+        }
+        // Prevent conflict with keyboard buttons (don't catch clicks on the panel)
+        preventStealing: false
+    }
 
     // ─── Public API ────────────────────────────
     property var targetItem: null
