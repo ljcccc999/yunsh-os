@@ -314,6 +314,39 @@ BUILD=2026.07.10.01
 
 ---
 
+## 🎮 操作指南
+
+### 鼠标操作
+
+| 操作 | 功能 |
+|------|------|
+| 左键点击（图标）| 打开应用 |
+| 左键点击（Home 指示条）| 打开 App Switcher |
+| 左键上滑（Home 指示条）| 打开 App Switcher（>30px 触发）|
+| 点击 App Switcher 卡片 | 切换至该应用 |
+| ✕ 关闭按钮 | 关闭应用 |
+| 点击空白区域 | 关闭 App Switcher / 返回桌面 |
+| ← 返回胶囊 | 返回上级页面 |
+| 长按输出区域 | 复制菜单（Terminal） |
+| 右键点击 | 粘贴（Terminal） |
+
+### 键盘快捷键
+
+| 快捷键 | 功能 |
+|--------|------|
+| **Escape** | 返回 / 关闭面板 |
+| **Print** | 截取全屏 |
+| **Ctrl + Shift + S** | 区域截图 |
+| **Ctrl + Shift + C** | 打开/关闭 控制中心 |
+| **Ctrl + ↑** | 打开 App Switcher |
+| **Ctrl + L** | 地址栏聚焦（Browser）/ 清屏（Terminal） |
+| **Ctrl + R** | 刷新页面（Browser） |
+| **Ctrl + Shift + V** | 粘贴（Terminal） |
+
+> 完整版：[docs/YUNSH-OS-操作指南.md](docs/YUNSH-OS-操作指南.md)
+
+---
+
 ## 📝 License
 
 **Tim (LiuJiacheng)**
