@@ -146,6 +146,7 @@ ApplicationWindow {
             onDismissPanel: controlCenter.hide()
             onOpenNetwork: { controlCenter.hide(); switchTo(networkWindow, "network") }
             onOpenBluetooth: { controlCenter.hide(); switchTo(bluetoothWindow, "bluetooth") }
+            onToggleKeyboard: { controlCenter.hide(); virtualKeyboard.visible ? virtualKeyboard.hide() : virtualKeyboard.show() }
             onTakeScreenshot: takeScreenshot()
         }
 
@@ -357,10 +358,10 @@ ApplicationWindow {
             onCancelled: screenshotOverlay.visible = false
         }
 
-        // ===== VIRTUAL KEYBOARD =====
+        // ===== VIRTUAL KEYBOARD (visionOS floating panel) =====
         VirtualKeyboard {
             id: virtualKeyboard
-            anchors.fill: parent; z: 1000
+            z: 1000
             onDismissKeyboard: virtualKeyboard.hide()
         }
 
@@ -474,6 +475,7 @@ ApplicationWindow {
             if (taskSwitcher.visible) { hideTaskSwitcher(); return }
             if (controlCenter.visible) { controlCenter.hide(); return }
             if (screenshotOverlay.visible) { screenshotOverlay.cancelled(); return }
+            if (virtualKeyboard.visible) { virtualKeyboard.hide(); return }
             if (screensaver.visible) { screensaver.wake(); return }
             if (activationScreen.visible && !activationDone) {
                 activationScreen.skipActivation()
