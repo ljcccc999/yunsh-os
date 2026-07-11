@@ -57,6 +57,10 @@ ApplicationWindow {
     }
 
     function closeWindowById(appId) {
+        if (appId === "appstore" || appId === "files") {
+            androidWindow.visible = false
+            return
+        }
         var w = getWindowById(appId)
         if (w) w.visible = false
     }
@@ -74,6 +78,8 @@ ApplicationWindow {
             case "network": return networkWindow
             case "bluetooth": return bluetoothWindow
             case "updatehistory": return updateHistoryWindow
+            case "appstore":
+            case "files": return androidWindow
         }
         return null
     }
@@ -290,6 +296,16 @@ ApplicationWindow {
             }
         }
 
+        // ===== ANDROID APP (Waydroid) =====
+        MacWindow {
+            id: androidWindow
+            appTitle: "Android App"
+            x: 120; y: 80; width: 900; height: 660
+            visible: false
+            onCloseClicked: { yunshOS.closeAppFromSwitcher("appstore"); yunshOS.closeAppFromSwitcher("files") }
+            onMinimizeClicked: { androidWindow.visible = false; androidWindow.isMinimized = true; homeScreen.visible = true }
+        }
+
         // ===== SCREENSHOT OVERLAY =====
         ScreenshotOverlay {
             id: screenshotOverlay
@@ -424,7 +440,23 @@ ApplicationWindow {
         }
     }
 
+    property var androidAppInfo: ({})
+
     function launchApp(appId) {
+        var info = appInfo[appId]
+        if (!info) return
+
+        // Show Android window
+        androidWindow.appTitle = info.name
+        var w = androidWindow
+        w.x = 80 + (windowCount % 3) * 40
+        w.y = 80 + (windowCount % 3) * 30
+        w.visible = true
+        w.isMinimized = false
+        w.z = 60 + (++windowCount)
+        trackAppOpen(appId)
+
+        // Send launch to daemon
         var xhr = new XMLHttpRequest()
         xhr.open("POST", "http://127.0.0.1:8590/launch", true)
         xhr.setRequestHeader("Content-Type", "application/json")

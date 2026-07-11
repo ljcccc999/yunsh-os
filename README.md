@@ -1,7 +1,7 @@
 # YUNSH OS v1.0 — AR 眼镜操作系统
 
 面向 YUNSH V1 AR 眼镜的定制系统，基于 **Raspberry Pi OS Lite (Debian 13 Trixie)**。
-全 visionOS 毛玻璃 UI，AR 透明黑底设计。
+全 visionOS 毛玻璃 UI + macOS 浮动窗口，AR 透明黑底设计。
 
 <p align="center">
   <img src="logo/logo-256.png" width="128" alt="YUNSH Logo"/>
@@ -14,7 +14,7 @@
 │        YUNSH OS v1.0 — visionOS       │
 ├───────────────────────────────────────┤
 │  ⚛ 主界面: 动态翻页 + 毛玻璃图标      │
-│  📱 Waydroid 安卓兼容 + 应用宝预装    │
+│  📱 Waydroid 安卓兼容 + 玻璃窗口框架  │
 │  🌐 WebEngine 浏览器 (GFW-safe)       │
 │  📷 相册 + 截图系统                   │
 │  🖥 PTY 终端 (持久化会话)             │
@@ -27,6 +27,12 @@
 
 ## ✨ 特性
 
+### 🪟 macOS 风格浮动窗口
+- 每个 App 打开为独立圆角毛玻璃窗口
+- 左上角三颗按钮：关闭 🟢 最小化 🟡 全屏 🔴
+- 拖拽移动，重叠排列，多窗口共存于纯黑背景
+- 设置 · 浏览器 · 终端 · 相册 · 系统更新 · 系统信息 · 关于 · Wi-Fi · 蓝牙 · 元宇宙 · 更新历史
+
 ### 🖼️ visionOS 毛玻璃 UI
 - 纯黑 AR 透明背景
 - 全系统 frosted glass 毛玻璃面板 + 顶光 + 阴影
@@ -38,7 +44,7 @@
 ### 📱 Waydroid 安卓兼容
 - 预装应用宝（腾讯应用商店）
 - Python HTTP daemon 启动 Android 应用
-- 无缝 QML ↔ Android 切换
+- Android 应用在浮动玻璃窗口框架中运行
 
 ### 🌐 内置浏览器
 - Qt6 WebEngine（Chromium 内核）
@@ -61,6 +67,11 @@
 - GFW-safe: 走 `api.github.com` + `release-assets.githubusercontent.com`
 - A/B 分区更新，失败可回退
 - 更新界面显示发布说明 + 操作方式
+
+### 📊 实时系统信息
+- CPU / 内存 / 存储 / 内核从 /proc 动态读取
+- 内存每 10 秒刷新，用色条实时显示压力
+- 设备型号（Pi 4 / Pi 5）自动识别
 
 ---
 
