@@ -1,0 +1,15 @@
+[Unit]
+Description=YUNSH OS BNO085 Head Tracking (I2C, no ESP32)
+Documentation=https://github.com/ljcccc999/yunsh-os
+After=yunsh-headtracking.service
+Wants=yunsh-headtracking.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/yunsh-bno085-reader
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target

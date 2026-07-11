@@ -53,7 +53,7 @@ apt-get update -qq 2>/dev/null || true
 show_progress 15 "安装 Qt6 基础框架..."
 apt-get install -y -qq \
     qt6-base-dev qt6-declarative-dev libqt6svg6 \
-    qt6-base-dev-tools qt6-qmltooling-plugins fbi 2>/dev/null || true
+    qt6-base-dev-tools qt6-qmltooling-plugins qml6 fbi 2>/dev/null || true
 
 show_progress 25 "安装编译工具..."
 apt-get install -y -qq \

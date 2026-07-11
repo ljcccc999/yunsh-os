@@ -451,10 +451,9 @@ fi
 /usr/bin/yunsh-disk-helper
 
 # Phase 4: Launch the main UI
-QT_QPA_PLATFORM=eglfs \
-QT_QPA_EGLFS_INTEGRATION=eglfs_kms \
-QT_QUICK_BACKEND=software \
-qml main.qml
+# Detect Qt6 QML runner (qml6 on Debian Trixie, qml on others)
+QML_RUNNER=$(command -v qml6 || command -v qml || echo 'qml6')
+QT_QPA_PLATFORM=eglfs QT_QPA_EGLFS_INTEGRATION=eglfs_kms $QML_RUNNER main.qml
 QML_EXIT=$?
 
 # Phase 5: If .activated was just created, restart launcher to enter home screen
@@ -611,6 +610,8 @@ StandardError=null
 WantedBy=sysinit.target
 SPLASHSVC
 add_file "${SPLASH_SVC}" "/etc/systemd/system/yunsh-splash.service"
+echo "mkdir /etc/systemd/system/sysinit.target.wants" >> "${DEBUGFS_SCRIPT}"
+echo "symlink /etc/systemd/system/sysinit.target.wants/yunsh-splash.service ../yunsh-splash.service" >> "${DEBUGFS_SCRIPT}"
 
 # App Launcher daemon
 APPD_SVC="${YUNSH_DIR}/system/yunsh-appd.service"
