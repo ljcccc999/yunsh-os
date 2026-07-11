@@ -31,6 +31,7 @@ Item {
     property bool wifiOnly: true
     property string lastCheckTime: ""
     property string changelog: ""
+    property bool showChangelog: false
 
     /* Backend integration — call this to refresh all data */
     function refreshStatus() {
@@ -170,18 +171,6 @@ Item {
                         }
                     }
 
-                    // Changelog preview if update available
-                    Text {
-                        visible: updateAvailable && changelog.length > 0
-                        text: changelog.substring(0, 120) + (changelog.length > 120 ? "..." : "")
-                        color: Qt.rgba(1, 1, 1, 0.5)
-                        font.pixelSize: 12
-                        font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
-                        elide: Text.ElideRight
-                        maximumLineCount: 2
-                        wrapMode: Text.WordWrap
-                        Layout.topMargin: 4
-                    }
                 }
             }
 
@@ -309,6 +298,168 @@ Item {
                         }
                     };
                     xhr.send(JSON.stringify({action: "start_download"}));
+                }
+            }
+
+            /* ==========================================================
+               Changelog expandable section — shows full release notes
+               ========================================================== */
+            GlassCard {
+                Layout.fillWidth: true
+                implicitHeight: showChangelog ? changelogColumn.implicitHeight + 60 : 64
+                visible: updateAvailable && changelog.length > 0
+                Behavior on implicitHeight { NumberAnimation { duration: 250 } }
+
+                contentItem: ColumnLayout {
+                    id: changelogColumn
+                    anchors.fill: parent
+                    anchors.leftMargin: 24
+                    anchors.rightMargin: 24
+                    spacing: 0
+
+                    /* Toggle header */
+                    Item {
+                        Layout.fillWidth: true
+                        implicitHeight: 64
+
+                        RowLayout {
+                            anchors.fill: parent
+                            spacing: 8
+
+                            Image {
+                                source: "/usr/share/yunsh/icons/doc.text.svg"
+                                width: 18
+                                height: 18
+                                opacity: 0.6
+                                sourceSize.width: 18
+                                sourceSize.height: 18
+                            }
+
+                            Text {
+                                text: "更新内容"
+                                color: "#FFFFFF"
+                                font.pixelSize: 16
+                                font.weight: Font.Medium
+                                font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
+                                Layout.fillWidth: true
+                            }
+
+                            Image {
+                                source: showChangelog ? "/usr/share/yunsh/icons/chevron.up.svg" : "/usr/share/yunsh/icons/chevron.down.svg"
+                                width: 16
+                                height: 16
+                                opacity: 0.5
+                                sourceSize.width: 16
+                                sourceSize.height: 16
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: showChangelog = !showChangelog
+                        }
+                    }
+
+                    /* Full changelog content (collapsible) */
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Math.min(changelogText.implicitHeight + 20, 300)
+                        Layout.bottomMargin: 16
+                        visible: showChangelog
+                        clip: true
+                        radius: 12
+                        color: Qt.rgba(1, 1, 1, 0.05)
+
+                        Flickable {
+                            anchors.fill: parent
+                            anchors.margins: 12
+                            contentHeight: changelogText.implicitHeight
+                            clip: true
+                            boundsBehavior: Flickable.OvershootBounds
+
+                            Text {
+                                id: changelogText
+                                width: parent.width
+                                text: changelog
+                                color: Qt.rgba(1, 1, 1, 0.75)
+                                font.pixelSize: 13
+                                font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
+                                wrapMode: Text.WordWrap
+                                textFormat: Text.PlainText
+                                lineHeight: 1.4
+                            }
+
+                            ScrollBar.vertical: ScrollBar {
+                                policy: ScrollBar.AsNeeded
+                                active: true
+                                interactive: true
+                            }
+                        }
+                    }
+                }
+            }
+
+            /* ==========================================================
+               Operation guide section
+               ========================================================== */
+            GlassCard {
+                Layout.fillWidth: true
+                implicitHeight: guideHeader.height + guideContent.implicitHeight + 60
+                visible: updateAvailable
+
+                contentItem: ColumnLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 24
+                    anchors.rightMargin: 24
+                    anchors.topMargin: 20
+                    anchors.bottomMargin: 20
+                    spacing: 12
+
+                    RowLayout {
+                        id: guideHeader
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        Image {
+                            source: "/usr/share/yunsh/icons/keyboard.svg"
+                            width: 18
+                            height: 18
+                            opacity: 0.6
+                            sourceSize.width: 18
+                            sourceSize.height: 18
+                        }
+
+                        Text {
+                            text: "操作方式"
+                            color: "#FFFFFF"
+                            font.pixelSize: 16
+                            font.weight: Font.Medium
+                            font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
+                        }
+                    }
+
+                    Text {
+                        id: guideContent
+                        Layout.fillWidth: true
+                        text: "键盘快捷键:\n"
+                            + "  Escape  → 返回 / 关闭面板\n"
+                            + "  Print  → 截取全屏\n"
+                            + "  Ctrl+Shift+S  → 区域截图\n"
+                            + "  Ctrl+Shift+C  → 控制中心\n"
+                            + "  Ctrl+↑  → App Switcher\n"
+                            + "  Ctrl+L  → 地址栏聚焦 / 清屏\n"
+                            + "  Ctrl+R  → 刷新页面\n"
+                            + "\n鼠标操作:\n"
+                            + "  Home 指示条点击/上滑  → App Switcher\n"
+                            + "  长按文字  → 复制菜单\n"
+                            + "  右键  → 粘贴"
+                        color: Qt.rgba(1, 1, 1, 0.6)
+                        font.pixelSize: 13
+                        font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
+                        font.weight: Font.Light
+                        lineHeight: 1.5
+                        wrapMode: Text.WordWrap
+                    }
                 }
             }
 
