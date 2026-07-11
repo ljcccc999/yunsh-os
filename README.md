@@ -189,20 +189,21 @@ Get-FileHash YUNSH-OS-v1.0.1.img.xz -Algorithm SHA256
 
 ## 🛠 构建
 
-**依赖**: macOS + `brew install e2fsprogs` + `pip3 install Pillow`
+**构建环境**: macOS（依赖 e2fsprogs 的 debugfs 操作 ext4 分区）+ Python3 Pillow（生成 splash 帧缓冲）
 
-```bash
-git clone git@github.com:ljcccc999/yunsh-os.git
-cd yunsh-os
+**构建逻辑**:
+- 基于 RPi OS Lite (Debian Trixie arm64) 镜像
+- 通过 debugfs 直接注入 ext4 分区，无需 Docker/虚拟机
+- 注入内容: QML 组件库、SVG 图标、logo、系统脚本、systemd 服务、配置文件
+- 配置 1080p KMS 显示、autologin、hostname
+- 生成 Apple 两段式 splash（atom → logo+文字）
+- 注入完成后合并 boot + root 分区
 
-# 下载 RPi OS Lite arm64 镜像放到 build/ 目录
-# 然后执行构建
-bash scripts/build-image-from-rpi-os.sh
-```
+**产物**: `output/YUNSH-OS-v1.0.1.img.xz`（~570MB）
 
-产物：`output/YUNSH-OS-v1.0.1.img.xz`（~570MB）
+构建脚本: `scripts/build-image-from-rpi-os.sh`
 
-**注意**: 构建产物和原版 RPi OS 镜像在 .gitignore 中，不会提交到仓库。
+注意: 构建产物和原版镜像在 .gitignore 中，不会提交到仓库。
 
 ---
 
