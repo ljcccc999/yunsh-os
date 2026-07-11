@@ -1,24 +1,34 @@
 #!/bin/bash
-# YUNSH OS v1.0 - Factory Reset
-# Resets to factory state: keeps system, removes all user data
+# YUNSH OS v1.0.1 — Factory Reset
+# iOS-style: keeps system, removes all user data + installed apps
 
 set -e
 
-echo "YUNSH OS v1.0 - Factory Reset"
+echo "YUNSH OS v1.0 — 恢复出厂设置"
 echo ""
 
 # ─── Remove activation flag (shows wizard on next boot) ───
 rm -f /etc/yunsh/.activated
 echo "✓ 激活状态已重置"
 
-# ─── Keep system packages flag (don't reinstall) ───
-# /etc/yunsh/.packages_installed is preserved
+# ─── Keep system flags & config (don't reinstall system) ───
+# /etc/yunsh/.packages_installed — preserved
+# /etc/yunsh/version.conf — preserved (system stays same version)
+# /etc/yunsh/update.conf — preserved (OTA settings kept)
 
-# ─── Wipe user configurations (Wi-Fi, language, Bluetooth) ───
-rm -f /etc/yunsh/*.conf 2>/dev/null || true
-echo "✓ 配置已清除"
+# ─── Delete user-installed app data (iOS style: apps + their data) ───
+rm -rf /home/*/.local/share 2>/dev/null || true
+rm -rf /home/*/.config 2>/dev/null || true
+echo "✓ 用户应用数据已清除"
 
-# ─── Delete user accounts (created during activation) ───
+# ─── Delete screenshots & user files ───
+rm -rf /home/*/Pictures 2>/dev/null || true
+rm -rf /home/*/Documents 2>/dev/null || true
+rm -rf /home/*/Desktop 2>/dev/null || true
+rm -rf /home/*/Downloads 2>/dev/null || true
+echo "✓ 用户文件（截图/文档）已清除"
+
+# ─── Delete user accounts ───
 for userdir in /home/*; do
     username=$(basename "$userdir")
     if [ "$username" != "root" ] && [ -d "$userdir" ]; then
@@ -27,10 +37,26 @@ for userdir in /home/*; do
 done
 echo "✓ 用户账号已删除"
 
+# ─── Reset user settings (language, Wi-Fi, Bluetooth) ───
+# Only remove user-preference files, keep system config
+rm -f /etc/yunsh/language.conf 2>/dev/null || true
+rm -f /etc/yunsh/region.conf 2>/dev/null || true
+# Keep: version.conf, update.conf, .packages_installed
+echo "✓ 用户偏好已重置（保留系统配置）"
+
+# ─── Waydroid: remove all installed Android apps + data ───
+if command -v waydroid &>/dev/null; then
+    waydroid session stop 2>/dev/null || true
+fi
+rm -rf /var/lib/waydroid/data/* 2>/dev/null || true
+rm -rf /var/lib/waydroid/images 2>/dev/null || true
+rm -rf /var/lib/waydroid/rootfs 2>/dev/null || true
+echo "✓ Waydroid 安卓应用及数据已清除"
+
 # ─── Clear caches and temp ───
 rm -rf /root/.cache 2>/dev/null || true
 rm -rf /tmp/* 2>/dev/null || true
-echo "✓ 缓存已清理"
+echo "✓ 系统缓存已清理"
 
 # ─── Clear logs ───
 : > /var/log/yunsh-update.log 2>/dev/null || true
@@ -38,16 +64,10 @@ echo "✓ 缓存已清理"
 : > /var/log/yunsh-bluetooth.log 2>/dev/null || true
 echo "✓ 日志已清理"
 
-# ─── Waydroid user data ───
-if command -v waydroid &>/dev/null; then
-    waydroid session stop 2>/dev/null || true
-fi
-rm -rf /var/lib/waydroid/data/* 2>/dev/null || true
-echo "✓ Waydroid 数据已清理"
-
 echo ""
 echo "✅ 恢复出厂设置完成！"
-echo "系统将重启并进入激活向导"
+echo "系统版本保持 v$(cat /etc/yunsh/version.conf 2>/dev/null | grep VERSION | cut -d= -f2 | tr -d 'v' || echo "?")"
+echo "重新启动后将进入激活向导"
 echo ""
 
 sleep 2
