@@ -61,7 +61,9 @@ apt-get install -y -qq \
 
 show_progress 30 "安装 Python 环境..."
 apt-get install -y -qq \
-    python3-pip python3-pyqt6 python3-requests 2>/dev/null || true
+    python3-pip python3-pyqt6 python3-requests \
+    python3-smbus 2>/dev/null || true
+pip3 install smbus2 2>/dev/null || true
 
 show_progress 38 "安装 WebEngine 浏览器引擎..."
 apt-get install -y -qq \
@@ -124,6 +126,12 @@ systemctl enable waydroid.service 2>/dev/null || true
 # ───── Enable YUNSH app daemon ─────
 systemctl enable yunsh-appd.service 2>/dev/null || true
 systemctl enable yunsh-terminal.service 2>/dev/null || true
+
+# Enable IMU head tracking services
+systemctl enable yunsh-headtracking.service 2>/dev/null || true
+
+# Enable BNO085 reader if sensor is detected (will fail gracefully if no I2C device)
+systemctl enable yunsh-bno085-reader.service 2>/dev/null || true
 
 # ───── Final system config ────────────────
 echo "yunsh-v1" > /etc/hostname

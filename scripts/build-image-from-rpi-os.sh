@@ -288,6 +288,9 @@ framebuffer_ignore_alpha=0
 # Boot splash (custom logo via framebuffer)
 disable_splash=1
 
+# I2C for IMU (BNO085/ICM-20948 head tracking)
+dtparam=i2c_arm=on
+
 # RPi 5 / general
 arm_64bit=1
 hdmi_force_hotplug=1
@@ -382,6 +385,7 @@ add_file "${YUNSH_DIR}/system/yunsh-updater.py" "/usr/bin/yunsh-updater"
 add_file "${YUNSH_DIR}/system/yunsh-network-daemon.py" "/usr/bin/yunsh-network-daemon"
 add_file "${YUNSH_DIR}/system/yunsh-bluetooth-daemon.py" "/usr/bin/yunsh-bluetooth-daemon"
 add_file "${YUNSH_DIR}/system/yunsh-headtracking" "/usr/bin/yunsh-headtracking"
+add_file "${YUNSH_DIR}/system/yunsh-bno085-reader" "/usr/bin/yunsh-bno085-reader"
 add_file "${YUNSH_DIR}/system/yunsh-headtracking-sim" "/usr/bin/yunsh-headtracking-sim"
 add_file "${YUNSH_DIR}/system/yunsh-screenshotd" "/usr/bin/yunsh-screenshotd"
 add_file "${YUNSH_DIR}/system/yunsh-factory-reset" "/usr/bin/yunsh-factory-reset"
@@ -620,6 +624,11 @@ add_file "${TERM_SVC}" "/etc/systemd/system/yunsh-terminal.service"
 HTSVC_FILE="${BUILD_DIR}/yunsh-headtracking.service"
 cp "${YUNSH_DIR}/system/yunsh-headtracking.service" "${HTSVC_FILE}"
 add_file "${HTSVC_FILE}" "/etc/systemd/system/yunsh-headtracking.service"
+
+# BNO085 IMU reader (direct I2C)
+BNO_SVC_FILE="${BUILD_DIR}/yunsh-bno085-reader.service"
+cp "${YUNSH_DIR}/system/yunsh-bno085-reader.service" "${BNO_SVC_FILE}"
+add_file "${BNO_SVC_FILE}" "/etc/systemd/system/yunsh-bno085-reader.service"
 
 # ─── Auto-login for tty1 ──────────────────────────
 echo "" >> "${DEBUGFS_SCRIPT}"
