@@ -71,9 +71,6 @@ ApplicationWindow {
         id: rootContainer
         anchors.fill: parent
 
-        // Full-screen white glass background for all screens
-        GlassBackground { anchors.fill: parent }
-
         // ===== ACTIVATION SCREEN (first boot) =========
         ActivationScreen {
             id: activationScreen
