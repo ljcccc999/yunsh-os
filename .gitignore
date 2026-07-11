@@ -7,3 +7,5 @@ raspios-lite.img
 build/splash
 build/logo
 build/apps/
+build/yunsh-*.service
+build/yunsh-*
