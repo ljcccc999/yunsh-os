@@ -381,6 +381,8 @@ add_file "${YUNSH_DIR}/system/yunsh-update-daemon.py" "/usr/bin/yunsh-update-dae
 add_file "${YUNSH_DIR}/system/yunsh-updater.py" "/usr/bin/yunsh-updater"
 add_file "${YUNSH_DIR}/system/yunsh-network-daemon.py" "/usr/bin/yunsh-network-daemon"
 add_file "${YUNSH_DIR}/system/yunsh-bluetooth-daemon.py" "/usr/bin/yunsh-bluetooth-daemon"
+add_file "${YUNSH_DIR}/system/yunsh-headtracking" "/usr/bin/yunsh-headtracking"
+add_file "${YUNSH_DIR}/system/yunsh-headtracking-sim" "/usr/bin/yunsh-headtracking-sim"
 add_file "${YUNSH_DIR}/system/yunsh-screenshotd" "/usr/bin/yunsh-screenshotd"
 add_file "${YUNSH_DIR}/system/yunsh-factory-reset" "/usr/bin/yunsh-factory-reset"
 add_file "${YUNSH_DIR}/system/yunsh-install-progress.sh" "/usr/bin/yunsh-install-progress.sh"
@@ -613,6 +615,11 @@ add_file "${APPD_SVC}" "/etc/systemd/system/yunsh-appd.service"
 # Terminal daemon
 TERM_SVC="${YUNSH_DIR}/system/yunsh-terminal.service"
 add_file "${TERM_SVC}" "/etc/systemd/system/yunsh-terminal.service"
+
+# Head Tracking daemon (3DoF IMU)
+HTSVC_FILE="${BUILD_DIR}/yunsh-headtracking.service"
+cp "${YUNSH_DIR}/system/yunsh-headtracking.service" "${HTSVC_FILE}"
+add_file "${HTSVC_FILE}" "/etc/systemd/system/yunsh-headtracking.service"
 
 # ─── Auto-login for tty1 ──────────────────────────
 echo "" >> "${DEBUGFS_SCRIPT}"

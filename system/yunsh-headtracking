@@ -1,0 +1,86 @@
+#!/usr/bin/env python3
+"""
+YUNSH Head Tracking Daemon v1.0
+================================
+Reads IMU rotation data (yaw/pitch/roll) and serves it via HTTP
+for YUNSH OS QML UI to consume.
+
+Hardware Input Sources (pick one):
+  1. UDP port 8595 — receive JSON {"yaw":0,"pitch":0,"roll":0}
+  2. STDIN — pipe IMU data line by line in JSON format
+  3. No input → serves zeros (no compensation)
+
+QML reads from: http://127.0.0.1:8592/tracking
+"""
+
+import json
+import socket
+import sys
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+ROTATION = {"yaw": 0.0, "pitch": 0.0, "roll": 0.0}
+LOCK = threading.Lock()
+
+
+class TrackingHandler(BaseHTTPRequestHandler):
+    """Minimal HTTP endpoint for QML polling."""
+
+    def do_GET(self):
+        with LOCK:
+            payload = json.dumps(ROTATION).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def log_message(self, fmt, *args):
+        pass  # silent
+
+
+def udp_listener():
+    """Listen for JSON rotation data on UDP :8595."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind(("127.0.0.1", 8595))
+    sock.settimeout(1.0)
+    while True:
+        try:
+            data, _addr = sock.recvfrom(4096)
+            update = json.loads(data.decode().strip())
+            with LOCK:
+                ROTATION.update(
+                    {k: float(v) for k, v in update.items() if k in ("yaw", "pitch", "roll")}
+                )
+        except (socket.timeout, json.JSONDecodeError, ValueError):
+            pass
+
+
+def stdin_listener():
+    """Read JSON rotation data from STDIN (line by line)."""
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            update = json.loads(line)
+            with LOCK:
+                ROTATION.update(
+                    {k: float(v) for k, v in update.items() if k in ("yaw", "pitch", "roll")}
+                )
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+
+if __name__ == "__main__":
+    # Start UDP listener (hardware IMU data)
+    threading.Thread(target=udp_listener, daemon=True).start()
+    # Start STDIN listener if piped (not a TTY)
+    if not sys.stdin.isatty():
+        threading.Thread(target=stdin_listener, daemon=True).start()
+
+    # Start HTTP server for QML
+    server = HTTPServer(("127.0.0.1", 8592), TrackingHandler)
+    print("[yunsh-headtracking] Ready on http://127.0.0.1:8592/tracking", file=sys.stderr)
+    server.serve_forever()

@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""
+YUNSH Head Tracking Simulator v1.0
+====================================
+Sends simulated rotation data to the headtracking daemon via UDP.
+Use arrow keys or mouse to test window compensation without real IMU.
+
+Usage:
+  python3 yunsh-headtracking-sim          # Interactive keyboard mode
+  python3 yunsh-headtracking-sim --mouse  # Mouse tracking mode
+"""
+
+import json
+import socket
+import sys
+import time
+
+
+def send_rotation(yaw: float, pitch: float, roll: float = 0.0):
+    """Send rotation data to local headtracking daemon."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    data = json.dumps({"yaw": yaw, "pitch": pitch, "roll": roll})
+    sock.sendto(data.encode(), ("127.0.0.1", 8595))
+    sock.close()
+
+
+def keyboard_mode():
+    """Arrow-key controlled simulator."""
+    import termios, tty
+
+    yaw, pitch = 0.0, 0.0
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+
+    print("=== Head Tracking Simulator (Keyboard Mode) ===")
+    print("← → : Yaw   |   ↑ ↓ : Pitch   |   r : Reset   |   q : Quit")
+    print("Current: yaw=0.0  pitch=0.0", end="\r")
+
+    try:
+        tty.setraw(fd)
+        while True:
+            ch = sys.stdin.read(1)
+            if ch == "q":
+                break
+            if ch == "r":
+                yaw, pitch = 0.0, 0.0
+            elif ch == "\x1b":  # ESC sequence
+                sys.stdin.read(1)  # skip [
+                direction = sys.stdin.read(1)
+                step = 5.0  # degrees
+                if direction == "C":  # right → positive yaw
+                    yaw = min(45.0, yaw + step)
+                elif direction == "D":  # left → negative yaw
+                    yaw = max(-45.0, yaw - step)
+                elif direction == "A":  # up → negative pitch (look up)
+                    pitch = max(-30.0, pitch - step)
+                elif direction == "B":  # down → positive pitch (look down)
+                    pitch = min(30.0, pitch + step)
+
+            send_rotation(yaw, pitch)
+            print(f"Current: yaw={yaw:+.1f}°  pitch={pitch:+.1f}°  ", end="\r")
+            time.sleep(0.016)  # ~60fps
+
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        send_rotation(0, 0)  # reset
+
+
+def mouse_mode():
+    """Mouse-position-based simulator."""
+    print("=== Head Tracking Simulator (Mouse Mode) ===")
+    print("Move mouse left/right → yaw    up/down → pitch")
+    print("Press Q to quit")
+
+    try:
+        import tkinter as tk
+
+        root = tk.Tk()
+        root.title("YUNSH Head Tracking Sim")
+        root.geometry("400x200")
+        root.attributes("-topmost", True)
+
+        label = tk.Label(text="Move mouse here\nyaw=0 pitch=0", font=("Helvetica", 16))
+        label.pack(expand=True, fill="both")
+
+        def on_motion(event):
+            w, h = root.winfo_width(), root.winfo_height()
+            if w < 10 or h < 10:
+                return
+            yaw = ((event.x / w) * 60) - 30   # -30° to +30°
+            pitch = ((event.y / h) * 40) - 20  # -20° to +20°
+            send_rotation(yaw, pitch)
+            label.config(text=f"yaw={yaw:+.1f}°  pitch={pitch:+.1f}°")
+
+        root.bind("<Motion>", on_motion)
+        root.bind("q", lambda e: root.destroy())
+
+        def poll():
+            send_rotation(0.0, 0.0)
+            root.after(1000, poll)
+
+        poll()
+        root.mainloop()
+    except ImportError:
+        print("tkinter not available. Use keyboard mode instead.")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    if "--mouse" in sys.argv:
+        mouse_mode()
+    else:
+        keyboard_mode()

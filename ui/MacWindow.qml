@@ -24,9 +24,27 @@ Rectangle {
     // "following" = follows user's gaze (always in view)
     property string pinMode: "pinned"
 
-    // Head rotation offset (used when pinned, set by IMU system)
-    property real headOffsetX: 0
-    property real headOffsetY: 0
+    // ─── 3DoF Head Tracking ───────────────────────────────
+    // Current head rotation (set by main.qml from IMU daemon)
+    property real headYaw: 0.0
+    property real headPitch: 0.0
+    property real pixelsPerDegree: 21.3   // 1920px / ~90° FOV = 21.3 px/°
+
+    // When pinned: window stays in world space using head rotation compensation
+    // When following: subtle head-aware offset (10% of pinned effect)
+    function computeHeadOffsetX() {
+        var degrees = pinMode === "pinned" ? headYaw : headYaw * 0.08
+        return -degrees * pixelsPerDegree
+    }
+    function computeHeadOffsetY() {
+        var degrees = pinMode === "pinned" ? headPitch : headPitch * 0.08
+        return -degrees * pixelsPerDegree
+    }
+
+    transform: Translate {
+        x: macWindow.computeHeadOffsetX()
+        y: macWindow.computeHeadOffsetY()
+    }
 
     signal pinModeChanged(string mode)
 
@@ -440,9 +458,6 @@ Rectangle {
         if (macWindow.pinMode === "pinned") {
             // Switch to follow mode: window becomes gaze-following
             macWindow.pinMode = "following"
-            // Store current position as offset for IMU reference
-            macWindow.headOffsetX = macWindow.x
-            macWindow.headOffsetY = macWindow.y
         } else {
             // Switch to pinned mode: fix in space
             macWindow.pinMode = "pinned"
@@ -450,7 +465,6 @@ Rectangle {
     }
 
     // When in follow mode, window smoothly moves to center-ish position
-    // (Actual IMU-driven offset would be applied externally via headOffsetX/Y)
     onPinModeChanged: {
         if (macWindow.pinMode === "following") {
             // Smoothly animate to centered position

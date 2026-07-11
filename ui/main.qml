@@ -18,6 +18,13 @@ ApplicationWindow {
     property bool activationDone: false
 
     // ─── App Switcher tracking ───────────────────────
+    // ─── 3DoF Head Tracking ─────────────────────────
+    property real headYaw: 0.0
+    property real headPitch: 0.0
+    property real headRoll: 0.0
+    property real pixelsPerDegree: 21.3  // 1920px ÷ ~90° FOV
+    property bool headTrackingEnabled: false
+
     property var openApps: []
     property var appInfo: ({
         "settings": { name: "设置", icon: "/usr/share/yunsh/icons/settings.svg", color: "#00D4FF" },
@@ -146,6 +153,9 @@ ApplicationWindow {
         MacWindow {
             id: settingsWindow
             appTitle: "设置"
+            headYaw: yunshOS.headYaw
+            headPitch: yunshOS.headPitch
+            pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 80; y: 60; width: 900; height: 650
             visible: false
             onCloseClicked: { yunshOS.closeAppFromSwitcher("settings") }
@@ -168,6 +178,9 @@ ApplicationWindow {
         MacWindow {
             id: systemInfoWindow
             appTitle: "系统信息"
+            headYaw: yunshOS.headYaw
+            headPitch: yunshOS.headPitch
+            pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 140; y: 100; width: 800; height: 600
             visible: false
             onCloseClicked: { yunshOS.closeAppFromSwitcher("systeminfo") }
@@ -181,6 +194,9 @@ ApplicationWindow {
         MacWindow {
             id: aboutWindow
             appTitle: "关于"
+            headYaw: yunshOS.headYaw
+            headPitch: yunshOS.headPitch
+            pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 120; y: 160; width: 800; height: 550
             visible: false
             onCloseClicked: { yunshOS.closeAppFromSwitcher("about") }
@@ -194,6 +210,9 @@ ApplicationWindow {
         MacWindow {
             id: networkWindow
             appTitle: "Wi-Fi"
+            headYaw: yunshOS.headYaw
+            headPitch: yunshOS.headPitch
+            pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 100; y: 120; width: 800; height: 550
             visible: false
             onCloseClicked: { yunshOS.closeAppFromSwitcher("network") }
@@ -208,6 +227,9 @@ ApplicationWindow {
         MacWindow {
             id: bluetoothWindow
             appTitle: "蓝牙"
+            headYaw: yunshOS.headYaw
+            headPitch: yunshOS.headPitch
+            pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 180; y: 80; width: 800; height: 550
             visible: false
             onCloseClicked: { yunshOS.closeAppFromSwitcher("bluetooth") }
@@ -222,6 +244,9 @@ ApplicationWindow {
         MacWindow {
             id: updateWindow
             appTitle: "系统更新"
+            headYaw: yunshOS.headYaw
+            headPitch: yunshOS.headPitch
+            pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 80; y: 100; width: 850; height: 600
             visible: false
             onCloseClicked: { yunshOS.closeAppFromSwitcher("update") }
@@ -235,6 +260,9 @@ ApplicationWindow {
         MacWindow {
             id: updateHistoryWindow
             appTitle: "更新历史"
+            headYaw: yunshOS.headYaw
+            headPitch: yunshOS.headPitch
+            pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 160; y: 140; width: 800; height: 550
             visible: false
             onCloseClicked: { yunshOS.closeAppFromSwitcher("updatehistory") }
@@ -248,6 +276,9 @@ ApplicationWindow {
         MacWindow {
             id: browserWindow
             appTitle: "Browser"
+            headYaw: yunshOS.headYaw
+            headPitch: yunshOS.headPitch
+            pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 120; y: 60; width: 1000; height: 700
             visible: false
             onCloseClicked: { yunshOS.closeAppFromSwitcher("browser") }
@@ -261,6 +292,9 @@ ApplicationWindow {
         MacWindow {
             id: metaverseWindow
             appTitle: "Metaverse"
+            headYaw: yunshOS.headYaw
+            headPitch: yunshOS.headPitch
+            pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 80; y: 160; width: 950; height: 680
             visible: false
             onCloseClicked: { yunshOS.closeAppFromSwitcher("metaverse") }
@@ -274,6 +308,9 @@ ApplicationWindow {
         MacWindow {
             id: terminalWindow
             appTitle: "终端"
+            headYaw: yunshOS.headYaw
+            headPitch: yunshOS.headPitch
+            pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 200; y: 120; width: 850; height: 600
             visible: false
             onCloseClicked: { yunshOS.closeAppFromSwitcher("terminal") }
@@ -287,6 +324,9 @@ ApplicationWindow {
         MacWindow {
             id: photosWindow
             appTitle: "相册"
+            headYaw: yunshOS.headYaw
+            headPitch: yunshOS.headPitch
+            pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 140; y: 80; width: 900; height: 650
             visible: false
             onCloseClicked: { yunshOS.closeAppFromSwitcher("photos") }
@@ -300,6 +340,9 @@ ApplicationWindow {
         MacWindow {
             id: androidWindow
             appTitle: "Android App"
+            headYaw: yunshOS.headYaw
+            headPitch: yunshOS.headPitch
+            pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 130; y: 80; width: 700; height: 540
             visible: false
             onCloseClicked: { yunshOS.closeAppFromSwitcher("appstore"); yunshOS.closeAppFromSwitcher("files") }
@@ -466,6 +509,32 @@ ApplicationWindow {
             }
         }
         xhr.send(JSON.stringify({action: "launch", appId: appId}))
+    }
+
+    // ─── Head Tracking Polling ────────────────────────
+    // Polls yunsh-headtracking daemon every ~50ms
+    Timer {
+        id: headTrackingTimer
+        interval: 50
+        running: true
+        repeat: true
+        onTriggered: {
+            var xhr = new XMLHttpRequest()
+            xhr.open("GET", "http://127.0.0.1:8592/tracking", true)
+            xhr.timeout = 30
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+                    try {
+                        var data = JSON.parse(xhr.responseText)
+                        yunshOS.headYaw = data.yaw || 0
+                        yunshOS.headPitch = data.pitch || 0
+                        yunshOS.headRoll = data.roll || 0
+                        yunshOS.headTrackingEnabled = true
+                    } catch(e) {}
+                }
+            }
+            xhr.send()
+        }
     }
 
     // ─── Mouse movement resets idle timer ──────────
