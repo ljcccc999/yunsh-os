@@ -209,4 +209,6 @@ Get-FileHash YUNSH-OS-v1.0.1.img.xz -Algorithm SHA256
 
 ## 📝 License
 
-© 2024 YUNSH Technology
+Developer：Tim（LiuJiacheng）
+
+© 2024 YUNSH inc.
