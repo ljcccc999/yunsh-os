@@ -318,6 +318,16 @@ hdiutil detach "$BOOT_DEV" 2>/dev/null || true
 echo "Boot partition done ✓"
 
 # ════════════════════════════════════════════════════════
+# STEP 5b: Write modified boot partition back
+# ════════════════════════════════════════════════════════
+echo ""
+echo "=== Step 5b: Writing boot partition back ==="
+BOOT_SIZE_BLOCKS=$((BOOT_END - BOOT_START + 1))
+dd if="${BOOT_PARTITION_IMG}" of="${OUTPUT_FILE}" bs=512    seek=$BOOT_START count=$BOOT_SIZE_BLOCKS conv=notrunc 2>/dev/null
+sync
+echo "Boot partition written back ✓"
+
+# ════════════════════════════════════════════════════════
 # STEP 6: Modify ROOT partition (ext4 via debugfs)
 # ════════════════════════════════════════════════════════
 echo ""
