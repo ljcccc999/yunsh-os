@@ -1,6 +1,6 @@
 // YUNSH OS v1.0.1 - Glass Background Component (visionOS Ultimate)
 // Full-screen frosted glass background layer
-// Used as the base for ALL YUNSH screens
+// AR-friendly: white-tinted glass for visibility on AR glasses
 
 import QtQuick 2.15
 
@@ -9,13 +9,13 @@ Rectangle {
     anchors.fill: parent
 
     // === Customizable Properties ===
-    property real tintOpacity: 0.65       // Base glass darkness
+    property real tintOpacity: 0.2        // White glass - visible on AR glasses
     property real cornerRadius: 0         // Full-screen = 0, panels = 28
     property bool showTopHighlight: true  // visionOS edge light
     property bool showBorder: false       // Subtle edge border
     property bool showDropShadow: false   // Deep floating shadow
     property bool showFrost: true         // Frost overlay layer
-    property color tintColor: Qt.rgba(12/255, 12/255, 25/255, tintOpacity)
+    property color tintColor: Qt.rgba(255/255, 255/255, 255/255, tintOpacity)
     property color accentColor: Qt.rgba(0/255, 212/255, 255/255, 0.0) // Subtle accent glow
 
     radius: cornerRadius
@@ -25,7 +25,7 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: cornerRadius
-        color: Qt.rgba(255/255, 255/255, 255/255, 0.02)
+        color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
         visible: showFrost
     }
 
@@ -33,7 +33,7 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: cornerRadius
-        color: Qt.rgba(255/255, 255/255, 255/255, 0.015)
+        color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
         visible: showFrost
     }
 

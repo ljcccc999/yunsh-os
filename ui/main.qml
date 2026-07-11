@@ -126,7 +126,7 @@ ApplicationWindow {
 
         // ===== SETTINGS =====
         Item { id: settingsScreen; anchors.fill: parent; visible: false; z: 50
-            GlassBackground { anchors.fill: parent; tintOpacity: 0.5; showTopHighlight: false }
+            GlassBackground { anchors.fill: parent; showTopHighlight: false }
             SettingsScreen { anchors.fill: parent; visible: true
                 onBackToHome: switchToHome()
                 onOpenUpdatePage: switchTo(updateScreen, "update")
@@ -143,7 +143,7 @@ ApplicationWindow {
 
         // ===== SYSTEM INFO =====
         Item { id: systemInfoScreen; anchors.fill: parent; visible: false; z: 55
-            GlassBackground { anchors.fill: parent; tintOpacity: 0.5; showTopHighlight: false }
+            GlassBackground { anchors.fill: parent; showTopHighlight: false }
             SystemInfoScreen { anchors.fill: parent; visible: true
                 onBackToSettings: switchTo(settingsScreen, "settings")
             }
@@ -151,7 +151,7 @@ ApplicationWindow {
 
         // ===== ABOUT =====
         Item { id: aboutScreen; anchors.fill: parent; visible: false; z: 50
-            GlassBackground { anchors.fill: parent; tintOpacity: 0.5; showTopHighlight: false }
+            GlassBackground { anchors.fill: parent; showTopHighlight: false }
             AboutScreen { anchors.fill: parent; visible: true
                 onBackToHome: switchToHome()
             }
@@ -159,7 +159,7 @@ ApplicationWindow {
 
         // ===== NETWORK/Wi-Fi =====
         Item { id: networkScreen; anchors.fill: parent; visible: false; z: 55
-            GlassBackground { anchors.fill: parent; tintOpacity: 0.5; showTopHighlight: false }
+            GlassBackground { anchors.fill: parent; showTopHighlight: false }
             NetworkScreen { anchors.fill: parent; visible: true
                 onBackToSettings: switchTo(settingsScreen, "settings")
                 onBackToHome: switchToHome()
@@ -168,7 +168,7 @@ ApplicationWindow {
 
         // ===== BLUETOOTH =====
         Item { id: bluetoothScreen; anchors.fill: parent; visible: false; z: 55
-            GlassBackground { anchors.fill: parent; tintOpacity: 0.5; showTopHighlight: false }
+            GlassBackground { anchors.fill: parent; showTopHighlight: false }
             BluetoothScreen { anchors.fill: parent; visible: true
                 onBackToSettings: switchTo(settingsScreen, "settings")
                 onBackToHome: switchToHome()
@@ -177,7 +177,7 @@ ApplicationWindow {
 
         // ===== UPDATE =====
         Item { id: updateScreen; anchors.fill: parent; visible: false; z: 60
-            GlassBackground { anchors.fill: parent; tintOpacity: 0.5 }
+            GlassBackground { anchors.fill: parent }
             UpdateScreen { anchors.fill: parent; visible: true; z: 10
                 onBackToHome: switchToHome()
             }
@@ -185,7 +185,7 @@ ApplicationWindow {
 
         // ===== UPDATE HISTORY =====
         Item { id: updateHistoryScreen; anchors.fill: parent; visible: false; z: 60
-            GlassBackground { anchors.fill: parent; tintOpacity: 0.5 }
+            GlassBackground { anchors.fill: parent }
             UpdateHistoryScreen { anchors.fill: parent; visible: true; z: 10
                 onBackToUpdates: switchTo(settingsScreen, "settings")
             }
@@ -193,7 +193,7 @@ ApplicationWindow {
 
         // ===== BROWSER =====
         Item { id: browserScreen; anchors.fill: parent; visible: false; z: 60
-            GlassBackground { anchors.fill: parent; tintOpacity: 0.5 }
+            GlassBackground { anchors.fill: parent }
             YunshBrowser { anchors.fill: parent; visible: true; z: 10
                 onBackToHome: switchToHome()
             }
@@ -201,7 +201,7 @@ ApplicationWindow {
 
         // ===== METAVERSE =====
         Item { id: metaverseScreen; anchors.fill: parent; visible: false; z: 60
-            GlassBackground { anchors.fill: parent; tintOpacity: 0.5 }
+            GlassBackground { anchors.fill: parent }
             YunshMetaverse { anchors.fill: parent; visible: true; z: 10
                 onBackToHome: switchToHome()
             }
@@ -209,7 +209,7 @@ ApplicationWindow {
 
         // ===== TERMINAL =====
         Item { id: terminalScreen; anchors.fill: parent; visible: false; z: 60
-            GlassBackground { anchors.fill: parent; tintOpacity: 0.45; showTopHighlight: false }
+            GlassBackground { anchors.fill: parent; showTopHighlight: false }
             TerminalScreen { anchors.fill: parent; visible: true
                 onBackToHome: switchToHome()
             }
@@ -217,7 +217,7 @@ ApplicationWindow {
 
         // ===== PHOTOS =====
         Item { id: photosScreen; anchors.fill: parent; visible: false; z: 60
-            GlassBackground { anchors.fill: parent; tintOpacity: 0.5 }
+            GlassBackground { anchors.fill: parent }
             PhotosScreen { anchors.fill: parent; visible: true; z: 10
                 onBackToHome: switchToHome()
             }
