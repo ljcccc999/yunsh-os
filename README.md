@@ -3,6 +3,10 @@
 面向 YUNSH V1 AR 眼镜的定制系统，基于 **Raspberry Pi OS Lite (Debian 13 Trixie)**。
 全 visionOS 毛玻璃 UI，AR 透明黑底设计。
 
+<p align="center">
+  <img src="logo/logo-256.png" width="128" alt="YUNSH Logo"/>
+</p>
+
 > ⬇️ **[下载最新镜像](https://github.com/ljcccc999/yunsh-os/releases)**
 
 ```
@@ -21,17 +25,78 @@
 
 ---
 
-## 特性
+## ✨ 特性
 
-- **visionOS 毛玻璃 UI**: 纯黑 AR 透明背景，全系统毛玻璃面板 + frost 层
-- **Waydroid**: 安卓兼容 + 应用宝预装
-- **内置浏览器**: Qt6 WebEngine (Chromium)，GFW-safe
-- **相册/截图系统**: 自动截图，全屏预览
-- **PTY 终端**: 后台持久化会话，切界面不中断
-- **OTA 双通道更新**: Stable/Beta，A/B 分区回退
-- **首次开机加速**: 自动切换清华镜像源
+### 🖼️ visionOS 毛玻璃 UI
+- 纯黑 AR 透明背景
+- 全系统 frosted glass 毛玻璃面板 + 顶光 + 阴影
+- iOS 式动态翻页主屏（超 8 个 App 自动新增页）
+- App Switcher: 任务切换器，底部 Home 指示条触发
+- 圆形毛玻璃图标 · 玻璃 orb 时钟 widget
+- 系统级长按复制/粘贴菜单
 
-## 快速开始
+### 📱 Waydroid 安卓兼容
+- 预装应用宝（腾讯应用商店）
+- Python HTTP daemon 启动 Android 应用
+- 无缝 QML ↔ Android 切换
+
+### 🌐 内置浏览器
+- Qt6 WebEngine（Chromium 内核）
+- 前进/后退/刷新/加载进度
+- 自动 HTTPS → HTTP fallback
+- Bing 搜索 · `Ctrl+L` 聚焦地址栏
+
+### 📷 相册 & 截图系统
+- 多种截图方式: Print 键 / 状态栏图标 / 悬浮按钮 / `Ctrl+Shift+S` / 控制中心
+- 自动读取 `~/Pictures/Screenshots/`
+- 5 列毛玻璃缩略图网格 + 全屏预览
+
+### 🖥 内置终端
+- Python PTY 后端（:8591）
+- 会话持久化（切界面不中断）
+- 复制/粘贴支持
+
+### 📡 OTA 双通道更新
+- Stable / Beta 双通道 · 大版本开关
+- GFW-safe: 走 `api.github.com` + `release-assets.githubusercontent.com`
+- A/B 分区更新，失败可回退
+- 更新界面显示发布说明 + 操作方式
+
+---
+
+## 📦 系统组件
+
+### 7 个系统服务
+
+| 服务 | 说明 |
+|------|------|
+| `yunsh-os` | UI 启动器（QML 主入口） |
+| `yunsh-splash` | Apple 式两段 splash（atom → logo + 文字） |
+| `yunsh-network` | Wi-Fi 扫描/连接管理 |
+| `yunsh-bluetooth` | 蓝牙设备管理 |
+| `yunsh-update` | OTA 更新守护（每 6h 检查） |
+| `yunsh-appd` | Waydroid 应用启动代理 |
+| `yunsh-terminal` | PTY 终端后台 |
+
+### QML 组件
+
+主界面 · App Switcher · Home 指示条 · 激活向导 · 设置
+浏览器 · 相册 · 终端 · 元宇宙 · 控制中心 · 状态栏
+虚拟键盘 · 屏保 · 截图叠加 · 毛玻璃组件库
+
+---
+
+## 🚀 开始使用
+
+### 硬件要求
+
+| 项目 | 规格 |
+|------|------|
+| 主板 | Raspberry Pi 4B (2GB+) / Pi 5 |
+| 显示 | 1080p HDMI（AR 眼镜 / 显示器） |
+| 输入 | USB 鼠标 + 键盘 |
+| 存储 | 16GB+ SD 卡（建议 A2） |
+| 电源 | 5V/3A USB-C |
 
 ### 烧录
 
@@ -39,34 +104,79 @@
 xzcat YUNSH-OS-v1.0.1.img.xz | sudo dd of=/dev/rdisk2 bs=1m status=progress
 ```
 
-### 硬件
-
-RPi 4B (2GB+) / Pi 5，1080p HDMI 显示，USB 鼠标 + 键盘，16GB+ SD 卡
+验证 SHA256:
+```bash
+shasum -a 256 YUNSH-OS-v1.0.1.img.xz
+```
 
 ### 首次开机
 
-1. 插卡通电 → 自动安装依赖（需联网）
-2. 重启 → 激活向导（语言/Wi-Fi/账户）
-3. 进入主界面
-
-### 操作
-
-**鼠标**: 点击 Home 指示条 → App Switcher | 左键上滑 Home 指示条 → App Switcher
-**键盘**: `Escape` 返回 | `Print` 截图 | `Ctrl+↑` App Switcher | `Ctrl+Shift+C` 控制中心
-
-## 构建
-
-**依赖**: macOS + `brew install e2fsprogs` + `pip3 install Pillow`
-
-```bash
-git clone git@github.com:ljcccc999/yunsh-os.git
-bash scripts/build-image-from-rpi-os.sh
-```
-
-产物：`output/YUNSH-OS-v1.0.1.img.xz`（~570MB）
+1. 插卡通电 → 自动安装 Qt6 / Waydroid / 应用宝（需联网）
+2. 自动重启 → 激活向导（选择语言 → 连接 Wi-Fi → 创建账户）
+3. 进入 YUNSH 主界面 🎯
 
 ---
 
-## License
+## 🎮 操作方式
+
+### 鼠标操作
+
+| 操作 | 功能 |
+|------|------|
+| 左键点击（图标） | 打开应用 |
+| 左键点击（Home 指示条） | 打开 App Switcher（任务切换器） |
+| 按住 Home 指示条向上拖拽 | 打开 App Switcher（>30px 触发） |
+| 点击 App Switcher 卡片 | 切换至该应用 |
+| 卡片 ✕ 按钮 | 关闭应用 |
+| 点击空白区域 / Escape | 关闭 App Switcher / 返回桌面 |
+| ← 返回胶囊 | 返回上级页面 |
+| 长按文字 | 弹出复制/粘贴菜单 |
+| 右键 | 粘贴（Terminal） |
+
+### 键盘快捷键
+
+| 快捷键 | 功能 |
+|--------|------|
+| **Escape** | 返回 / 关闭面板 |
+| **Print** | 截取全屏 |
+| **Ctrl + Shift + S** | 区域截图 |
+| **Ctrl + Shift + C** | 打开/关闭控制中心 |
+| **Ctrl + ↑** | 打开 App Switcher（任务切换器） |
+| **Ctrl + L** | 浏览器地址栏聚焦 / 终端清屏 |
+| **Ctrl + R** | 刷新浏览器页面 |
+
+### App Switcher（任务切换器）
+
+- **触发方式**: 点击 Home 指示条 / 上滑拖拽 / `Ctrl+↑`
+- 横向滚动浏览打开的应用
+- 点击卡片切换，✕ 关闭
+- 关闭所有应用 → 自动回到主屏幕
+
+### 控制中心
+
+`Ctrl+Shift+C` 或状态栏 ☰ 图标打开
+- Wi-Fi / 蓝牙开关
+- 虚拟键盘 / 截图快捷按钮
+- 亮度 / 音量滑块
+- Wi-Fi / 蓝牙设置快捷入口
+
+### 截图
+
+五种方式触发：Print 键 / 状态栏截图图标 / 浮动截图按钮 / `Ctrl+Shift+S` / 控制中心
+
+截图后右上角显示预览，自动保存到 `~/Pictures/Screenshots/`
+
+### 恢复出厂设置
+
+清除所有用户数据 + 已安装应用，保留系统版本和 OTA 配置。
+重启后进入激活向导。
+
+### 待机
+
+2 分钟无操作 → 屏保，移动鼠标唤醒。
+
+---
+
+## 📝 License
 
 © 2024 YUNSH Technology
