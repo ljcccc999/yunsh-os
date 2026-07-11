@@ -393,6 +393,9 @@ add_file "${YUNSH_DIR}/system/yunsh-appd.py" "/usr/bin/yunsh-appd"
 # Inject terminal daemon
 add_file "${YUNSH_DIR}/system/yunsh-terminal.py" "/usr/bin/yunsh-terminal"
 
+# Inject disk usage helper (for SystemInfo QML)
+add_file "${YUNSH_DIR}/system/yunsh-disk-helper" "/usr/bin/yunsh-disk-helper"
+
 # Inject 应用宝 APK (pre-downloaded)
 echo "" >> "${DEBUGFS_SCRIPT}"
 echo "# === 应用宝 APK ===" >> "${DEBUGFS_SCRIPT}"
@@ -438,14 +441,17 @@ if [ -f /etc/yunsh/.save_user_creds.sh ]; then
     sync
 fi
 
-# Phase 3: Launch the main UI
+# Phase 3: Collect system info
+/usr/bin/yunsh-disk-helper
+
+# Phase 4: Launch the main UI
 QT_QPA_PLATFORM=eglfs \
 QT_QPA_EGLFS_INTEGRATION=eglfs_kms \
 QT_QUICK_BACKEND=software \
 qml main.qml
 QML_EXIT=$?
 
-# Phase 4: If .activated was just created, restart launcher to enter home screen
+# Phase 5: If .activated was just created, restart launcher to enter home screen
 if [ -f /etc/yunsh/.activated ] && [ ! -f /etc/yunsh/.save_user_creds.sh ]; then
     exec "$0"
 fi
@@ -657,6 +663,7 @@ echo "set_inode_field /usr/bin/yunsh-ui-launcher mode 0755" >> "${DEBUGFS_SCRIPT
 echo "set_inode_field /usr/bin/yunsh-splash mode 0755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-appd mode 0755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-terminal mode 0755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-disk-helper mode 0755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /etc/rc.local mode 0755" >> "${DEBUGFS_SCRIPT}"
 
 # ─── Remove RPi OS default first-boot services ────

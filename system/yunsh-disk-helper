@@ -1,0 +1,19 @@
+#!/bin/bash
+# YUNSH OS v1.0.1 - Disk usage helper
+# Writes disk usage info to a file that SystemInfo QML can read
+set -e
+
+OUTPUT_FILE="/tmp/yunsh-disk-usage.json"
+
+# Get total and used in bytes for root partition
+read total used available pct mountpoint <<< $(df -B1 / | tail -1 | awk '{print $2, $3, $4, $5, $6}')
+
+cat > "$OUTPUT_FILE" <<EOF
+{
+  "total_bytes": $total,
+  "used_bytes": $used,
+  "available_bytes": $available,
+  "used_pct": ${pct%\%},
+  "mountpoint": "$mountpoint"
+}
+EOF

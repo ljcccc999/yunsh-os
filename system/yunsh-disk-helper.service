@@ -1,0 +1,10 @@
+[Unit]
+Description=YUNSH OS disk usage helper - writes /tmp/yunsh-disk-usage.json
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/yunsh-disk-helper
+
+[Install]
+WantedBy=multi-user.target

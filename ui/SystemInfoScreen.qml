@@ -13,43 +13,166 @@ Rectangle {
     z: 60
 
     property string osVersion: "YUNSH OS v1.0.1"
-    property string buildNumber: "2026.07.08.01"
-    property string deviceModel: "Raspberry Pi 5"
-    property string cpuInfo: "ARM Cortex-A76 × 4"
-    property string memoryTotal: "8 GB"
-    property string memoryUsed: "1.2 GB"
-    property string storageTotal: "32 GB"
-    property string storageUsed: "4.5 GB"
+    property string buildNumber: ""
+    property string deviceModel: ""
+    property string cpuInfo: ""
+    property string memoryTotal: ""
+    property string memoryUsed: ""
+    property real memoryPct: 0
+    property string storageTotal: ""
+    property string storageUsed: ""
+    property real storagePct: 0
     property string displayRes: "1920 × 1080"
     property string displayRefresh: "60 Hz"
-    property string kernelVersion: "6.6.x"
+    property string kernelVersion: ""
 
     signal backToSettings()
 
-    // Read version config from /etc/yunsh/version.conf
-    function loadVersionConfig() {
+    // Read a text file synchronously via file://
+    function readFile(path) {
         var xhr = new XMLHttpRequest()
-        xhr.open("GET", "file:///etc/yunsh/version.conf", true)
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState === XMLHttpRequest.DONE) {
-                if (xhr.status === 0 || xhr.status === 200) {
-                    var text = xhr.responseText
-                    var lines = text.split('\n')
-                    for (var i = 0; i < lines.length; i++) {
-                        var line = lines[i].trim()
-                        if (line.indexOf('VERSION=') === 0) {
-                            osVersion = "YUNSH OS " + line.substring(8)
-                        } else if (line.indexOf('BUILD=') === 0) {
-                            buildNumber = line.substring(6)
-                        }
-                    }
+        xhr.open("GET", "file://" + path, false)  // synchronous
+        try {
+            xhr.send()
+            if (xhr.status === 0 || xhr.status === 200) {
+                return xhr.responseText
+            }
+        } catch(e) {}
+        return ""
+    }
+
+    function humanSize(bytes) {
+        if (bytes < 0) return "?"
+        var units = ["B", "KB", "MB", "GB", "TB"]
+        var i = 0
+        var size = bytes
+        while (size >= 1024 && i < units.length - 1) {
+            size /= 1024
+            i++
+        }
+        return size.toFixed(i > 0 ? 1 : 0) + " " + units[i]
+    }
+
+    function loadSystemInfo() {
+        // Version config
+        var versionText = readFile("/etc/yunsh/version.conf")
+        if (versionText) {
+            var lines = versionText.split('\n')
+            for (var i = 0; i < lines.length; i++) {
+                var line = lines[i].trim()
+                if (line.indexOf('VERSION=') === 0) {
+                    osVersion = "YUNSH OS " + line.substring(8)
+                } else if (line.indexOf('BUILD=') === 0) {
+                    buildNumber = line.substring(6)
                 }
             }
         }
-        xhr.send()
+
+        // Device model
+        var model = readFile("/proc/device-tree/model")
+        if (model) {
+            deviceModel = model.replace(/\0/g, '').trim()
+        }
+
+        // CPU info
+        var cpuText = readFile("/proc/cpuinfo")
+        if (cpuText) {
+            var cpuName = ""
+            var coreCount = 0
+            var cpuLines = cpuText.split('\n')
+            for (var j = 0; j < cpuLines.length; j++) {
+                var cl = cpuLines[j].trim()
+                if (cl.indexOf("model name") === 0 || cl.indexOf("Processor") === 0) {
+                    cpuName = cl.split(':')[1].trim()
+                }
+                if (cl.indexOf("processor") === 0) {
+                    coreCount++
+                }
+                if (cl.indexOf("Hardware") === 0 && !cpuName) {
+                    cpuName = cl.split(':')[1].trim()
+                }
+            }
+            cpuInfo = cpuName + " × " + coreCount
+        }
+
+        // Memory
+        var memText = readFile("/proc/meminfo")
+        if (memText) {
+            var memTotalKb = 0
+            var memAvailKb = 0
+            var memLines = memText.split('\n')
+            for (var k = 0; k < memLines.length; k++) {
+                var ml = memLines[k].trim()
+                if (ml.indexOf("MemTotal:") === 0) {
+                    memTotalKb = parseInt(ml.split(/\s+/)[1]) || 0
+                }
+                if (ml.indexOf("MemAvailable:") === 0) {
+                    memAvailKb = parseInt(ml.split(/\s+/)[1]) || 0
+                }
+            }
+            var memTotalBytes = memTotalKb * 1024
+            var memUsedBytes = (memTotalKb - memAvailKb) * 1024
+            memoryTotal = humanSize(memTotalBytes)
+            memoryUsed = humanSize(memUsedBytes)
+            memoryPct = memTotalKb > 0 ? (memTotalKb - memAvailKb) / memTotalKb : 0
+        }
+
+        // Storage (read from disk-helper JSON)
+        var diskJson = readFile("/tmp/yunsh-disk-usage.json")
+        if (diskJson) {
+            try {
+                var diskData = JSON.parse(diskJson)
+                storageTotal = humanSize(diskData.total_bytes)
+                storageUsed = humanSize(diskData.used_bytes)
+                storagePct = diskData.used_pct / 100.0
+            } catch(e) {}
+        }
+        // Fallback: read block device size
+        if (!storageTotal) {
+            var sizeStr = readFile("/sys/block/mmcblk0/size") || readFile("/sys/block/mmcblk1/size") || readFile("/sys/block/nvme0n1/size") || ""
+            if (sizeStr) {
+                var totalBytes = parseInt(sizeStr.trim()) * 512
+                storageTotal = humanSize(totalBytes)
+            }
+        }
+
+        // Kernel version
+        var verText = readFile("/proc/version")
+        if (verText) {
+            var parts = verText.split(' ')
+            // "Linux version 6.6.31+rpi-rpi-v8 ..."
+            kernelVersion = parts[2] || ""
+        }
+
+        // Timer to refresh periodically
+        refreshTimer.running = true
     }
 
-    Component.onCompleted: loadVersionConfig()
+    Timer {
+        id: refreshTimer
+        interval: 10000  // refresh every 10s
+        running: false
+        repeat: true
+        onTriggered: {
+            // Only refresh memory (fast to read)
+            var mem = readFile("/proc/meminfo")
+            if (mem) {
+                var mt = 0, ma = 0
+                var mlines = mem.split('\n')
+                for (var i = 0; i < mlines.length; i++) {
+                    var l = mlines[i].trim()
+                    if (l.indexOf("MemTotal:") === 0) mt = parseInt(l.split(/\s+/)[1]) || 0
+                    if (l.indexOf("MemAvailable:") === 0) ma = parseInt(l.split(/\s+/)[1]) || 0
+                }
+                if (mt > 0) {
+                    memoryUsed = humanSize((mt - ma) * 1024)
+                    memoryPct = (mt - ma) / mt
+                }
+            }
+        }
+    }
+
+    Component.onCompleted: loadSystemInfo()
 
     // Header
     Rectangle {
@@ -142,9 +265,9 @@ Rectangle {
                 color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
 
                 Rectangle {
-                    width: parent.width * 0.15
+                    width: parent.width * Math.min(memoryPct, 1.0)
                     height: parent.height; radius: 3
-                    color: "#00D4FF"
+                    color: memoryPct > 0.8 ? "#FF453A" : (memoryPct > 0.6 ? "#FFD60A" : "#00D4FF")
                 }
             }
 
@@ -166,9 +289,9 @@ Rectangle {
                 color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
 
                 Rectangle {
-                    width: parent.width * 0.14
+                    width: parent.width * Math.min(storagePct, 1.0)
                     height: parent.height; radius: 3
-                    color: "#00E676"
+                    color: storagePct > 0.8 ? "#FF453A" : (storagePct > 0.6 ? "#FFD60A" : "#00E676")
                 }
             }
 
