@@ -298,6 +298,18 @@ RPI5CONFIG
     echo "   config.txt updated"
 fi
 
+# 5a2. Modify cmdline.txt - remove boot logo, quiet kernel messages
+CMDLINE_FILE="${BOOT_MOUNT}/cmdline.txt"
+if [ -f "${CMDLINE_FILE}" ]; then
+    echo "→ Updating cmdline.txt"
+    # Read current cmdline, remove any existing quiet/logo.nologo, add ours
+    CURRENT=$(cat "${CMDLINE_FILE}")
+    # Remove old splash-related args if present
+    CLEANED=$(echo "$CURRENT" | sed 's/ quiet//g; s/ logo.nologo//g; s/ splash//g; s/ consoleblank=[0-9]*//g' 2>/dev/null || echo "$CURRENT")
+    echo "$CLEANED quiet logo.nologo consoleblank=0" > "${CMDLINE_FILE}"
+    echo "   cmdline.txt updated: added quiet logo.nologo consoleblank=0"
+fi
+
 # 5b. Copy YUNSH boot scripts + splash to boot partition
 echo "→ Copying YUNSH boot files to /boot/"
 cp "${YUNSH_DIR}/boot/yunsh-firstboot.sh" "${BOOT_MOUNT}/yunsh-firstboot.sh" 2>/dev/null || true
