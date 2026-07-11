@@ -1,6 +1,9 @@
-# YUNSH OS v1.0 — AR 眼镜操作系统
+# YUNSH OS — 空间计算操作系统
 
-面向 YUNSH V1 AR 眼镜的定制系统，基于 **Raspberry Pi OS Lite (Debian 13 Trixie)**。
+> YUNSH 公司三层架构：**AR（入口）→ OS（互联）→ 元宇宙+Web3（根本）**
+> YUNSH OS 是连接层——连接 AR 硬件、设备和未来空间互联网
+
+基于 **Raspberry Pi OS Lite (Debian 13 Trixie)** arm64
 全 visionOS 毛玻璃 UI + macOS 浮动窗口，AR 透明黑底设计。
 
 <p align="center">
@@ -39,6 +42,9 @@
 - 📌 **悬停**：窗口固定在 AR 空间，转头时屏幕位置反向补偿
 - 👀 **跟随**：窗口轻柔跟随头部微动，始终在视野中央
 - `yunsh-headtracking` 守护进程：UDP :8595 接收 IMU → HTTP :8592 供 QML 轮询
+- **BNO085 即插即用**：`yunsh-bno085-reader` 直接 I²C 读取硬件融合四元数 → UDP :8595
+  - 四线焊接 → 上电 → 窗口自动 3DoF 空间锚定
+  - 芯片内建融合，零 CPU 负载，无 ESP32
 - 硬件未就绪时可用 `yunsh-headtracking-sim` 键盘/鼠标模拟
 
 ### 🖼️ visionOS 毛玻璃 UI
@@ -47,6 +53,7 @@
 - iOS 式动态翻页主屏（超 8 个 App 自动新增页）
 - App Switcher: 任务切换器，底部 Home 指示条触发
 - 圆形毛玻璃图标 · 玻璃 orb 时钟 widget
+- **visionOS 浮动虚拟键盘**：白色毛玻璃面板 + 正圆按键，独立浮动，可拖拽
 - 系统级长按复制/粘贴菜单
 
 ### 📱 Waydroid 安卓兼容
@@ -85,7 +92,7 @@
 
 ## 📦 系统组件
 
-### 7 个系统服务
+### 9 个系统服务
 
 | 服务 | 说明 |
 |------|------|
@@ -94,7 +101,8 @@
 | `yunsh-network` | Wi-Fi 扫描/连接管理 |
 | `yunsh-bluetooth` | 蓝牙设备管理 |
 | `yunsh-update` | OTA 更新守护（每 6h 检查） |
-| `yunsh-headtracking` | 3DoF IMU 头追（UDP :8595 → HTTP :8592） |
+| `yunsh-headtracking` | 3DoF 头追守护（UDP :8595 → HTTP :8592） |
+| `yunsh-bno085-reader` | BNO085 I²C 读（即插即用，无 ESP32） |
 | `yunsh-appd` | Waydroid 应用启动代理 |
 | `yunsh-terminal` | PTY 终端后台 |
 
@@ -102,7 +110,7 @@
 
 主界面 · App Switcher · Home 指示条 · 激活向导 · 设置
 浏览器 · 相册 · 终端 · 元宇宙 · 控制中心 · 状态栏
-虚拟键盘 · 屏保 · 截图叠加 · 毛玻璃组件库
+visionOS 风格浮动虚拟键盘 · 屏保 · 截图叠加 · 毛玻璃组件库
 
 ---
 
@@ -115,7 +123,8 @@
 | 主板 | Raspberry Pi 4B (2GB+) / Pi 5 |
 | 显示 | 1080p HDMI（AR 眼镜 / 显示器） |
 | 输入 | USB 鼠标 + 键盘 |
-| 3DoF 追踪（可选） | 带 IMU (MPU6050 等) 的 MCU，通过 UDP :8595 发送 JSON 旋转数据 |
+| 3DoF 追踪（可选） | **BNO085**（推荐）：直连 Pi GPIO I²C，即插即用 |
+| | 或任意 IMU MCU 通过 UDP :8595 发 JSON 旋转数据 |
 | 无硬件时 | `yunsh-headtracking-sim` 键盘/鼠标模拟器即可测试 |
 | 存储 | 16GB+ SD 卡（建议 A2） |
 | 电源 | 5V/3A USB-C |
