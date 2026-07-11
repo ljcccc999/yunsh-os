@@ -52,18 +52,30 @@ ApplicationWindow {
                 break
             }
         }
-        if (appId === "settings") settingsScreen.visible = false
-        else if (appId === "browser") browserScreen.visible = false
-        else if (appId === "metaverse") metaverseScreen.visible = false
-        else if (appId === "terminal") terminalScreen.visible = false
-        else if (appId === "photos") photosScreen.visible = false
-        else if (appId === "update") updateScreen.visible = false
-        else if (appId === "about") aboutScreen.visible = false
-        else if (appId === "systeminfo") systemInfoScreen.visible = false
-        else if (appId === "network") networkScreen.visible = false
-        else if (appId === "bluetooth") bluetoothScreen.visible = false
-        else if (appId === "updatehistory") updateHistoryScreen.visible = false
+        closeWindowById(appId)
         if (openApps.length === 0) homeScreen.visible = true
+    }
+
+    function closeWindowById(appId) {
+        var w = getWindowById(appId)
+        if (w) w.visible = false
+    }
+
+    function getWindowById(appId) {
+        switch (appId) {
+            case "settings": return settingsWindow
+            case "browser": return browserWindow
+            case "metaverse": return metaverseWindow
+            case "terminal": return terminalWindow
+            case "photos": return photosWindow
+            case "update": return updateWindow
+            case "about": return aboutWindow
+            case "systeminfo": return systemInfoWindow
+            case "network": return networkWindow
+            case "bluetooth": return bluetoothWindow
+            case "updatehistory": return updateHistoryWindow
+        }
+        return null
     }
 
     // Root container
@@ -96,17 +108,17 @@ ApplicationWindow {
             id: homeScreen
             anchors.fill: parent
             visible: !firstBoot || activationDone
-            onOpenSettings: switchTo(settingsScreen, "settings")
-            onOpenAbout: switchTo(systemInfoScreen, "systeminfo")
+            onOpenSettings: switchTo(settingsWindow, "settings")
+            onOpenAbout: switchTo(systemInfoWindow, "systeminfo")
             onOpenAppStore: launchApp("appstore")
             onOpenFileManager: launchApp("files")
-            onOpenBrowser: switchTo(browserScreen, "browser")
-            onOpenMetaverse: switchTo(metaverseScreen, "metaverse")
-            onOpenSystemUpdateUI: switchTo(updateScreen, "update")
-            onOpenNetwork: switchTo(networkScreen, "network")
-            onOpenBluetooth: switchTo(bluetoothScreen, "bluetooth")
-            onOpenTerminal: switchTo(terminalScreen, "terminal")
-            onOpenPhotos: switchTo(photosScreen, "photos")
+            onOpenBrowser: switchTo(browserWindow, "browser")
+            onOpenMetaverse: switchTo(metaverseWindow, "metaverse")
+            onOpenSystemUpdateUI: switchTo(updateWindow, "update")
+            onOpenNetwork: switchTo(networkWindow, "network")
+            onOpenBluetooth: switchTo(bluetoothWindow, "bluetooth")
+            onOpenTerminal: switchTo(terminalWindow, "terminal")
+            onOpenPhotos: switchTo(photosWindow, "photos")
             onShowControlCenter: controlCenter.show()
             onTakeScreenshot: takeScreenshot()
             onOpenAppLibrary: {}
@@ -119,20 +131,26 @@ ApplicationWindow {
             visible: false
             z: 300
             onDismissPanel: controlCenter.hide()
-            onOpenNetwork: { controlCenter.hide(); switchTo(networkScreen, "network") }
-            onOpenBluetooth: { controlCenter.hide(); switchTo(bluetoothScreen, "bluetooth") }
+            onOpenNetwork: { controlCenter.hide(); switchTo(networkWindow, "network") }
+            onOpenBluetooth: { controlCenter.hide(); switchTo(bluetoothWindow, "bluetooth") }
             onTakeScreenshot: takeScreenshot()
         }
 
         // ===== SETTINGS =====
-        Item { id: settingsScreen; anchors.fill: parent; visible: false; z: 50
-            SettingsScreen { anchors.fill: parent; visible: true
+        MacWindow {
+            id: settingsWindow
+            appTitle: "设置"
+            x: 80; y: 60; width: 900; height: 650
+            visible: false
+            onCloseClicked: { yunshOS.closeAppFromSwitcher("settings") }
+            onMinimizeClicked: { settingsWindow.visible = false; settingsWindow.isMinimized = true; homeScreen.visible = true }
+            SettingsScreen { anchors.fill: parent
                 onBackToHome: switchToHome()
-                onOpenUpdatePage: switchTo(updateScreen, "update")
-                onOpenUpdateHistory: switchTo(updateHistoryScreen, "updatehistory")
-                onOpenNetworkSettings: switchTo(networkScreen, "network")
-                onOpenBluetoothSettings: switchTo(bluetoothScreen, "bluetooth")
-                onOpenSystemInfo: switchTo(systemInfoScreen, "systeminfo")
+                onOpenUpdatePage: switchTo(updateWindow, "update")
+                onOpenUpdateHistory: switchTo(updateHistoryWindow, "updatehistory")
+                onOpenNetworkSettings: switchTo(networkWindow, "network")
+                onOpenBluetoothSettings: switchTo(bluetoothWindow, "bluetooth")
+                onOpenSystemInfo: switchTo(systemInfoWindow, "systeminfo")
                 onOpenDisplaySettings: {}
                 onOpenSoundSettings: {}
                 onOpenLanguageSettings: {}
@@ -141,73 +159,133 @@ ApplicationWindow {
         }
 
         // ===== SYSTEM INFO =====
-        Item { id: systemInfoScreen; anchors.fill: parent; visible: false; z: 55
-            SystemInfoScreen { anchors.fill: parent; visible: true
-                onBackToSettings: switchTo(settingsScreen, "settings")
+        MacWindow {
+            id: systemInfoWindow
+            appTitle: "系统信息"
+            x: 140; y: 100; width: 800; height: 600
+            visible: false
+            onCloseClicked: { yunshOS.closeAppFromSwitcher("systeminfo") }
+            onMinimizeClicked: { systemInfoWindow.visible = false; systemInfoWindow.isMinimized = true; homeScreen.visible = true }
+            SystemInfoScreen { anchors.fill: parent
+                onBackToSettings: switchTo(settingsWindow, "settings")
             }
         }
 
         // ===== ABOUT =====
-        Item { id: aboutScreen; anchors.fill: parent; visible: false; z: 50
-            AboutScreen { anchors.fill: parent; visible: true
+        MacWindow {
+            id: aboutWindow
+            appTitle: "关于"
+            x: 120; y: 160; width: 800; height: 550
+            visible: false
+            onCloseClicked: { yunshOS.closeAppFromSwitcher("about") }
+            onMinimizeClicked: { aboutWindow.visible = false; aboutWindow.isMinimized = true; homeScreen.visible = true }
+            AboutScreen { anchors.fill: parent
                 onBackToHome: switchToHome()
             }
         }
 
         // ===== NETWORK/Wi-Fi =====
-        Item { id: networkScreen; anchors.fill: parent; visible: false; z: 55
-            NetworkScreen { anchors.fill: parent; visible: true
-                onBackToSettings: switchTo(settingsScreen, "settings")
+        MacWindow {
+            id: networkWindow
+            appTitle: "Wi-Fi"
+            x: 100; y: 120; width: 800; height: 550
+            visible: false
+            onCloseClicked: { yunshOS.closeAppFromSwitcher("network") }
+            onMinimizeClicked: { networkWindow.visible = false; networkWindow.isMinimized = true; homeScreen.visible = true }
+            NetworkScreen { anchors.fill: parent
+                onBackToSettings: switchTo(settingsWindow, "settings")
                 onBackToHome: switchToHome()
             }
         }
 
         // ===== BLUETOOTH =====
-        Item { id: bluetoothScreen; anchors.fill: parent; visible: false; z: 55
-            BluetoothScreen { anchors.fill: parent; visible: true
-                onBackToSettings: switchTo(settingsScreen, "settings")
+        MacWindow {
+            id: bluetoothWindow
+            appTitle: "蓝牙"
+            x: 180; y: 80; width: 800; height: 550
+            visible: false
+            onCloseClicked: { yunshOS.closeAppFromSwitcher("bluetooth") }
+            onMinimizeClicked: { bluetoothWindow.visible = false; bluetoothWindow.isMinimized = true; homeScreen.visible = true }
+            BluetoothScreen { anchors.fill: parent
+                onBackToSettings: switchTo(settingsWindow, "settings")
                 onBackToHome: switchToHome()
             }
         }
 
         // ===== UPDATE =====
-        Item { id: updateScreen; anchors.fill: parent; visible: false; z: 60
-            UpdateScreen { anchors.fill: parent; visible: true; z: 10
+        MacWindow {
+            id: updateWindow
+            appTitle: "系统更新"
+            x: 80; y: 100; width: 850; height: 600
+            visible: false
+            onCloseClicked: { yunshOS.closeAppFromSwitcher("update") }
+            onMinimizeClicked: { updateWindow.visible = false; updateWindow.isMinimized = true; homeScreen.visible = true }
+            UpdateScreen { anchors.fill: parent
                 onBackToHome: switchToHome()
             }
         }
 
         // ===== UPDATE HISTORY =====
-        Item { id: updateHistoryScreen; anchors.fill: parent; visible: false; z: 60
-            UpdateHistoryScreen { anchors.fill: parent; visible: true; z: 10
-                onBackToUpdates: switchTo(settingsScreen, "settings")
+        MacWindow {
+            id: updateHistoryWindow
+            appTitle: "更新历史"
+            x: 160; y: 140; width: 800; height: 550
+            visible: false
+            onCloseClicked: { yunshOS.closeAppFromSwitcher("updatehistory") }
+            onMinimizeClicked: { updateHistoryWindow.visible = false; updateHistoryWindow.isMinimized = true; homeScreen.visible = true }
+            UpdateHistoryScreen { anchors.fill: parent
+                onBackToUpdates: switchTo(settingsWindow, "settings")
             }
         }
 
         // ===== BROWSER =====
-        Item { id: browserScreen; anchors.fill: parent; visible: false; z: 60
-            YunshBrowser { anchors.fill: parent; visible: true; z: 10
+        MacWindow {
+            id: browserWindow
+            appTitle: "Browser"
+            x: 120; y: 60; width: 1000; height: 700
+            visible: false
+            onCloseClicked: { yunshOS.closeAppFromSwitcher("browser") }
+            onMinimizeClicked: { browserWindow.visible = false; browserWindow.isMinimized = true; homeScreen.visible = true }
+            YunshBrowser { anchors.fill: parent
                 onBackToHome: switchToHome()
             }
         }
 
         // ===== METAVERSE =====
-        Item { id: metaverseScreen; anchors.fill: parent; visible: false; z: 60
-            YunshMetaverse { anchors.fill: parent; visible: true; z: 10
+        MacWindow {
+            id: metaverseWindow
+            appTitle: "Metaverse"
+            x: 80; y: 160; width: 950; height: 680
+            visible: false
+            onCloseClicked: { yunshOS.closeAppFromSwitcher("metaverse") }
+            onMinimizeClicked: { metaverseWindow.visible = false; metaverseWindow.isMinimized = true; homeScreen.visible = true }
+            YunshMetaverse { anchors.fill: parent
                 onBackToHome: switchToHome()
             }
         }
 
         // ===== TERMINAL =====
-        Item { id: terminalScreen; anchors.fill: parent; visible: false; z: 60
-            TerminalScreen { anchors.fill: parent; visible: true
+        MacWindow {
+            id: terminalWindow
+            appTitle: "终端"
+            x: 200; y: 120; width: 850; height: 600
+            visible: false
+            onCloseClicked: { yunshOS.closeAppFromSwitcher("terminal") }
+            onMinimizeClicked: { terminalWindow.visible = false; terminalWindow.isMinimized = true; homeScreen.visible = true }
+            TerminalScreen { anchors.fill: parent
                 onBackToHome: switchToHome()
             }
         }
 
         // ===== PHOTOS =====
-        Item { id: photosScreen; anchors.fill: parent; visible: false; z: 60
-            PhotosScreen { anchors.fill: parent; visible: true; z: 10
+        MacWindow {
+            id: photosWindow
+            appTitle: "相册"
+            x: 140; y: 80; width: 900; height: 650
+            visible: false
+            onCloseClicked: { yunshOS.closeAppFromSwitcher("photos") }
+            onMinimizeClicked: { photosWindow.visible = false; photosWindow.isMinimized = true; homeScreen.visible = true }
+            PhotosScreen { anchors.fill: parent
                 onBackToHome: switchToHome()
             }
         }
@@ -247,58 +325,34 @@ ApplicationWindow {
         }
     }
 
-    // ===== NAVIGATION FUNCTIONS =====
-    function switchTo(screen, appId) {
-        homeScreen.visible = false
-        settingsScreen.visible = false
-        aboutScreen.visible = false
-        systemInfoScreen.visible = false
-        networkScreen.visible = false
-        bluetoothScreen.visible = false
-        updateScreen.visible = false
-        updateHistoryScreen.visible = false
-        browserScreen.visible = false
-        metaverseScreen.visible = false
-        terminalScreen.visible = false
-        photosScreen.visible = false
-        screen.visible = true
+    // ===== FLOATING WINDOW FUNCTIONS =====
+    var windowCount = 0
+
+    function switchTo(window, appId) {
+        if (!window.visible) homeScreen.visible = true
+        window.visible = true
+        window.isMinimized = false
+        windowCount++
+        window.z = 60 + windowCount
         if (appId) trackAppOpen(appId)
     }
 
     function switchToHome() {
-        updateScreen.visible = false
-        updateHistoryScreen.visible = false
-        browserScreen.visible = false
-        metaverseScreen.visible = false
-        terminalScreen.visible = false
-        photosScreen.visible = false
-        settingsScreen.visible = false
-        aboutScreen.visible = false
-        systemInfoScreen.visible = false
-        networkScreen.visible = false
-        bluetoothScreen.visible = false
+        var ids = ["update","updatehistory","browser","metaverse","terminal",
+                    "photos","settings","about","systeminfo","network","bluetooth"]
+        for (var i = 0; i < ids.length; i++) {
+            var w = getWindowById(ids[i])
+            if (w) { w.visible = false; w.isMinimized = false }
+        }
         homeScreen.visible = true
     }
 
     function switchToAppById(appId) {
-        switch (appId) {
-            case "settings": switchTo(settingsScreen, appId); break
-            case "browser": switchTo(browserScreen, appId); break
-            case "metaverse": switchTo(metaverseScreen, appId); break
-            case "terminal": switchTo(terminalScreen, appId); break
-            case "photos": switchTo(photosScreen, appId); break
-            case "update": switchTo(updateScreen, appId); break
-            case "about": switchTo(aboutScreen, appId); break
-            case "systeminfo": switchTo(systemInfoScreen, appId); break
-            case "network": switchTo(networkScreen, appId); break
-            case "bluetooth": switchTo(bluetoothScreen, appId); break
-            case "updatehistory": switchTo(updateHistoryScreen, appId); break
-        }
+        var w = getWindowById(appId)
+        if (w) switchTo(w, appId)
     }
 
     function showTaskSwitcher() {
-        homeScreen.visible = false
-        switchToHome()
         taskSwitcher.show()
     }
 
