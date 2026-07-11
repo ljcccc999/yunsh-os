@@ -3,7 +3,6 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Layouts 1.15
 
 Rectangle {
     id: macWindow
@@ -205,6 +204,108 @@ Rectangle {
             }
         }
     }
+
+        // ─── Resize Handles ───────────────────────────
+        // Right edge
+        MouseArea {
+            anchors.right: parent.right
+            anchors.top: parent.top; anchors.topMargin: 48
+            anchors.bottom: parent.bottom; anchors.bottomMargin: 20
+            width: 8
+            cursorShape: Qt.SizeHorCursor
+
+            property real startW: 0
+            property real startX: 0
+
+            onPressed: { startW = macWindow.width; startX = mouseX }
+            onPositionChanged: {
+                var dx = mouseX - startX
+                macWindow.width = Math.max(400, startW + dx)
+            }
+        }
+
+        // Bottom edge
+        MouseArea {
+            anchors.bottom: parent.bottom
+            anchors.left: parent.left; anchors.leftMargin: 20
+            anchors.right: parent.right; anchors.rightMargin: 20
+            height: 8
+            cursorShape: Qt.SizeVerCursor
+
+            property real startH: 0
+            property real startY: 0
+
+            onPressed: { startH = macWindow.height; startY = mouseY }
+            onPositionChanged: {
+                var dy = mouseY - startY
+                macWindow.height = Math.max(300, startH + dy)
+            }
+        }
+
+        // Bottom-right corner (macOS style resize grip)
+        MouseArea {
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            width: 20
+            height: 20
+            cursorShape: Qt.SizeFDiagCursor
+
+            property real startW: 0
+            property real startH: 0
+            property real startX: 0
+            property real startY: 0
+
+            onPressed: {
+                startW = macWindow.width
+                startH = macWindow.height
+                startX = mouseX
+                startY = mouseY
+            }
+            onPositionChanged: {
+                var dx = mouseX - startX
+                var dy = mouseY - startY
+                macWindow.width = Math.max(400, startW + dx)
+                macWindow.height = Math.max(300, startH + dy)
+            }
+        }
+
+        // Left edge
+        MouseArea {
+            anchors.left: parent.left
+            anchors.top: parent.top; anchors.topMargin: 48
+            anchors.bottom: parent.bottom; anchors.bottomMargin: 20
+            width: 8
+            cursorShape: Qt.SizeHorCursor
+
+            property real startW: 0
+            property real startX: 0
+
+            onPressed: { startW = macWindow.width; startX = mouseX + macWindow.x }
+            onPositionChanged: {
+                var dx = (mouseX + macWindow.x) - startX
+                macWindow.width = Math.max(400, startW - dx)
+                macWindow.x += (startW - macWindow.width)
+            }
+        }
+
+        // Top edge
+        MouseArea {
+            anchors.top: parent.top
+            anchors.left: parent.left; anchors.leftMargin: 20
+            anchors.right: parent.right; anchors.rightMargin: 20
+            height: 8
+            cursorShape: Qt.SizeVerCursor
+
+            property real startH: 0
+            property real startY: 0
+
+            onPressed: { startH = macWindow.height; startY = mouseY + macWindow.y }
+            onPositionChanged: {
+                var dy = (mouseY + macWindow.y) - startY
+                macWindow.height = Math.max(300, startH - dy)
+                macWindow.y += (startH - macWindow.height)
+            }
+        }
 
     // ─── Fullscreen toggle ──────────────────────────
     states: [
