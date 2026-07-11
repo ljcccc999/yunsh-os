@@ -100,13 +100,23 @@
 
 ### 烧录
 
+**macOS**:
 ```bash
 xzcat YUNSH-OS-v1.0.1.img.xz | sudo dd of=/dev/rdisk2 bs=1m status=progress
 ```
 
+**Windows**:
+1. 下载 [Raspberry Pi Imager](https://www.raspberrypi.com/software/) 或 [balenaEtcher](https://etcher.balena.io/)
+2. 先解压镜像（用 7-Zip 解压 `.xz` 文件得到 `.img`）
+3. 打开烧录工具，选中 `.img` 文件，选中 SD 卡，点击烧录
+
 验证 SHA256:
 ```bash
+# macOS
 shasum -a 256 YUNSH-OS-v1.0.1.img.xz
+
+# Windows (PowerShell)
+Get-FileHash YUNSH-OS-v1.0.1.img.xz -Algorithm SHA256
 ```
 
 ### 首次开机
