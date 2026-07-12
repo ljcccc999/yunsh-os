@@ -1,146 +1,214 @@
 #!/bin/bash
-# YUNSH OS v1.0 - First Boot Setup
-# Installs system packages, initializes Waydroid, sets up the OS
-# UI files are pre-injected into the image (see build-image-from-rpi-os.sh)
+# YUNSH OS v1.0.1 - First Boot Setup (v5)
+# Installs system packages, configures services
+# UI files pre-injected into image
 
-set -e
+export DEBIAN_FRONTEND=noninteractive
+export DEBCONF_NONINTERACTIVE_SEEN=true
 
-# Source progress display (pre-injected)
-if [ -f "/usr/bin/yunsh-install-progress.sh" ]; then
-    source /usr/bin/yunsh-install-progress.sh
+# Redirect ALL output to tty1 so Tim can see progress on HDMI
+exec > /dev/tty1 2>&1
+
+touch /etc/yunsh/.firstboot_partial
+sync
+
+echo ""
+echo "  +------------------------------------------+"
+echo "  |  YUNSH OS v1.0.1 - First Time Setup      |"
+echo "  +------------------------------------------+"
+
+source /usr/bin/yunsh-install-progress.sh 2>/dev/null || true
+
+TOTAL=14; CUR=0
+pct() { CUR=$((CUR+1)); local P=$((CUR*100/TOTAL)); [ "$P" -gt "$1" ] && P=$1
+    if type draw_frame &>/dev/null 2>&1; then draw_frame "$P" "$2" "$CUR" "$TOTAL"
+    else echo "  [$P%] $2"; fi
+}
+
+# ───── Wait for network (up to 120s timeout) ──
+echo -n "  [+] Waiting for network"
+WAIT=0
+TIMEOUT=120   # Max 120 seconds waiting for network
+while ! ping -c1 -W2 223.5.5.5 &>/dev/null && \
+      ! ping -c1 -W2 114.114.114.114 &>/dev/null && \
+      ! curl -s --max-time 3 http://mirrors.tuna.tsinghua.edu.cn/ &>/dev/null && \
+      ! curl -s --max-time 3 http://deb.debian.org/ &>/dev/null; do
+    WAIT=$((WAIT+1))
+    if [ $WAIT -ge $TIMEOUT ]; then
+        echo " [TIMEOUT]"
+        echo "  ⚠ Network not available after ${TIMEOUT}s, continuing anyway..."
+        break
+    fi
+    [ $((WAIT % 12)) -eq 0 ] && echo -n $'\n  [+] Waiting for network'
+    echo -n "."
+    sleep 5
+done
+echo " [OK]"
+
+if [ $WAIT -gt 60 ]; then
+    MIRROR="http://mirrors.tuna.tsinghua.edu.cn"
+else
+    MIRROR="http://deb.debian.org/debian"
 fi
 
-# Progress tracking
-TOTAL_STEPS=10
-CURRENT_STEP=0
+# Switch mirrors
+for sf in /etc/apt/sources.list.d/*.sources; do
+    [ -f "$sf" ] || continue
+    sed -i "s|URIs: http://deb.debian.org/debian|URIs: $MIRROR/debian|g" "$sf" 2>/dev/null || true
+    sed -i "s|URIs: http://archive.raspberrypi.com/debian|URIs: $MIRROR/raspberrypi|g" "$sf" 2>/dev/null || true
+done
+grep -q "deb.debian.org" /etc/apt/sources.list 2>/dev/null && {
+    sed -i "s|http://deb.debian.org/debian|$MIRROR/debian|g" /etc/apt/sources.list 2>/dev/null || true
+    sed -i "s|https://deb.debian.org/debian|$MIRROR/debian|g" /etc/apt/sources.list 2>/dev/null || true
+}
 
-show_progress() {
-    CURRENT_STEP=$((CURRENT_STEP + 1))
-    local pct=$(( CURRENT_STEP * 100 / TOTAL_STEPS ))
-    [ "$pct" -gt "$1" ] && pct=$1
-    if type draw_frame &>/dev/null; then
-        draw_frame "$pct" "$2" "$CURRENT_STEP" "$TOTAL_STEPS"
+install_apt() {
+    local step="$1" name="$2"; shift 2
+    pct "$step" "Installing: $name"
+    apt-get install -yqq --no-install-recommends "$@" 2>/dev/null || {
+        sleep 5
+        apt-get install -yqq --no-install-recommends "$@" 2>/dev/null || {
+            sleep 10
+            apt-get install -yqq --no-install-recommends "$@" 2>/dev/null || true
+        }
+    }
+    apt-get clean -qq 2>/dev/null || true
+}
+
+# ───── Firewall & SSH Security Setup ────────────
+setup_firewall() {
+    local FIREWALL_DONE="/etc/yunsh/.firewall_configured"
+    local SSH_DONE="/etc/yunsh/.ssh_hardened"
+    local BOOT_MNT="/boot/firmware"
+
+    # ── Firewall ──
+    if [ ! -f "$FIREWALL_DONE" ]; then
+        echo "  [+] Installing firewall rules..."
+        # iptables script is copied to boot partition during build
+        if [ -f "$BOOT_MNT/yunsh-iptables.sh" ]; then
+            cp "$BOOT_MNT/yunsh-iptables.sh" /usr/bin/yunsh-iptables.sh
+            chmod +x /usr/bin/yunsh-iptables.sh
+
+            cat > /etc/systemd/system/yunsh-firewall.service << 'UNIT'
+[Unit]
+Description=YUNSH OS Firewall (iptables)
+Before=network-pre.target
+Wants=network-pre.target
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/yunsh-iptables.sh
+RemainAfterExit=yes
+StandardOutput=journal
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+            systemctl daemon-reload
+            systemctl enable yunsh-firewall.service
+            systemctl start yunsh-firewall.service
+            echo "  [OK] Firewall configured and enabled"
+        else
+            echo "  [WARN] yunsh-iptables.sh not found, firewall not configured"
+        fi
+        touch "$FIREWALL_DONE"
     else
-        echo "[$pct%] $2"
+        echo "  [SKIP] Firewall already configured"
+    fi
+
+    # ── SSH Hardening ──
+    if [ ! -f "$SSH_DONE" ]; then
+        echo "  [+] Hardening SSH configuration..."
+        mkdir -p /etc/ssh/sshd_config.d
+        cat > /etc/ssh/sshd_config.d/yunsh.conf << 'SSH'
+# YUNSH OS - SSH Server Hardening
+Port 22
+Protocol 2
+MaxAuthTries 3
+ClientAliveInterval 120
+ClientAliveCountMax 3
+PermitRootLogin prohibit-password
+PasswordAuthentication yes
+X11Forwarding no
+SSH
+        chmod 644 /etc/ssh/sshd_config.d/yunsh.conf
+
+        # Remove old-style permit-root section if present in sshd_config
+        sed -i '/^PermitRootLogin/d' /etc/ssh/sshd_config 2>/dev/null || true
+
+        systemctl restart sshd || systemctl restart ssh 2>/dev/null || true
+        echo "  [OK] SSH hardening applied and sshd restarted"
+        touch "$SSH_DONE"
+    else
+        echo "  [SKIP] SSH already hardened"
     fi
 }
 
-# ──────────────────────────────────────────────
-echo "============================================"
-echo "  YUNSH OS v1.0 - 首次安装"
-echo "============================================"
+# Wait for NTP (max 30s)
+for i in $(seq 1 30); do
+    timedatectl show -p NTPSynchronized 2>/dev/null | grep -q "yes" && break
+    sleep 1
+done
 
-# ───── 使用国内镜像加速 ────────────────────
-MIRROR_DEBIAN="https://mirrors.tuna.tsinghua.edu.cn/debian"
-MIRROR_RPI="https://mirrors.tuna.tsinghua.edu.cn/raspberrypi"
+pct 3 "Updating package lists..."
+apt-get update -qq 2>/dev/null || { sleep 10; apt-get update -qq 2>/dev/null || true; }
 
-if grep -q "deb.debian.org" /etc/apt/sources.list 2>/dev/null; then
-    echo "切换到清华镜像源..."
-    # Debian 主源
-    sed -i 's|http://deb.debian.org/debian|'"$MIRROR_DEBIAN"'|g' /etc/apt/sources.list 2>/dev/null || true
-    sed -i 's|https://deb.debian.org/debian|'"$MIRROR_DEBIAN"'|g' /etc/apt/sources.list 2>/dev/null || true
-    # Raspberry Pi 源
-    if [ -f /etc/apt/sources.list.d/raspi.list ]; then
-        sed -i 's|http://archive.raspberrypi.com/debian|'"$MIRROR_RPI"'|g' /etc/apt/sources.list.d/raspi.list 2>/dev/null || true
-        sed -i 's|https://archive.raspberrypi.com/debian|'"$MIRROR_RPI"'|g' /etc/apt/sources.list.d/raspi.list 2>/dev/null || true
-    fi
-    apt-get update -qq 2>/dev/null || true
-fi
-
-show_progress 8 "更新软件源..."
-apt-get update -qq 2>/dev/null || true
-
-show_progress 15 "安装 Qt6 基础框架..."
-apt-get install -y -qq \
-    qt6-base-dev qt6-declarative-dev libqt6svg6 \
-    qt6-base-dev-tools qt6-qmltooling-plugins qml6 fbi 2>/dev/null || true
-
-show_progress 25 "安装编译工具..."
-apt-get install -y -qq \
-    cmake build-essential 2>/dev/null || true
-
-show_progress 30 "安装 Python 环境..."
-apt-get install -y -qq \
-    python3-pip python3-pyqt6 python3-requests \
-    python3-smbus 2>/dev/null || true
+# Install packages
+install_apt 8 "Qt6 framework" qt6-base-dev qt6-declarative-dev libqt6svg6 qt6-base-dev-tools qt6-qmltooling-plugins qml6 qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-window qml6-module-qtquick-virtualkeyboard qml6-module-qt-labs-qmlmodels qml6-module-qtquick-templates
+install_apt 14 "Python environment" python3-pip python3-smbus
 pip3 install smbus2 2>/dev/null || true
+install_apt 20 "WebEngine" qt6-webengine-dev libqt6webenginequick6
+install_apt 26 "Waydroid" lxc python3-dbus waydroid
+install_apt 32 "Network & BT" network-manager wpasupplicant bluez bluez-utils
+install_apt 38 "System tools" openssh-server avahi-daemon i2c-tools curl wget git
+install_apt 44 "Chinese fonts" fonts-noto-cjk
+install_apt 50 "Audio" pulseaudio alsa-utils
+install_apt 56 "OpenGL" mesa-utils libgl1-mesa-dri
 
-show_progress 38 "安装 WebEngine 浏览器引擎..."
-apt-get install -y -qq \
-    qt6-webengine-dev libqt6webenginequick6 2>/dev/null || true
+pct 62 "Configuring Waydroid..."
+[ -f "/usr/lib/waydroid/data/config.py" ] && timeout 120 waydroid init </dev/null 2>/dev/null || true
 
-show_progress 50 "安装 Waydroid Android 容器..."
-apt-get install -y -qq \
-    lxc python3-dbus waydroid 2>/dev/null || true
+pct 68 "Starting core services..."
+systemctl enable NetworkManager bluetooth ssh 2>/dev/null || true
+systemctl start NetworkManager bluetooth 2>/dev/null || true
+systemctl disable dhcpcd 2>/dev/null || true
+systemctl stop dhcpcd 2>/dev/null || true
 
-show_progress 58 "安装网络与蓝牙组件..."
-apt-get install -y -qq \
-    network-manager wpasupplicant \
-    bluez bluez-utils 2>/dev/null || true
+pct 74 "Configuring YUNSH OS..."
+mkdir -p /etc/yunsh
+cat > /etc/yunsh/version.conf << 'V'
+VERSION=v1.0.1
+BUILD=2026.07.12
+V
 
-show_progress 65 "安装字体与媒体..."
-apt-get install -y -qq \
-    fonts-noto-cjk fonts-dejavu-core \
-    pulseaudio alsa-utils 2>/dev/null || true
+pct 78 "Configuring firewall & SSH..."
+setup_firewall
 
-show_progress 75 "启用 YUNSH 系统服务..."
-systemctl enable yunsh-os.service 2>/dev/null || true
-systemctl enable yunsh-network.service 2>/dev/null || true
-systemctl enable yunsh-bluetooth.service 2>/dev/null || true
-systemctl enable yunsh-update.service 2>/dev/null || true
-# Splash already enabled via rc.local / pre-injection
+pct 84 "Enabling YUNSH services..."
+systemctl enable yunsh-os yunsh-network yunsh-bluetooth yunsh-update fstrim.timer 2>/dev/null || true
 
-show_progress 82 "初始化 Waydroid 容器..."
-pip3 install waydroid-tools 2>/dev/null || true
-waydroid init -s GAPPS -f 2>/dev/null || true
+pct 86 "Creating default user..."
+if ! id yunsh &>/dev/null; then
+    useradd -m -s /bin/bash -G sudo,adm,dialout yunsh 2>/dev/null || true
+    echo "yunsh:yunsh123" | chpasswd 2>/dev/null || true
+fi
+ssh-keygen -A 2>/dev/null || true
+echo "yunsh-v1" > /etc/hostname
+hostname yunsh-v1 2>/dev/null || true
 
-show_progress 90 "安装 应用宝..."
-
-# ───── Wait for Waydroid init to finish ─────
-sleep 5
-
-# Install 应用宝 into Waydroid
+pct 92 "Installing application store..."
 if [ -f /usr/share/yunsh/apps/appstore.apk ]; then
     APK_SIZE=$(stat -c%s /usr/share/yunsh/apps/appstore.apk 2>/dev/null || stat -f%z /usr/share/yunsh/apps/appstore.apk 2>/dev/null || echo 0)
-    if [ "$APK_SIZE" -gt 100000 ]; then
-        echo "安装 应用宝 到 Waydroid..."
-        waydroid app install /usr/share/yunsh/apps/appstore.apk 2>/dev/null || echo "⚠ 应用宝 安装失败"
-    else
-        echo "⚠ APK 无效（大小: $APK_SIZE），尝试在线下载..."
-        curl -sSL --connect-timeout 15 --max-time 60 -o /tmp/appstore.apk \
-            "https://dlied6.myapp.com/myapp/1104466820/sgame/20191217/com.tencent.android.qqdownloader_latest.apk" \
-            2>/dev/null && \
-        waydroid app install /tmp/appstore.apk 2>/dev/null || \
-        echo "⚠ 在线下载安装失败，可在系统中手动安装"
-        rm -f /tmp/appstore.apk
-    fi
-else
-    echo "⚠ 预装 APK 未找到，跳过"
+    [ "$APK_SIZE" -gt 100000 ] && waydroid app install /usr/share/yunsh/apps/appstore.apk 2>/dev/null || true
 fi
 
+pct 98 "Cleaning up..."
+rm -f /usr/bin/yunsh-firstboot.sh /etc/yunsh/.firstboot_partial 2>/dev/null || true
 
-# ───── Enable Waydroid system services ─────
-systemctl enable waydroid-container.service 2>/dev/null || true
-systemctl enable waydroid.service 2>/dev/null || true
-
-# ───── Enable YUNSH app daemon ─────
-systemctl enable yunsh-appd.service 2>/dev/null || true
-systemctl enable yunsh-terminal.service 2>/dev/null || true
-
-# Enable IMU head tracking services
-systemctl enable yunsh-headtracking.service 2>/dev/null || true
-
-# Enable BNO085 reader if sensor is detected (will fail gracefully if no I2C device)
-systemctl enable yunsh-bno085-reader.service 2>/dev/null || true
-
-# ───── Final system config ────────────────
-echo "yunsh-v1" > /etc/hostname
-hostname yunsh-v1
-
-# ───── Mark firstboot complete ────────────
-show_progress 100 "✅ 安装完成！正在重启..."
+pct 100 "Setup complete! Rebooting..."
 touch /etc/yunsh/.packages_installed
 sync
 sleep 2
-
 reboot

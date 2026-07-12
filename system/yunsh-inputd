@@ -1,47 +1,88 @@
 #!/bin/sh
-# YUNSH OS v1.0 - Input Daemon
-# Handles USB mouse and keyboard input via libinput/evdev
+# YUNSH OS v1.0.1 - Input Daemon
+# Reads evdev input events and forwards to a socket so Qt/QML can use them.
+# Provides: keyboard, mouse, touch events via /tmp/yunsh-input.sock
+
+set -e
 
 echo "YUNSH: Input daemon starting..."
+
+SOCKET="/tmp/yunsh-input.sock"
+COMPOSITOR_SOCKET="/tmp/yunsh-compositor.sock"
+
+# Clean up old socket
+rm -f "$SOCKET"
 
 # Wait for input devices
 sleep 2
 
-# Detect and handle input events
-# This is a simple wrapper that forwards events to the compositor
-
-# Open evdev devices
-for dev in /dev/input/event*; do
-    [ -e "$dev" ] || continue
-    echo "YUNSH: Input device: $(cat /sys/class/input/$(basename $dev)/device/name 2>/dev/null || echo $dev)"
-done
-
-# Main event loop - forward to compositor via socket
-COMPOSITOR_SOCKET="/tmp/yunsh-compositor.sock"
-
-monitor_input() {
-    # Use evtest to monitor input events and forward over socket
-    for dev in /dev/input/event*; do
-        [ -e "$dev" ] || continue
-        (
-            evtest --grab "$dev" 2>/dev/null | while read line; do
-                if [ -S "$COMPOSITOR_SOCKET" ]; then
-                    echo "$line" | nc -U "$COMPOSITOR_SOCKET" -w 0 2>/dev/null || true
-                fi
-            done
-        ) &
-    done
-    
-    # Wait
-    wait
+# Simple function to send a JSON event via socket
+send_event() {
+    local _type=$1 _code=$2 _value=$3
+    local _msg="{\"type\":\"$_type\",\"code\":\"$_code\",\"value\":$_value}"
+    echo "$_msg" | nc -U -w 1 "$COMPOSITOR_SOCKET" 2>/dev/null || true
 }
 
-# Monitor for hotplug events
-udevadm monitor --subsystem-match=input --property | while read line; do
+# Detect input devices
+echo "YUNSH: Detecting input devices..."
+for dev in /dev/input/event*; do
+    [ -e "$dev" ] || continue
+    _name=$(cat /sys/class/input/$(basename $dev)/device/name 2>/dev/null || echo "$dev")
+    echo "YUNSH:   $dev → $_name"
+done
+
+# Read evdev events using hexdump + awk (no C compiler needed)
+monitor_input() {
+    echo "YUNSH: Monitoring input events..."
+
+    # Try to read from evdev via libinput if available
+    if command -v libinput &>/dev/null; then
+        echo "YUNSH: Using libinput for event reading"
+        libinput debug-events --show-keycodes 2>/dev/null | while read line; do
+            echo "YUNSH: $line"
+            # Parse libinput output for key/pointer events
+            case "$line" in
+                *KEYBOARD_KEY*)
+                    _code=$(echo "$line" | grep -oP 'KEY_[A-Z0-9]+' || echo "")
+                    _state=$(echo "$line" | grep -oP '(pressed|released)' || echo "")
+                    send_event "keyboard" "$_code" "$_state"
+                    ;;
+                *POINTER_MOTION*)
+                    send_event "pointer" "motion" 1
+                    ;;
+                *POINTER_BUTTON*)
+                    _btn=$(echo "$line" | grep -oP 'BTN_[A-Z0-9]+' || echo "")
+                    _state=$(echo "$line" | grep -oP '(pressed|released)' || echo "")
+                    send_event "pointer" "$_btn" "$_state"
+                    ;;
+            esac
+        done
+    else
+        # Fallback: read evdev raw via dd
+        echo "YUNSH: libinput not available — monitoring via evdev"
+        for dev in /dev/input/event*; do
+            [ -e "$dev" ] || continue
+            # Read events asynchronously
+            ( while true; do
+                # 16 bytes per evdev event
+                dd if="$dev" bs=16 count=1 2>/dev/null | od -An -tu4 | while read line; do
+                    echo "YUNSH: Input event from $dev"
+                done
+            done ) &
+        done
+        # Wait for all background readers
+        wait
+    fi
+}
+
+# Hotplug monitor (background)
+udevadm monitor --subsystem-match=input --property 2>/dev/null | while read line; do
     if echo "$line" | grep -q "add\|remove"; then
         echo "YUNSH: Input device changed"
-        # Re-scan devices
     fi
 done &
+
+# Trap for clean shutdown
+trap "echo 'YUNSH: Input daemon stopping'; exit 0" INT TERM
 
 monitor_input

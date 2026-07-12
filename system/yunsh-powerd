@@ -36,8 +36,24 @@ check_battery() {
     done
 }
 
-# Main loop - check every 30 seconds
+# Main loop - check at appropriate interval
 while true; do
+    # Detect if a battery exists
+    HAS_BATTERY=false
+    for bat in $BATTERY_PATH/*; do
+        [ -d "$bat" ] || continue
+        if [ -f "$bat/type" ] && grep -q "Battery" "$bat/type" 2>/dev/null; then
+            HAS_BATTERY=true
+            break
+        fi
+    done
+
+    if ! $HAS_BATTERY; then
+        # No battery - desktop mode, sleep much longer
+        sleep 300
+        continue
+    fi
+
     check_battery
     sleep 30
 done

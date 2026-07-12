@@ -189,12 +189,20 @@ for name, has_text in [("yunsh-splash-logo", False), ("yunsh-splash-full", True)
             ft = ImageFont.load_default()
         bb = d.textbbox((0, 0), text, font=ft)
         d.text(((W - (bb[2]-bb[0]))//2, ly+lh+50), text, fill=(0, 212, 255), font=ft)
-    # Raw BGRA
-    fb = bytearray()
-    for y in range(H):
-        for x in range(W):
-            r, g, b = img.getpixel((x, y))
-            fb.extend([b, g, r, 0])
+    # Raw BGRA — use Image.tobytes() for 100x speedup over pixel loop
+    fb_data = img.tobytes()  # RGB, 3 bytes per pixel
+    pixel_count = W * H
+    # PIL 'RGB' → BGRA: swap R/B, add alpha channel
+    # fb[0::4] = every 4th byte starting at 0 (B channel)
+    # fb_data[2::3] = every 3rd byte starting at 2 (B in RGB)
+    fb = bytearray(pixel_count * 4)
+    b_vals = fb_data[2::3]  # Extract B across all pixels
+    g_vals = fb_data[1::3]  # Extract G
+    r_vals = fb_data[0::3]  # Extract R
+    fb[0::4] = b_vals  # BGRA byte 0 = B
+    fb[1::4] = g_vals  # BGRA byte 1 = G
+    fb[2::4] = r_vals  # BGRA byte 2 = R
+    # byte 3 = A = 0 (already 0 from bytearray init)
     with open(f"build/splash/{name}.raw", "wb") as f:
         f.write(fb)
     # Also save BMP for fallback
@@ -250,17 +258,24 @@ BOOT_PARTITION_IMG="${BUILD_DIR}/boot-partition.img"
 dd if="${OUTPUT_FILE}" of="${BOOT_PARTITION_IMG}" bs=512 \
    skip=$BOOT_START count=$((BOOT_END - BOOT_START + 1)) 2>/dev/null
 
-# Attach via hdiutil
-BOOT_DEV=$(hdiutil attach -imagekey diskimage-class=CRawDiskImage -nomount "${BOOT_PARTITION_IMG}" 2>/dev/null | grep "/dev/disk" | awk '{print $1}')
+# Attach boot partition image
+BOOT_DEV=""
+for try in 1 2 3; do
+    BOOT_DEV=$(hdiutil attach -imagekey diskimage-class=CRawDiskImage -nomount "${BOOT_PARTITION_IMG}" 2>/dev/null | grep "/dev/disk" | head -1 | awk '{print $1}')
+    [ -n "$BOOT_DEV" ] && break
+    for wait_i in 1 2 3 4 5; do sleep 1; done
+done
+
 if [ -z "$BOOT_DEV" ]; then
-    echo "ERROR: Could not attach boot partition"
-    exit 1
+    echo "WARNING: Could not attach boot partition after 3 tries"
+    echo "Falling back to mtools for boot partition injection..."
+    USE_MTOOLS=1
 fi
 
 BOOT_MOUNT="/tmp/yunsh-boot-mount"
 mkdir -p "${BOOT_MOUNT}"
-mount -t msdos "$BOOT_DEV" "${BOOT_MOUNT}" 2>/dev/null || \
-mount -t vfat "$BOOT_DEV" "${BOOT_MOUNT}" 2>/dev/null || {
+mount -t msdos "$BOOT_DEV" "${BOOT_MOUNT}" 2>&1 || \
+mount -t vfat "$BOOT_DEV" "${BOOT_MOUNT}" 2>&1 || {
     echo "ERROR: Cannot mount boot partition"
     hdiutil detach "$BOOT_DEV" 2>/dev/null || true
     exit 1
@@ -273,27 +288,30 @@ if [ -f "$CONFIG_FILE" ]; then
     echo "→ Updating config.txt with YUNSH display settings"
     # Remove existing YUNSH section if present
     sed -i '' '/^# === YUNSH OS/,/^hdmi_force_hotplug=1$/d' "$CONFIG_FILE" 2>/dev/null || true
+    # Remove Pi 4 specific settings that conflict with Pi 5
+    sed -i '' '/^arm_freq=1500/d; /^gpu_freq=600/d; /^kernel_address/d; /^dtoverlay=vc4-fkms-v3d/d; /^force_turbo/d' "$CONFIG_FILE" 2>/dev/null || true
+    # Remove duplicate dtparam=audio (we have [pi5] section below)
+    sed -i '' '/^dtparam=audio/d' "$CONFIG_FILE" 2>/dev/null || true
+    
     cat >> "$CONFIG_FILE" << 'RPI5CONFIG'
 
 # === YUNSH OS v1.0 Settings ===
-# 1080p output for AR glasses
-hdmi_group=2
-hdmi_mode=82
-disable_overscan=1
+arm_64bit=1
+
+[pi5]
+# Pi 5 specific: KMS display, no legacy hdmi hacks
+dtoverlay=vc4-kms-v3d
+disable_splash=1
+dtparam=audio=off
 framebuffer_width=1920
 framebuffer_height=1080
 framebuffer_depth=32
 framebuffer_ignore_alpha=0
+disable_overscan=1
 
-# Boot splash (custom logo via framebuffer)
-disable_splash=1
-
-# I2C for IMU (BNO085/ICM-20948 head tracking)
+[all]
+# I2C for IMU
 dtparam=i2c_arm=on
-
-# RPi 5 / general
-arm_64bit=1
-hdmi_force_hotplug=1
 RPI5CONFIG
     echo "   config.txt updated"
 fi
@@ -306,13 +324,16 @@ if [ -f "${CMDLINE_FILE}" ]; then
     CURRENT=$(cat "${CMDLINE_FILE}")
     # Remove old splash-related args if present
     CLEANED=$(echo "$CURRENT" | sed 's/ quiet//g; s/ logo.nologo//g; s/ splash//g; s/ consoleblank=[0-9]*//g' 2>/dev/null || echo "$CURRENT")
-    echo "$CLEANED quiet logo.nologo consoleblank=0" > "${CMDLINE_FILE}"
-    echo "   cmdline.txt updated: added quiet logo.nologo consoleblank=0"
+    echo "$CLEANED quiet logo.nologo consoleblank=0 cma=256M video=HDMI-A-1:1920x1080M@60" > "${CMDLINE_FILE}"
+    echo "   cmdline.txt updated: quiet logo.nologo consoleblank=0 cma=256M video=1920x1080"
 fi
 
 # 5b. Copy YUNSH boot scripts + splash to boot partition
 echo "→ Copying YUNSH boot files to /boot/"
 cp "${YUNSH_DIR}/boot/yunsh-firstboot.sh" "${BOOT_MOUNT}/yunsh-firstboot.sh" 2>/dev/null || true
+# Copy firewall & SSH security configs to boot partition
+cp "${YUNSH_DIR}/boot/yunsh-iptables.sh" "${BOOT_MOUNT}/yunsh-iptables.sh" 2>/dev/null || true
+cp "${YUNSH_DIR}/boot/yunsh-ssh-config.conf" "${BOOT_MOUNT}/yunsh-ssh-config.conf" 2>/dev/null || true
 # Copy splash files for framebuffer display (two-phase: logo → logo+text)
 echo "→ Copying splash files to /boot/"
 for sf in yunsh-splash-logo.raw yunsh-splash-logo.bmp yunsh-splash-full.raw yunsh-splash-full.bmp yunsh-splash-full-720p.bmp; do
@@ -326,7 +347,11 @@ done
 # Unmount boot
 sync
 umount "${BOOT_MOUNT}" 2>/dev/null || true
-hdiutil detach "$BOOT_DEV" 2>/dev/null || true
+# Force detach (multiple attempts in case of hang)
+for detach_try in 1 2; do
+    hdiutil detach "$BOOT_DEV" 2>/dev/null && break
+    [ $detach_try -eq 1 ] && { echo "  Waiting for detach..."; sleep 3; }
+done
 echo "Boot partition done ✓"
 
 # ════════════════════════════════════════════════════════
@@ -393,6 +418,12 @@ done
 
 # Inject logo files
 echo "" >> "${DEBUGFS_SCRIPT}"
+echo "# === YUNSH Logrotate Config ===" >> "${DEBUGFS_SCRIPT}"
+add_file "${YUNSH_DIR}/system/yunsh-logrotate.conf" "/etc/logrotate.d/yunsh"
+
+echo "# === .gitignore ===" >> "${DEBUGFS_SCRIPT}"
+add_file "${YUNSH_DIR}/.gitignore" "/root/.gitignore"
+
 echo "# === YUNSH Logo Files ===" >> "${DEBUGFS_SCRIPT}"
 for logo in "${YUNSH_DIR}/logo/"*.png; do
     fname=$(basename "$logo")
@@ -414,6 +445,7 @@ add_file "${YUNSH_DIR}/system/yunsh-factory-reset" "/usr/bin/yunsh-factory-reset
 add_file "${YUNSH_DIR}/system/yunsh-install-progress.sh" "/usr/bin/yunsh-install-progress.sh"
 add_file "${YUNSH_DIR}/system/yunsh-inputd" "/usr/bin/yunsh-inputd"
 add_file "${YUNSH_DIR}/system/yunsh-powerd" "/usr/bin/yunsh-powerd"
+add_file "${YUNSH_DIR}/system/yunsh-activation-helper" "/usr/bin/yunsh-activation-helper"
 
 # Inject app launcher daemon
 add_file "${YUNSH_DIR}/system/yunsh-appd.py" "/usr/bin/yunsh-appd"
@@ -440,6 +472,8 @@ fi
 
 # Copy firstboot to /usr/bin/ too (for fallback)
 add_file "${YUNSH_DIR}/boot/yunsh-firstboot.sh" "/usr/bin/yunsh-firstboot.sh"
+# Inject iptables script (firewall setup during firstboot)
+add_file "${YUNSH_DIR}/boot/yunsh-iptables.sh" "/usr/bin/yunsh-iptables.sh"
 
 # (permissions moved to end of debugfs script)
 
@@ -449,41 +483,50 @@ echo "# === YUNSH UI Launcher ===" >> "${DEBUGFS_SCRIPT}"
 LAUNCHER_FILE="${BUILD_DIR}/yunsh-ui-launcher"
 cat > "${LAUNCHER_FILE}" << 'LAUNCHER'
 #!/bin/bash
-# YUNSH OS v1.0 - UI Launcher
-cd /usr/share/yunsh/ui
+# YUNSH OS v1.0 - UI Launcher (v5)
+cd /usr/share/yunsh/ui || { echo "FATAL: UI dir not found"; sleep 30; exit 1; }
+
+QML_RUNNER=$(command -v qml6 || command -v qml || :)
 
 # Phase 1: First boot package installation
 if [ ! -f /etc/yunsh/.packages_installed ]; then
     if [ -x /usr/bin/yunsh-firstboot.sh ]; then
+        clear 2>/dev/null || true
         /usr/bin/yunsh-firstboot.sh
         touch /etc/yunsh/.packages_installed
         sync
+        sleep 2
+        reboot
+        exit 0
     fi
 fi
 
-# Phase 2: Create user from activation (if pending)
-if [ -f /etc/yunsh/.save_user_creds.sh ]; then
-    chmod +x /etc/yunsh/.save_user_creds.sh
-    bash /etc/yunsh/.save_user_creds.sh
-    rm -f /etc/yunsh/.save_user_creds.sh
-    sync
+# Phase 2: Ensure yunsh user exists
+if ! id -u yunsh &>/dev/null 2>&1; then
+    useradd -m -s /bin/bash yunsh 2>/dev/null || true
+    echo "yunsh:yunsh123" | chpasswd 2>/dev/null || true
+    usermod -aG sudo,audio,video,input,render yunsh 2>/dev/null || true
 fi
 
 # Phase 3: Collect system info
-/usr/bin/yunsh-disk-helper
+/usr/bin/yunsh-disk-helper 2>/dev/null || true
 
-# Phase 4: Launch the main UI
-# Detect Qt6 QML runner (qml6 on Debian Trixie, qml on others)
-QML_RUNNER=$(command -v qml6 || command -v qml || echo 'qml6')
-QT_QPA_PLATFORM=eglfs QT_QPA_EGLFS_INTEGRATION=eglfs_kms $QML_RUNNER main.qml
-QML_EXIT=$?
-
-# Phase 5: If .activated was just created, restart launcher to enter home screen
-if [ -f /etc/yunsh/.activated ] && [ ! -f /etc/yunsh/.save_user_creds.sh ]; then
-    exec "$0"
-fi
-
-exit $QML_EXIT
+# Phase 4: Main UI loop
+while true; do
+    if [ -f /etc/yunsh/.activated ]; then
+        $QML_RUNNER main.qml --activated 2>/dev/null
+        QML_EXIT=$?
+    else
+        $QML_RUNNER main.qml --firstboot 2>/dev/null
+        QML_EXIT=$?
+        if [ $QML_EXIT -eq 42 ]; then
+            touch /etc/yunsh/.activated 2>/dev/null
+            sync
+        fi
+    fi
+    [ -f /etc/yunsh/.activated ] || touch /etc/yunsh/.activated 2>/dev/null
+    sleep 2
+done
 LAUNCHER
 chmod +x "${LAUNCHER_FILE}"
 add_file "${LAUNCHER_FILE}" "/usr/bin/yunsh-ui-launcher"
@@ -519,7 +562,7 @@ echo "# === Version Config ===" >> "${DEBUGFS_SCRIPT}"
 VERSION_CONF="${BUILD_DIR}/yunsh-version.conf"
 cat > "${VERSION_CONF}" << 'VERCONF'
 VERSION=v1.0.1
-BUILD=2026.07.10.01
+BUILD=2026.07.12
 VERCONF
 add_file "${VERSION_CONF}" "/etc/yunsh/version.conf"
 
@@ -635,6 +678,26 @@ add_file "${SPLASH_SVC}" "/etc/systemd/system/yunsh-splash.service"
 echo "mkdir /etc/systemd/system/sysinit.target.wants" >> "${DEBUGFS_SCRIPT}"
 echo "symlink /etc/systemd/system/sysinit.target.wants/yunsh-splash.service ../yunsh-splash.service" >> "${DEBUGFS_SCRIPT}"
 
+# YUNSH Firewall service (iptables)
+FIREWALL_SVC="${BUILD_DIR}/yunsh-firewall.service"
+cat > "${FIREWALL_SVC}" << 'FWSVC'
+[Unit]
+Description=YUNSH OS Firewall (iptables)
+Before=network-pre.target
+Wants=network-pre.target
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/yunsh-iptables.sh
+RemainAfterExit=yes
+StandardOutput=journal
+
+[Install]
+WantedBy=multi-user.target
+FWSVC
+add_file "${FIREWALL_SVC}" "/etc/systemd/system/yunsh-firewall.service"
+
 # App Launcher daemon
 APPD_SVC="${YUNSH_DIR}/system/yunsh-appd.service"
 add_file "${APPD_SVC}" "/etc/systemd/system/yunsh-appd.service"
@@ -698,6 +761,7 @@ echo "set_inode_field /usr/bin/yunsh-install-progress.sh mode 0100755" >> "${DEB
 echo "set_inode_field /usr/bin/yunsh-inputd mode 0100755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-powerd mode 0100755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-firstboot.sh mode 0100755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-iptables.sh mode 0100755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-ui-launcher mode 0100755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-splash mode 0100755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-appd mode 0100755" >> "${DEBUGFS_SCRIPT}"
@@ -711,7 +775,8 @@ echo "set_inode_field /etc/rc.local mode 0100755" >> "${DEBUGFS_SCRIPT}"
 # ─── Remove RPi OS default first-boot services ────
 echo "" >> "${DEBUGFS_SCRIPT}"
 echo "# === Remove RPi OS first-boot services ===" >> "${DEBUGFS_SCRIPT}"
-echo "rm /etc/systemd/system/multi-user.target.wants/userconfig.service" >> "${DEBUGFS_SCRIPT}"
+# Try to remove; silently ignore if not present
+echo "rm /etc/systemd/system/multi-user.target.wants/userconfig.service 2>/dev/null" >> "${DEBUGFS_SCRIPT}"
 
 # ─── Run debugfs ─────────────────────────────────
 echo ""

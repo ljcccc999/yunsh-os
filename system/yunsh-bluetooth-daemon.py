@@ -438,7 +438,7 @@ def socket_server():
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(SOCKET_PATH)
     server.listen(5)
-    os.chmod(SOCKET_PATH, 0o777)
+    os.chmod(SOCKET_PATH, 0o666)
     
     log.info(f"Listening on {SOCKET_PATH}")
     

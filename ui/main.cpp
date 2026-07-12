@@ -15,12 +15,12 @@ int main(int argc, char *argv[])
 {
     // Set up high-dpi support
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-    QCoreApplication::setAttribute(Qt::AA_UseSoftwareOpenGL);
+    // Note: NOT using AA_UseSoftwareOpenGL — Pi 5 vc4-kms-v3d needs hardware OpenGL
 
     // Create application with platform-appropriate settings
     QGuiApplication app(argc, argv);
     app.setApplicationName("YUNSH OS");
-    app.setApplicationVersion("1.0.0");
+    app.setApplicationVersion("1.0.1");
     app.setOrganizationName("YUNSH");
     app.setOrganizationDomain("yunsh.tech");
 
@@ -79,8 +79,8 @@ int main(int argc, char *argv[])
         if (window) {
             window->setFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
             window->setProperty("color", QColor(0, 0, 0, 0));  // Transparent
-            window->showFullScreen();
-            qDebug() << "YUNSH: UI window shown fullscreen";
+            // showFullScreen is called in QML Component.onCompleted — don't duplicate
+            qDebug() << "YUNSH: UI window loaded";
         }
     }
 

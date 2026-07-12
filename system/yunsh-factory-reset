@@ -55,7 +55,9 @@ echo "✓ Waydroid 安卓应用及数据已清除"
 
 # ─── Clear caches and temp ───
 rm -rf /root/.cache 2>/dev/null || true
-rm -rf /tmp/* 2>/dev/null || true
+# Remove temp files but NOT sockets or running process IPC
+# Safer: use -exec rm -rf {} + with proper socket exclusion
+find /tmp -maxdepth 1 \! -name '.' \! -name '..' \! -type s -exec rm -rf {} + 2>/dev/null || true
 echo "✓ 系统缓存已清理"
 
 # ─── Clear logs ───

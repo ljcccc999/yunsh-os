@@ -1,0 +1,154 @@
+#!/usr/bin/env python3
+"""
+YUNSH OS v1.0.1 — Activation Wi-Fi Helper
+Minimal HTTP server on port 8591.
+QML ActivationScreen sends Wi-Fi credentials here to actually connect.
+"""
+
+import json, os, socket, subprocess, sys
+
+HOST = "127.0.0.1"
+PORT = 8591
+SOCKET_PATH = "/tmp/yunsh-network.sock"
+
+
+def handle_request(conn):
+    data = b""
+    while True:
+        chunk = conn.recv(4096)
+        if not chunk:
+            break
+        data += chunk
+        if b"\r\n\r\n" in data:
+            break
+
+    # Parse POST body
+    body = b""
+    if b"\r\n\r\n" in data:
+        header_part, body_part = data.split(b"\r\n\r\n", 1)
+        # Check Content-Length
+        for line in header_part.decode("utf-8", errors="replace").split("\r\n"):
+            if line.lower().startswith("content-length:"):
+                content_len = int(line.split(":")[1].strip())
+                while len(body_part) < content_len:
+                    chunk = conn.recv(4096)
+                    if not chunk:
+                        break
+                    body_part += chunk
+                body = body_part[:content_len]
+                break
+        else:
+            body = body_part
+
+    response_body = b'{"success": false, "error": "bad request"}'
+    status = "400 Bad Request"
+
+    try:
+        payload = json.loads(body.decode("utf-8"))
+        action = payload.get("action", "")
+
+        if action == "connect_wifi":
+            ssid = payload.get("ssid", "")
+            password = payload.get("password", "")
+            result = connect_wifi(ssid, password)
+            response_body = json.dumps(result).encode()
+            status = "200 OK" if result.get("success") else "400 Bad Request"
+
+        elif action == "status":
+            result = get_network_status()
+            response_body = json.dumps(result).encode()
+            status = "200 OK"
+
+        elif action == "ping":
+            response_body = json.dumps({"success": True, "message": "pong"}).encode()
+            status = "200 OK"
+
+    except Exception as e:
+        response_body = json.dumps({"success": False, "error": str(e)}).encode()
+        status = "500 Internal Server Error"
+
+    conn.sendall(
+        f"HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {len(response_body)}\r\nConnection: close\r\n\r\n".encode()
+        + response_body
+    )
+    conn.close()
+
+
+def connect_wifi(ssid, password):
+    """Connect to Wi-Fi via nmcli or network daemon socket."""
+    if not ssid:
+        return {"success": False, "error": "no SSID provided"}
+
+    # Method 1: Direct nmcli
+    try:
+        cmd = ["nmcli", "device", "wifi", "connect", ssid]
+        if password:
+            cmd += ["password", password]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        if result.returncode == 0:
+            return {"success": True, "ssid": ssid}
+        # nmcli failed — try socket
+    except Exception:
+        pass
+
+    # Method 2: Via network daemon Unix socket
+    try:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        sock.connect(SOCKET_PATH)
+        msg = json.dumps({"command": "connect", "ssid": ssid, "password": password}) + "\n"
+        sock.send(msg.encode())
+        resp = sock.recv(4096).decode()
+        sock.close()
+        data = json.loads(resp)
+        data["ssid"] = ssid
+        return data
+    except Exception as e:
+        return {"success": False, "error": f"Failed: {e}", "ssid": ssid}
+
+
+def get_network_status():
+    try:
+        result = subprocess.run(
+            ["nmcli", "-t", "-f", "ACTIVE,SSID,SIGNAL", "device", "wifi"],
+            capture_output=True, text=True, timeout=5
+        )
+        connected = False
+        ssid = ""
+        for line in result.stdout.strip().split("\n"):
+            parts = line.split(":")
+            if len(parts) >= 2 and parts[0] == "yes":
+                connected = True
+                ssid = parts[1]
+        return {"success": True, "connected": connected, "ssid": ssid}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def main():
+    """Run a single-threaded HTTP server."""
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        server.bind((HOST, PORT))
+        server.listen(1)
+        server.settimeout(1.0)
+    except OSError as e:
+        # Port already in use — another instance running
+        sys.exit(0)
+
+    try:
+        while True:
+            try:
+                conn, _ = server.accept()
+                handle_request(conn)
+            except socket.timeout:
+                continue
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.close()
+
+
+if __name__ == "__main__":
+    main()

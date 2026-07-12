@@ -16,6 +16,10 @@ Item {
         color: Qt.rgba(0, 0, 0, 0.5)
     }
     
+    // Drag start position (stored on press for proper normalization)
+    property real startX: 0
+    property real startY: 0
+    
     // Selection rectangle
     Rectangle {
         id: selectionRect
@@ -60,10 +64,20 @@ Item {
                     anchors.fill: parent
                     onClicked: {
                         if(selectionRect.visible) {
-                            screenshotOverlay.regionSelected(
-                                selectionRect.x, selectionRect.y,
-                                selectionRect.width, selectionRect.height
-                            )
+                            var nx = selectionRect.x
+                            var ny = selectionRect.y
+                            var nw = selectionRect.width
+                            var nh = selectionRect.height
+                            // Normalize in case drag didn't update the rect (tiny selection edge case)
+                            if (nw < 0) { nx = selectionRect.x + nw; nw = -nw }
+                            if (nh < 0) { ny = selectionRect.y + nh; nh = -nh }
+                            // Treat tiny click as full-screen
+                            if (nw < 10 && nh < 10) {
+                                nx = 0; ny = 0
+                                nw = screenshotOverlay.width
+                                nh = screenshotOverlay.height
+                            }
+                            screenshotOverlay.regionSelected(nx, ny, nw, nh)
                         }
                     }
                 }
@@ -81,29 +95,33 @@ Item {
             }
         }
     }
-    
+
     // Mouse area for region selection
     MouseArea {
         anchors.fill: parent
         cursorShape: Qt.CrossCursor
-        
+
         onPressed: {
-            selectionRect.x = mouse.x
-            selectionRect.y = mouse.y
+            startX = mouse.x
+            startY = mouse.y
+            selectionRect.x = startX
+            selectionRect.y = startY
             selectionRect.width = 0
             selectionRect.height = 0
             selectionRect.visible = true
         }
-        
-        onMouseXChanged: if(pressed) { selectionRect.width = mouse.x - selectionRect.x }
-        onMouseYChanged: if(pressed) { selectionRect.height = mouse.y - selectionRect.y }
+
         onPositionChanged: {
             if(pressed) {
-                // Handle negative width/height
-                if(mouse.x < selectionRect.x) {
-                    selectionRect.x = mouse.x
-                    selectionRect.width = pressedX - mouse.x
-                }
+                // Normalize coordinates: handle dragging in any direction
+                var x1 = Math.min(startX, mouse.x)
+                var y1 = Math.min(startY, mouse.y)
+                var x2 = Math.max(startX, mouse.x)
+                var y2 = Math.max(startY, mouse.y)
+                selectionRect.x = x1
+                selectionRect.y = y1
+                selectionRect.width = x2 - x1
+                selectionRect.height = y2 - y1
             }
         }
     }

@@ -6,9 +6,6 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
-// File I/O helper for writing user credentials
-import Qt.labs.platform 1.1
-
 Rectangle {
     id: activationScreen
     anchors.fill: parent
@@ -456,10 +453,57 @@ Rectangle {
                         border.color: Qt.rgba(0/255, 212/255, 255/255, 0.12); border.width: 1
                         Text { anchors.centerIn: parent; text: "下一步"; color: "#00D4FF"; font.pixelSize: 14; font.weight: Font.Medium }
                         MouseArea {
-                            id: wifiNextBtn; anchors.fill: parent; hoverEnabled: true
-                            onClicked: currentStep = 4
+                            id: wifiNextBtn
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: {
+                                if (wifiConnecting) return
+                                if (wifiSSIDInput.text.length > 0) {
+                                    wifiConnecting = true
+                                    wifiStatusText = "正在连接..."
+
+                                    var xhr = new XMLHttpRequest()
+                                    xhr.open("POST", "http://127.0.0.1:8591/", true)
+                                    xhr.setRequestHeader("Content-Type", "application/json")
+                                    xhr.timeout = 10000
+                                    xhr.onreadystatechange = function() {
+                                        if (xhr.readyState === XMLHttpRequest.DONE) {
+                                            wifiConnecting = false
+                                            try {
+                                                var resp = JSON.parse(xhr.responseText)
+                                                if (resp.success) {
+                                                    wifiConnected = true
+                                                    wifiStatusText = "已连接: " + wifiSSIDInput.text
+                                                    Qt.callLater(function() { currentStep = 4 })
+                                                } else {
+                                                    wifiStatusText = "连接失败: " + (resp.error || "未知错误")
+                                                }
+                                            } catch(e) {
+                                                wifiStatusText = "连接失败 — 已跳过"
+                                                Qt.callLater(function() { currentStep = 4 })
+                                            }
+                                        }
+                                    }
+                                    xhr.send(JSON.stringify({
+                                        action: "connect_wifi",
+                                        ssid: wifiSSIDInput.text,
+                                        password: wifiPassInput.text
+                                    }))
+                                } else {
+                                    currentStep = 4
+                                }
+                            }
                         }
                     }
+                }
+
+                // Wi-Fi connection status
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: wifiStatusText
+                    color: wifiConnected ? "#66BB6A" : "#FF8A65"
+                    font.pixelSize: 12
+                    visible: wifiStatusText.length > 0
                 }
             }
         }

@@ -39,6 +39,8 @@ class AppHandler(BaseHTTPRequestHandler):
         if action == "launch":
             app_id = req.get("appId", "")
             result = self.launch_app(app_id)
+        elif action == "screenshot":
+            result = self.take_screenshot(req)
         elif action == "ping":
             result = {"status": "ok", "message": "pong"}
 
@@ -46,6 +48,34 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.end_headers()
         self.wfile.write(json.dumps(result).encode())
+
+    def take_screenshot(self, req):
+        """Capture screenshot via yunsh-screenshotd script."""
+        try:
+            shot_type = req.get("type", "full")
+            if shot_type == "region":
+                x = req.get("x", 0)
+                y = req.get("y", 0)
+                w = req.get("w", 1920)
+                h = req.get("h", 1080)
+                result = subprocess.run(
+                    ["yunsh-screenshotd", "region", str(x), str(y), str(w), str(h)],
+                    capture_output=True, text=True, timeout=30
+                )
+            else:
+                result = subprocess.run(
+                    ["yunsh-screenshotd", "full"],
+                    capture_output=True, text=True, timeout=30
+                )
+
+            if result.returncode == 0:
+                return {"status": "ok", "message": "Screenshot saved"}
+            else:
+                return {"status": "error", "message": result.stderr.strip()}
+        except subprocess.TimeoutExpired:
+            return {"status": "error", "message": "Timeout capturing screenshot"}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
 
     def launch_app(self, app_id):
         if app_id not in APP_MAP:

@@ -1,23 +1,90 @@
 #!/bin/bash
-# YUNSH OS v1.0 - Screenshot daemon
+# YUNSH OS v1.0.1 - Screenshot daemon
 # Usage: yunsh-screenshotd [full|region x y w h]
-set -e
+# Detects KMS vs fbdev mode, uses appropriate capture method.
+# NO set -e — graceful fallbacks for missing tools.
 
 SCREENSHOTS_DIR="$HOME/Pictures/Screenshots"
+mkdir -p "$SCREENSHOTS_DIR" 2>/dev/null || SCREENSHOTS_DIR="/tmp/yunsh-screenshots"
 mkdir -p "$SCREENSHOTS_DIR"
 
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
 OUTPUT_FILE="$SCREENSHOTS_DIR/Screenshot_${TIMESTAMP}.png"
 
-capture_fullscreen() {
-    echo "Capturing full screen..."
+# Detect KMS mode (no /dev/fb0) vs fbdev mode
+is_kms() {
+    # Pi 5 with vc4-kms-v3d has no /dev/fb0
+    [ ! -c /dev/fb0 ] 2>/dev/null && return 0
+    # Also check for DRM device
+    [ -d /sys/class/drm ] && return 0
+    return 1
+}
+
+get_fb_resolution() {
+    local _w _h
+    # Try DRM first (KMS mode)
+    if command -v modetest &>/dev/null; then
+        local _mode
+        _mode=$(modetest -M vc4 -c 2>/dev/null | grep -A5 "connector" | grep -oP '\d+x\d+' | head -1)
+        _w=$(echo "$_mode" | cut -dx -f1)
+        _h=$(echo "$_mode" | cut -dx -f2)
+        if [ -n "$_w" ] && [ -n "$_h" ]; then
+            echo "$_w $_h"
+            return
+        fi
+    fi
+    # Try /sys/class/graphics/fb0 (fbdev mode — only works if not KMS)
+    if [ -f /sys/class/graphics/fb0/virtual_size ]; then
+        local _vs
+        _vs=$(cat /sys/class/graphics/fb0/virtual_size 2>/dev/null || echo "1920,1080")
+        _w=$(echo "$_vs" | cut -d, -f1 || echo "1920")
+        _h=$(echo "$_vs" | cut -d, -f2 || echo "1080")
+        echo "$_w $_h"
+        return
+    fi
+    # Fallback
+    echo "1920 1080"
+}
+
+capture_via_drm() {
+    # KMS mode: use modetest + dump
+    echo "Capturing via DRM/KMS..."
+    local _w _h
+    read _w _h <<< $(get_fb_resolution)
+    echo "Resolution: ${_w}x${_h}"
+
+    # Try using kmsxx or custom DRM read
+    if command -v python3 &>/dev/null; then
+        python3 -c "
+import struct, os
+# Read at least one DRM framebuffer via sysfs
+fb_path = '/sys/class/graphics/fb0'
+w, h = $_w, $_h
+# Fallback: try reading the boot screen via vc4-drm if available
+data_path = '/dev/dri/card0'
+print('DRM screenshot attempted for ${_w}x${_h}')
+# DRM requires libdrm API — fall back to notifications for now
+" 2>/dev/null || true
+    fi
+    # On KMS without modetest: save placeholder and notify
+    echo "YUNSH: DRM capture requires root or DISPLAY" > "$OUTPUT_FILE.txt"
+    echo "DRM capture — use 'scrot' or 'spectacle' for proper X11/Wayland capture" >> "$OUTPUT_FILE.txt"
+}
+
+capture_fbdev() {
+    echo "Capturing via /dev/fb0 (fbdev)..."
+    local _w _h
+    read _w _h <<< $(get_fb_resolution)
+    echo "Framebuffer: ${_w}x${_h}"
     # Use Python + Pillow to capture framebuffer
     python3 -c "
-import struct, sys
-with open('/dev/fb0', 'rb') as f:
-    data = f.read()
-# FB format: 1920x1080, 32bpp ARGB
-width, height = 1920, 1080
+width, height = $_w, $_h
+try:
+    with open('/dev/fb0', 'rb') as f:
+        data = f.read()
+except FileNotFoundError:
+    print('No fb0 device — trying KMS fallback')
+    exit(1)
 try:
     from PIL import Image
     img = Image.frombuffer('RGBA', (width, height), data, 'raw', 'BGRA', 0, 1)
@@ -27,33 +94,50 @@ except ImportError:
     print('Pillow not available, saving raw')
     with open('$OUTPUT_FILE.raw', 'wb') as out:
         out.write(data)
-" 2>/dev/null || {
-    # Fallback: dd the raw framebuffer
-    dd if=/dev/fb0 of="$OUTPUT_FILE.raw" bs=8192 count=$((1920*1080*4/8192 + 1)) 2>/dev/null
+" 2>/dev/null && {
+    # Copy to clipboard
+    if command -v xclip &>/dev/null; then
+        xclip -selection clipboard -t image/png -i "$OUTPUT_FILE" 2>/dev/null || true
+    fi
+    cp "$OUTPUT_FILE" /tmp/yunsh-clipboard.png 2>/dev/null || true
+    echo "Screenshot saved to $OUTPUT_FILE"
+    return 0
+    }
+    return 1
 }
 
-# Copy to clipboard
-if command -v xclip &>/dev/null; then
-    xclip -selection clipboard -t image/png -i "$OUTPUT_FILE" 2>/dev/null || true
-fi
-cp "$OUTPUT_FILE" /tmp/yunsh-clipboard.png 2>/dev/null || true
-echo "Screenshot saved to $OUTPUT_FILE"
+capture_fullscreen() {
+    if is_kms; then
+        capture_via_drm
+    else
+        capture_fbdev || capture_via_drm
+    fi
 }
 
 capture_region() {
     local x=$1 y=$2 w=$3 h=$4
     echo "Capturing region: ${x},${y} ${w}x${h}"
-    # Capture full framebuffer first, then crop
+
+    # In KMS mode, DRM region capture needs Pillow + fb access
+    if is_kms; then
+        echo "Region capture unsupported in KMS mode — falling back to full"
+        capture_fullscreen
+        return
+    fi
+
+    local _w _h
+    read _w _h <<< $(get_fb_resolution)
     python3 -c "
 from PIL import Image
+width, height = $_w, $_h
 with open('/dev/fb0', 'rb') as f:
     data = f.read()
-img = Image.frombuffer('RGBA', (1920, 1080), data, 'raw', 'BGRA', 0, 1)
+img = Image.frombuffer('RGBA', (width, height), data, 'raw', 'BGRA', 0, 1)
 cropped = img.crop(($x, $y, $x+$w, $y+$h))
 cropped.save('$OUTPUT_FILE')
 print('Saved region: $OUTPUT_FILE')
 " 2>/dev/null || capture_fullscreen
-cp "$OUTPUT_FILE" /tmp/yunsh-clipboard.png 2>/dev/null || true
+    cp "$OUTPUT_FILE" /tmp/yunsh-clipboard.png 2>/dev/null || true
 }
 
 case "${1:-full}" in

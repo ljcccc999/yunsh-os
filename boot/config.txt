@@ -23,16 +23,12 @@ framebuffer_ignore_alpha=0
 # Enable 64-bit kernel
 arm_64bit=1
 
-# Boot
-kernel=Image.gz
-kernel_address=0x80000
+# Boot (Pi 5 auto-picks kernel8.img — no kernel= line needed)
+# kernel= line removed: Pi 5 firmware searches kernel8.img by default
 
-# GPU
+# GPU — vc4-kms-v3d ONLY. vc4-fkms-v3d conflicts with KMS on Pi 5.
 dtoverlay=vc4-kms-v3d
 max_framebuffers=2
-
-# Enable DRM
-dtoverlay=vc4-fkms-v3d
 
 # Serial console for debugging
 enable_uart=1

@@ -65,16 +65,21 @@ def scan_wifi():
     if success:
         networks = []
         if isinstance(result, dict):
-            for entry in result.get("wifi-networks", []):
-                for ap in entry.get("access-points", [entry]):
-                    ssid = ap.get("ssid", "")
+            # nmcli JSON output varies by version. Try multiple key patterns.
+            raw_networks = result.get("wifi-networks", result.get("NETWORKS", []))
+            for entry in raw_networks:
+                aps = entry.get("access-points", [entry])
+                for ap in aps:
+                    if not isinstance(ap, dict):
+                        continue
+                    ssid = ap.get("ssid", ap.get("SSID", ""))
                     if ssid:
                         networks.append({
-                            "ssid": ssid,
-                            "signal": ap.get("signal", 0),
-                            "security": ap.get("security", ""),
-                            "bars": ap.get("bars", ""),
-                            "chan": ap.get("chan", 0)
+                            "ssid": str(ssid),
+                            "signal": ap.get("signal", ap.get("SIGNAL", 0)),
+                            "security": ap.get("security", ap.get("SECURITY", "")),
+                            "bars": ap.get("bars", ap.get("BARS", "")),
+                            "chan": ap.get("chan", ap.get("CHAN", 0))
                         })
         # Sort by signal strength
         networks.sort(key=lambda n: n["signal"], reverse=True)
@@ -200,7 +205,7 @@ def socket_server():
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(SOCKET_PATH)
     server.listen(5)
-    os.chmod(SOCKET_PATH, 0o777)
+    os.chmod(SOCKET_PATH, 0o666)
     
     log.info(f"Listening on {SOCKET_PATH}")
     
@@ -254,8 +259,11 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, handle_signal)
     signal.signal(signal.SIGINT, handle_signal)
     
-    if "--daemon" in sys.argv:
-        # Double fork
+    # Systemd Type=simple: just run in foreground (systemd handles daemonization).
+    # Double-fork only when explicitly requested via --fork, not via --daemon
+    # to avoid confusing systemd's service manager.
+    if "--fork" in sys.argv:
+        # Manual double-fork (for non-systemd usage)
         pid = os.fork()
         if pid > 0:
             sys.exit(0)

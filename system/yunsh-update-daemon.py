@@ -45,6 +45,7 @@ DEFAULT_CONFIG = {
     "wifi_only": True,
     "update_channel": "stable",  # "stable" | "beta"
     "allow_major_update": True,
+    "github_mirror": "",  # e.g. "https://hub.yzuu.cf" for GFW bypass; empty = direct
 }
 
 # ---------------------------------------------------------------------------
@@ -103,7 +104,7 @@ def save_config(config: dict):
     """Persist config to /etc/yunsh/update.conf."""
     os.makedirs(os.path.dirname(CONF_PATH), exist_ok=True)
     with open(CONF_PATH, "w") as f:
-        for key in ("auto_update", "wifi_only", "update_channel"):
+        for key in ("auto_update", "wifi_only", "update_channel", "github_mirror"):
             val = config.get(key, DEFAULT_CONFIG[key])
             if isinstance(val, bool):
                 f.write(f"{key}={str(val).lower()}\n")
@@ -160,10 +161,11 @@ def write_update_info(info: dict):
 # ---------------------------------------------------------------------------
 # GitHub Release checker
 # ---------------------------------------------------------------------------
-def _github_api(channel: str) -> str:
+def _github_api(channel: str, mirror: str = "") -> str:
+    base = mirror if mirror else "https://api.github.com"
     if channel == "beta":
-        return f"https://api.github.com/repos/{GITHUB_REPO}/releases?per_page=5"
-    return f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+        return f"{base}/repos/{GITHUB_REPO}/releases?per_page=5"
+    return f"{base}/repos/{GITHUB_REPO}/releases/latest"
 
 
 def _parse_release(data: dict) -> dict:
@@ -234,8 +236,8 @@ def is_major_update(current: str, latest: str) -> bool:
         return False
 
 
-def fetch_latest_release(channel: str = "stable") -> dict | None:
-    url = _github_api(channel)
+def fetch_latest_release(channel: str = "stable", mirror: str = "") -> dict | None:
+    url = _github_api(channel, mirror)
     data = _fetch_json(url)
     if data is None:
         return None
@@ -447,7 +449,8 @@ class UpdateDaemon:
         write_status(state="checking")
 
         channel = self._config.get("update_channel", "stable")
-        release = fetch_latest_release(channel)
+        mirror = self._config.get("github_mirror", "")
+        release = fetch_latest_release(channel, mirror)
         if release is None:
             self._state = "error"
             write_status(state="error", error="failed to fetch release info")
@@ -472,7 +475,7 @@ class UpdateDaemon:
 
         # Persist update-info.json
         info = {
-            "current_version": cur or "1.0.0",
+            "current_version": cur or "1.0.1",
             "latest_version": latest,
             "update_available": available,
             "last_check_ts": self._last_check_ts,
@@ -493,7 +496,7 @@ class UpdateDaemon:
         self._state = "idle"
         write_status(
             state="idle" if not available else "update_available",
-            current_version=cur or "1.0.0",
+            current_version=cur or "1.0.1",
             latest_version=latest,
             update_available=available,
             major_update=release.get("major_update", False),
@@ -579,7 +582,7 @@ class UpdateDaemon:
         logger.info("Listening on %s", SOCKET_PATH)
         write_status(
             state="idle",
-            current_version=current_version() or "1.0.0",
+            current_version=current_version() or "1.0.1",
             auto_update=self._config.get("auto_update", False),
             wifi_only=self._config.get("wifi_only", True),
             update_channel=self._config.get("update_channel", "stable"),

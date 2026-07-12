@@ -1,14 +1,9 @@
 [Unit]
-Description=YUNSH OS Head Tracking Daemon (3DoF IMU)
-Documentation=https://github.com/ljcccc999/yunsh-os
+Description=YUNSH OS Head Tracking
 After=multi-user.target
-
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-headtracking
 Restart=always
-RestartSec=5
-User=root
-
 [Install]
 WantedBy=multi-user.target
