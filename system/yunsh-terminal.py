@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 YUNSH OS Terminal Daemon v1.0
-PTY-based bash terminal backend, runs on :8591
+PTY-based bash terminal backend, runs on :8593
 """
 
 import os
@@ -15,7 +15,7 @@ import json
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
-PORT = 8591
+PORT = 8593
 
 
 class PTYTerminal:

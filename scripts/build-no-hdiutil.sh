@@ -350,12 +350,29 @@ WantedBy=multi-user.target
 BNOSVC
 add_file "${BUILD_DIR}/yunsh-bno085-reader.service" "/etc/systemd/system/yunsh-bno085-reader.service"
 
+# Terminal service
+cat > "${BUILD_DIR}/yunsh-terminal.service" << 'TERMSVC'
+[Unit]
+Description=YUNSH OS Terminal Daemon (PTY bash)
+After=network.target yunsh-os.service
+[Service]
+Type=simple
+ExecStart=/usr/bin/yunsh-terminal
+Restart=on-failure
+RestartSec=3
+User=root
+[Install]
+WantedBy=multi-user.target
+TERMSVC
+add_file "${BUILD_DIR}/yunsh-terminal.service" "/etc/systemd/system/yunsh-terminal.service"
+
 # Enable services
 echo "ln /etc/systemd/system/yunsh-os.service /etc/systemd/system/multi-user.target.wants/yunsh-os.service" >> "${DEBUGFS_SCRIPT}"
 echo "ln /etc/systemd/system/yunsh-network.service /etc/systemd/system/multi-user.target.wants/yunsh-network.service" >> "${DEBUGFS_SCRIPT}"
 echo "ln /etc/systemd/system/yunsh-bluetooth.service /etc/systemd/system/multi-user.target.wants/yunsh-bluetooth.service" >> "${DEBUGFS_SCRIPT}"
 echo "ln /etc/systemd/system/yunsh-update.service /etc/systemd/system/multi-user.target.wants/yunsh-update.service" >> "${DEBUGFS_SCRIPT}"
 echo "ln /etc/systemd/system/yunsh-appd.service /etc/systemd/system/multi-user.target.wants/yunsh-appd.service" >> "${DEBUGFS_SCRIPT}"
+echo "ln /etc/systemd/system/yunsh-terminal.service /etc/systemd/system/multi-user.target.wants/yunsh-terminal.service" >> "${DEBUGFS_SCRIPT}"
 echo "ln /etc/systemd/system/yunsh-splash.service /etc/systemd/system/sysinit.target.wants/yunsh-splash.service" >> "${DEBUGFS_SCRIPT}"
 echo "mkdir /etc/systemd/system/sysinit.target.wants" >> "${DEBUGFS_SCRIPT}"
 

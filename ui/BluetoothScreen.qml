@@ -64,23 +64,20 @@ Rectangle {
         xhr.send()
     }
 
-    // ── Send command to daemon via socket ─────────────
+    // ── Send command to daemon via command file ─────────
+    // QML cannot do Unix socket directly (no C++ socket bridge yet).
+    // Commands are written to a JSON file; the daemon monitors it.
     function sendCommand(command, params, callback) {
         var cmd = { "command": command }
         if (params) {
             for (var k in params) cmd[k] = params[k]
         }
+        // Write command to JSON file — yunsh-bluetooth-daemon polls this
+        var cmdStr = JSON.stringify(cmd)
         var xhr = new XMLHttpRequest()
-        // Socket communication via local file trick: write command to temp, read response
-        // On real YUNSH OS, this uses a proper socket client helper
-        var sockCmd = "echo '" + JSON.stringify(cmd).replace(/'/g, "'\\''") + "' | nc -U /tmp/yunsh-bluetooth.sock"
-        var proc = Qt.createQmlObject(
-            "import QtQuick 2.15; Timer { interval: 100; running: true; onTriggered: destroy() }",
-            bluetoothScreen
-        )
-        // Simplified: use status file polling and trigger daemon via helper
-        // In production, a C++ socket client bridges QML to the Unix socket
-        daemonHelper.send(JSON.stringify(cmd))
+        xhr.open("PUT", "file:///tmp/yunsh-bluetooth-cmd.json", false)
+        xhr.send(cmdStr)
+        // The daemon reads /tmp/yunsh-bluetooth-cmd.json and processes it
     }
 
     // ── Toggle Bluetooth on/off ───────────────────────
@@ -328,7 +325,6 @@ Rectangle {
             Rectangle {
                 id: toggleKnob
                 anchors.verticalCenter: parent.verticalCenter
-                anchors.leftMargin: 4
                 anchors.left: bluetoothOn ? parent.right : parent.left
                 anchors.leftMargin: bluetoothOn ? -(width + 4) : 4
                 width: 22; height: 22; radius: 11

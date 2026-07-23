@@ -14,7 +14,7 @@ Rectangle {
     visible: false
     z: 60
 
-    property string terminalHost: "http://127.0.0.1:8591"
+    property string terminalHost: "http://127.0.0.1:8593"
     property bool terminalReady: false
 
     signal backToHome()
