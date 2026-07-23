@@ -6,7 +6,7 @@ set -e
 YUNSH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${YUNSH_DIR}/build"
 OUTPUT_DIR="${YUNSH_DIR}/output"
-OUTPUT_FILE="${OUTPUT_DIR}/YUNSH-OS-v1.0.1.img"
+OUTPUT_FILE="${OUTPUT_DIR}/YUNSH-OS-v1.0.2.img"
 E2FSPROGS="/opt/homebrew/Cellar/e2fsprogs/1.47.4"
 DEBUGFS="${E2FSPROGS}/sbin/debugfs"
 
