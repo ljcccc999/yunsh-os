@@ -380,7 +380,7 @@ echo "ln /etc/systemd/system/yunsh-splash.service /etc/systemd/system/sysinit.ta
 echo "rm /etc/systemd/system/multi-user.target.wants/dhcpcd.service" >> "${DEBUGFS_SCRIPT}"
 
 # Autologin on tty1
-echo "mkdir -p /etc/systemd/system/getty@tty1.service.d" >> "${DEBUGFS_SCRIPT}"
+echo "mkdir /etc/systemd/system/getty@tty1.service.d" >> "${DEBUGFS_SCRIPT}"
 AUTOLOGIN_FILE="${BUILD_DIR}/yunsh-autologin.conf"
 cat > "${AUTOLOGIN_FILE}" << 'AUTOLOGIN'
 # YUNSH OS - Auto-login on tty1
