@@ -26,9 +26,9 @@ fi
 echo "Source: ${RPI_IMAGE} ($(ls -lh "${RPI_IMAGE}" | awk '{print $5}'))"
 
 # ─── Step 2: Parse partition table ────────────────
-eval $(python3 << 'PYEOF'
+eval $(python3 << PYEOF
 import struct
-with open("'''${RPI_IMAGE}'''", "rb") as f:
+with open("${RPI_IMAGE}", "rb") as f:
     mbr = f.read(512)
 boot_start = struct.unpack_from("<I", mbr, 454)[0]
 boot_end = boot_start + struct.unpack_from("<I", mbr, 458)[0] - 1
@@ -373,14 +373,14 @@ echo "ln /etc/systemd/system/yunsh-bluetooth.service /etc/systemd/system/multi-u
 echo "ln /etc/systemd/system/yunsh-update.service /etc/systemd/system/multi-user.target.wants/yunsh-update.service" >> "${DEBUGFS_SCRIPT}"
 echo "ln /etc/systemd/system/yunsh-appd.service /etc/systemd/system/multi-user.target.wants/yunsh-appd.service" >> "${DEBUGFS_SCRIPT}"
 echo "ln /etc/systemd/system/yunsh-terminal.service /etc/systemd/system/multi-user.target.wants/yunsh-terminal.service" >> "${DEBUGFS_SCRIPT}"
-echo "ln /etc/systemd/system/yunsh-splash.service /etc/systemd/system/sysinit.target.wants/yunsh-splash.service" >> "${DEBUGFS_SCRIPT}"
 echo "mkdir /etc/systemd/system/sysinit.target.wants" >> "${DEBUGFS_SCRIPT}"
+echo "ln /etc/systemd/system/yunsh-splash.service /etc/systemd/system/sysinit.target.wants/yunsh-splash.service" >> "${DEBUGFS_SCRIPT}"
 
 # Network: disable dhcpcd, enable NetworkManager + fstrim
-echo "rm /etc/systemd/system/multi-user.target.wants/dhcpcd.service 2>/dev/null" >> "${DEBUGFS_SCRIPT}"
+echo "rm /etc/systemd/system/multi-user.target.wants/dhcpcd.service" >> "${DEBUGFS_SCRIPT}"
 
 # Autologin on tty1
-echo "mkdir /etc/systemd/system/getty.target.wants" >> "${DEBUGFS_SCRIPT}"
+echo "mkdir -p /etc/systemd/system/getty@tty1.service.d" >> "${DEBUGFS_SCRIPT}"
 AUTOLOGIN_FILE="${BUILD_DIR}/yunsh-autologin.conf"
 cat > "${AUTOLOGIN_FILE}" << 'AUTOLOGIN'
 # YUNSH OS - Auto-login on tty1
@@ -416,7 +416,7 @@ for bin in yunsh-update-daemon yunsh-updater yunsh-network-daemon yunsh-bluetoot
     echo "set_inode_field /usr/bin/${bin} mode 0100755" >> "${DEBUGFS_SCRIPT}"
 done
 echo "set_inode_field /etc/rc.local mode 0100755" >> "${DEBUGFS_SCRIPT}"
-echo "rm /etc/systemd/system/multi-user.target.wants/userconfig.service 2>/dev/null" >> "${DEBUGFS_SCRIPT}"
+echo "rm /etc/systemd/system/multi-user.target.wants/userconfig.service" >> "${DEBUGFS_SCRIPT}"
 
 # ─── Step 8: Run debugfs on rootfs ────────────────
 echo ""
