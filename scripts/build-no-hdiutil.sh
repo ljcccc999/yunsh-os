@@ -134,7 +134,7 @@ echo "→ cmdline.txt..."
 mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null > "${BUILD_DIR}/yunsh-cmdline-new.txt"
 CMDLINE=$(cat "${BUILD_DIR}/yunsh-cmdline-new.txt")
 # Add quiet mode, framebuffer config, disable splash logging
-echo "${CMDLINE} quiet logo.nologo consoleblank=0 vt.global_cursor_default=0 cma=256M video=HDMI-A-1:1920x1080M@60" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
+echo "${CMDLINE} quiet logo.nologo consoleblank=0 vt.global_cursor_default=0 cma=256M" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
 mdel -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null || true
 mcopy -i "${BOOT_IMG}" "${BUILD_DIR}/yunsh-cmdline-new.txt" ::/cmdline.txt
 echo "  ✓ cmdline.txt modified"
