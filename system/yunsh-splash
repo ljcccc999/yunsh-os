@@ -13,13 +13,19 @@ for i in $(seq 1 30); do
 done
 [ -c "$FB_DEV" ] || exit 0
 
+# Try boot firmware mount points (boot partition location)
+BOOT_DIR="/boot/firmware"
+if [ ! -d "$BOOT_DIR" ]; then
+    BOOT_DIR="/boot"
+fi
+
 # Phase 1: Atom logo only (Apple style — just the mark)
-if [ -f "/boot/yunsh-splash-logo.raw" ]; then
-    cat "/boot/yunsh-splash-logo.raw" > "$FB_DEV" 2>/dev/null
-elif [ -f "/boot/yunsh-splash-logo.bmp" ]; then
+if [ -f "${BOOT_DIR}/yunsh-splash-logo.raw" ]; then
+    cat "${BOOT_DIR}/yunsh-splash-logo.raw" > "$FB_DEV" 2>/dev/null
+elif [ -f "${BOOT_DIR}/yunsh-splash-logo.bmp" ]; then
     command -v python3 >/dev/null 2>&1 && python3 -c "
 import sys, struct
-p = '/boot/yunsh-splash-logo.bmp'
+p = '${BOOT_DIR}/yunsh-splash-logo.bmp'
 with open(p,'rb') as f: d=f.read()
 off=struct.unpack('<I',d[10:14])[0]
 w=struct.unpack('<i',d[18:22])[0]
@@ -41,12 +47,12 @@ fi
 # Phase 2: After 1.5s, show logo + "YUNSH OS" text
 sleep 1.5
 
-if [ -f "/boot/yunsh-splash-full.raw" ]; then
-    cat "/boot/yunsh-splash-full.raw" > "$FB_DEV" 2>/dev/null
-elif [ -f "/boot/yunsh-splash-full.bmp" ]; then
+if [ -f "${BOOT_DIR}/yunsh-splash-full.raw" ]; then
+    cat "${BOOT_DIR}/yunsh-splash-full.raw" > "$FB_DEV" 2>/dev/null
+elif [ -f "${BOOT_DIR}/yunsh-splash-full.bmp" ]; then
     command -v python3 >/dev/null 2>&1 && python3 -c "
 import sys, struct
-p = '/boot/yunsh-splash-full.bmp'
+p = '${BOOT_DIR}/yunsh-splash-full.bmp'
 with open(p,'rb') as f: d=f.read()
 off=struct.unpack('<I',d[10:14])[0]
 w=struct.unpack('<i',d[18:22])[0]

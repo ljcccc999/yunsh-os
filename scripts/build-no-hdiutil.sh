@@ -38,8 +38,10 @@ print(f"BOOT_START={boot_start} BOOT_END={boot_end}")
 print(f"ROOT_START={root_start} ROOT_END={root_end}")
 PYEOF
 )
-echo "Boot: sectors $BOOT_START-$BOOT_END"
-echo "Root: sectors $ROOT_START-$ROOT_END"
+BOOT_SIZE=$((BOOT_END - BOOT_START + 1))
+ROOT_SIZE=$((ROOT_END - ROOT_START + 1))
+echo "Boot: sectors $BOOT_START-$BOOT_END ($BOOT_SIZE sectors)"
+echo "Root: sectors $ROOT_START-$ROOT_END ($ROOT_SIZE sectors)"
 
 # ─── Step 3: Create working copy ──────────────────
 echo ""
@@ -90,11 +92,80 @@ if [ ! -f "$APK_FILE" ] || [ "$(stat -f%z "$APK_FILE" 2>/dev/null || echo 0)" -l
     fi
 fi
 
-# ─── Step 6: Inject boot partition ────────────────
+# ─── Step 6: Inject boot partition (mtools) ────────
 echo ""
-echo "=== Injecting boot partition ==="
-python3 "${YUNSH_DIR}/scripts/inject-boot.py" 2>&1
-echo "Boot partition injection complete ✓"
+echo "=== Injecting boot partition (mtools) ==="
+
+BOOT_OFFSET=$((BOOT_START * 512))
+BOOT_IMG="${BUILD_DIR}/boot-partition-tmp.img"
+BOOT_SIZE_BYTES=$((BOOT_SIZE * 512))
+
+# Extract boot partition to temp file
+dd if="${OUTPUT_FILE}" of="${BOOT_IMG}" bs=512 skip=$BOOT_START count=$BOOT_SIZE 2>/dev/null
+echo "  Boot partition extracted ($((BOOT_SIZE_BYTES / 1024 / 1024)) MB)"
+
+MTOOL="mcopy -i ${BOOT_IMG}"
+
+# Modify config.txt --- extract, modify, write back
+echo ""
+echo "→ config.txt..."
+mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null > "${BUILD_DIR}/yunsh-config-new.txt"
+cat >> "${BUILD_DIR}/yunsh-config-new.txt" << 'YUNSHCONF'
+
+# === YUNSH OS Settings ===
+arm_64bit=1
+[pi5]
+dtoverlay=vc4-kms-v3d
+disable_splash=1
+framebuffer_width=1920
+framebuffer_height=1080
+framebuffer_depth=32
+disable_overscan=1
+[all]
+dtparam=i2c_arm=on
+YUNSHCONF
+mdel -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null || true
+mcopy -i "${BOOT_IMG}" "${BUILD_DIR}/yunsh-config-new.txt" ::/config.txt
+echo "  ✓ config.txt modified"
+
+# Modify cmdline.txt
+echo ""
+echo "→ cmdline.txt..."
+mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null > "${BUILD_DIR}/yunsh-cmdline-new.txt"
+CMDLINE=$(cat "${BUILD_DIR}/yunsh-cmdline-new.txt")
+# Add quiet mode, framebuffer config, disable splash logging
+echo "${CMDLINE} quiet logo.nologo consoleblank=0 vt.global_cursor_default=0 cma=256M video=HDMI-A-1:1920x1080M@60" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
+mdel -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null || true
+mcopy -i "${BOOT_IMG}" "${BUILD_DIR}/yunsh-cmdline-new.txt" ::/cmdline.txt
+echo "  ✓ cmdline.txt modified"
+
+# Copy YUNSH boot files
+echo ""
+echo "→ YUNSH boot files..."
+mcopy -i "${BOOT_IMG}" "${YUNSH_DIR}/boot/yunsh-firstboot.sh" ::/yunsh-firstboot.sh
+echo "  ✓ yunsh-firstboot.sh"
+mcopy -i "${BOOT_IMG}" "${YUNSH_DIR}/boot/yunsh-iptables.sh" ::/yunsh-iptables.sh
+echo "  ✓ yunsh-iptables.sh"
+
+# Splash files (raw + bmp)
+echo "→ Splash files..."
+SPLASH_DIR="${BUILD_DIR}/splash"
+if [ -d "$SPLASH_DIR" ]; then
+  for sf in "$SPLASH_DIR"/*.raw; do
+    [ -f "$sf" ] && mcopy -i "${BOOT_IMG}" "$sf" ::/ && echo "  ✓ $(basename $sf)"
+  done
+  for sf in "$SPLASH_DIR"/*.bmp; do
+    [ -f "$sf" ] && mcopy -i "${BOOT_IMG}" "$sf" ::/ && echo "  ✓ $(basename $sf)"
+  done
+fi
+
+# Write boot partition back to full image
+echo ""
+echo "→ Writing boot back to output image..."
+dd if="${BOOT_IMG}" of="${OUTPUT_FILE}" bs=512 seek=$BOOT_START count=$BOOT_SIZE conv=notrunc 2>/dev/null
+sync
+rm -f "${BOOT_IMG}" "${BUILD_DIR}/yunsh-config-new.txt" "${BUILD_DIR}/yunsh-cmdline-new.txt"
+echo "  ✓ Boot partition written back"
 
 # ─── Step 7: Create debugfs injection script ──────
 echo ""
@@ -207,8 +278,8 @@ UC
 add_file "${BUILD_DIR}/yunsh-update.conf" "/etc/yunsh/update.conf"
 
 cat > "${BUILD_DIR}/yunsh-version.conf" << 'VERCONF'
-VERSION=v1.0.1
-BUILD=2026.07.12
+VERSION=v1.0.2
+BUILD=2026.07.24
 VERCONF
 add_file "${BUILD_DIR}/yunsh-version.conf" "/etc/yunsh/version.conf"
 
@@ -421,12 +492,11 @@ echo "rm /etc/systemd/system/multi-user.target.wants/userconfig.service" >> "${D
 # ─── Step 8: Run debugfs on rootfs ────────────────
 echo ""
 echo "=== Extracting root partition ==="
-ROOT_SIZE_BLOCKS=$((ROOT_END - ROOT_START + 1))
 ROOT_PARTITION_IMG="${BUILD_DIR}/root-partition.img"
 rm -f "${ROOT_PARTITION_IMG}"
 dd if="${OUTPUT_FILE}" of="${ROOT_PARTITION_IMG}" bs=512 \
-   skip=$ROOT_START count=$ROOT_SIZE_BLOCKS 2>/dev/null
-echo "  ✓ root partition extracted ($((ROOT_SIZE_BLOCKS * 512 / 1024 / 1024)) MB)"
+   skip=$ROOT_START count=$ROOT_SIZE 2>/dev/null
+echo "  ✓ root partition extracted ($((ROOT_SIZE * 512 / 1024 / 1024)) MB)"
 
 echo ""
 echo "=== Running debugfs injection ==="
@@ -447,7 +517,7 @@ echo "e2fsck ✓"
 echo ""
 echo "=== Writing root partition back ==="
 dd if="${ROOT_PARTITION_IMG}" of="${OUTPUT_FILE}" bs=512 \
-   seek=$ROOT_START count=$ROOT_SIZE_BLOCKS conv=notrunc 2>/dev/null
+   seek=$ROOT_START count=$ROOT_SIZE conv=notrunc 2>/dev/null
 sync
 echo "Root partition written ✓"
 
@@ -457,7 +527,7 @@ echo "=== Quick verification ==="
 # Extract root and check files
 ROOT_TEST_IMG="${BUILD_DIR}/root-test.img"
 dd if="${OUTPUT_FILE}" of="${ROOT_TEST_IMG}" bs=512 \
-   skip=$ROOT_START count=$ROOT_SIZE_BLOCKS 2>/dev/null
+   skip=$ROOT_START count=$ROOT_SIZE 2>/dev/null
 
 echo "Files injected:"
 "${E2FSPROGS}/sbin/debugfs" -R "ls -l /usr/bin/yunsh" "${ROOT_TEST_IMG}" 2>/dev/null | head -5 || true
