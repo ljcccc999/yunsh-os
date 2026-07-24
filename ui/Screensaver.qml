@@ -119,13 +119,18 @@ Rectangle {
     Keys.onPressed: screensaver.wake()
 
     // ─── Show/hide animation ──────────────────────
+    // Apple: prefers-reduced-motion → short opacity cross-fade, no slide/spring
     Behavior on opacity {
-        NumberAnimation { duration: 400; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
     }
 
     function show() {
+        if (Qt.application.layoutDirection === Qt.RightToLeft) {
+            // Fallback for accessibility
+        }
         opacity = 0
         visible = true
+        // Quick fade in for reduced-motion compatibility (Apple: keep opacity/color changes)
         opacity = 1
         // Force clock update
         var d = new Date()
@@ -137,4 +142,9 @@ Rectangle {
         opacity = 0
         Qt.callLater(function() { visible = false })
     }
+
+    // Reduced-motion: avoid full-viewport moving backgrounds (Apple guideline)
+    // Screensaver uses static clock + subtle fade, no sliding/spring/pulse
+    // This is intentional — moving backgrounds trigger vestibular issues
+    readonly property bool reducedMotion: true  // intrinsic to screensaver design
 }

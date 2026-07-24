@@ -41,11 +41,6 @@ Rectangle {
         return -degrees * pixelsPerDegree
     }
 
-    transform: Translate {
-        x: macWindow.computeHeadOffsetX()
-        y: macWindow.computeHeadOffsetY()
-    }
-
     signal pinModeChanged(string mode)
 
     signal closeClicked()
@@ -53,6 +48,58 @@ Rectangle {
     signal fullscreenClicked()
     signal mouseEntered()
     signal togglePinMode()
+
+    // ─── Materialize Animation (Apple: glass surfaces materialize, don't just fade) ──
+    property bool animateEnter: true
+    property bool isClosing: false
+
+    // Window open: scale 0.95 + fade in
+    transform: [
+        Scale {
+            id: winScale
+            origin.x: macWindow.width / 2
+            origin.y: macWindow.height / 2
+            xScale: 1.0
+            yScale: 1.0
+        },
+        Translate {
+            x: macWindow.computeHeadOffsetX()
+            y: macWindow.computeHeadOffsetY()
+        }
+    ]
+
+    // Open animation (replaces original translate transform)
+    Component.onCompleted: {
+        if (animateEnter) {
+            winScale.xScale = 0.95
+            winScale.yScale = 0.95
+            macWindow.opacity = 0
+        }
+        // Animate in immediately
+        winScale.xScale = 1.0
+        winScale.yScale = 1.0
+        macWindow.opacity = 1.0
+    }
+
+    // Animate out before destroying (call before destroying)
+    function animateOut(callback) {
+        if (isClosing) return
+        isClosing = true
+        winScale.xScale = 0.92
+        winScale.yScale = 0.92
+        macWindow.opacity = 0
+        closeAnimCallback = callback || function(){}
+    }
+
+    property var closeAnimCallback: function(){}
+
+    // Close animation timer
+    Timer {
+        interval: 250
+        repeat: false
+        running: isClosing
+        onTriggered: closeAnimCallback()
+    }
 
     default property alias content: contentArea.data
 
