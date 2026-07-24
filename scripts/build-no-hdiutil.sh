@@ -291,7 +291,8 @@ echo "mkdir /etc/systemd/system/multi-user.target.wants" >> "${DEBUGFS_SCRIPT}"
 cat > "${BUILD_DIR}/yunsh-os.service" << 'SVC'
 [Unit]
 Description=YUNSH OS v1.0 AR Glasses UI
-After=multi-user.target
+After=network.target
+Wants=network.target
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-ui-launcher
