@@ -5,14 +5,14 @@
 # Usage:  ./build-image-from-rpi-os.sh
 # Prereq: e2fsprogs via Homebrew (brew install e2fsprogs)
 # Input:  build/raspios-lite.img (download from Raspberry Pi)
-# Output: output/YUNSH-OS-v1.0.1.img
+# Output: output/YUNSH-OS-v1.0.2.img
 
 set -euo pipefail
 
 YUNSH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${YUNSH_DIR}/build"
 OUTPUT_DIR="${YUNSH_DIR}/output"
-IMAGE_NAME="YUNSH-OS-v1.0.1.img"
+IMAGE_NAME="YUNSH-OS-v1.0.2.img"
 
 # macOS Homebrew e2fsprogs (keg-only, link to Cellar directly)
 E2FSPROGS="/opt/homebrew/Cellar/e2fsprogs/1.47.4"
@@ -576,7 +576,8 @@ SVC_FILE="${BUILD_DIR}/yunsh-os.service"
 cat > "${SVC_FILE}" << 'SVC'
 [Unit]
 Description=YUNSH OS v1.0 AR Glasses UI
-After=multi-user.target
+After=network.target
+Wants=network.target
 
 [Service]
 Type=simple

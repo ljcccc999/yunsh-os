@@ -46,6 +46,7 @@ echo "Root: sectors $ROOT_START-$ROOT_END ($ROOT_SIZE sectors)"
 # ─── Step 3: Create working copy ──────────────────
 echo ""
 echo "=== Creating working copy ==="
+mkdir -p "${OUTPUT_DIR}"
 cp "${RPI_IMAGE}" "${OUTPUT_FILE}"
 echo "  ✓ ${OUTPUT_FILE}"
 
@@ -134,7 +135,7 @@ echo "→ cmdline.txt..."
 mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null > "${BUILD_DIR}/yunsh-cmdline-new.txt"
 CMDLINE=$(cat "${BUILD_DIR}/yunsh-cmdline-new.txt")
 # Add quiet mode, framebuffer config, disable splash logging
-echo "${CMDLINE} logo.nologo consoleblank=0 vt.global_cursor_default=0 cma=256M" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
+echo "${CMDLINE} logo.nologo consoleblank=0 cma=256M systemd.show_status=1 systemd.log_target=console" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
 mdel -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null || true
 mcopy -i "${BOOT_IMG}" "${BUILD_DIR}/yunsh-cmdline-new.txt" ::/cmdline.txt
 echo "  ✓ cmdline.txt modified"
@@ -291,8 +292,8 @@ echo "mkdir /etc/systemd/system/multi-user.target.wants" >> "${DEBUGFS_SCRIPT}"
 cat > "${BUILD_DIR}/yunsh-os.service" << 'SVC'
 [Unit]
 Description=YUNSH OS v1.0 AR Glasses UI
-After=network.target
-Wants=network.target
+After=network.target yunsh-firstboot.service
+Wants=network.target yunsh-firstboot.service
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-ui-launcher
@@ -302,6 +303,29 @@ User=root
 WantedBy=multi-user.target
 SVC
 add_file "${BUILD_DIR}/yunsh-os.service" "/etc/systemd/system/yunsh-os.service"
+
+# First-boot installer: own tty1 explicitly so progress and failures are visible.
+cat > "${BUILD_DIR}/yunsh-firstboot.service" << 'FBSVC'
+[Unit]
+Description=YUNSH OS First Boot Installer
+After=network.target
+Wants=network.target
+Before=yunsh-os.service
+ConditionPathExists=!/etc/yunsh/.packages_installed
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/yunsh-firstboot.sh
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=no
+[Install]
+WantedBy=multi-user.target
+FBSVC
+add_file "${BUILD_DIR}/yunsh-firstboot.service" "/etc/systemd/system/yunsh-firstboot.service"
 
 # Network service
 cat > "${BUILD_DIR}/yunsh-network.service" << 'NSVC'
@@ -440,13 +464,13 @@ add_file "${BUILD_DIR}/yunsh-terminal.service" "/etc/systemd/system/yunsh-termin
 
 # Enable services
 echo "ln /etc/systemd/system/yunsh-os.service /etc/systemd/system/multi-user.target.wants/yunsh-os.service" >> "${DEBUGFS_SCRIPT}"
+echo "ln /etc/systemd/system/yunsh-firstboot.service /etc/systemd/system/multi-user.target.wants/yunsh-firstboot.service" >> "${DEBUGFS_SCRIPT}"
 echo "ln /etc/systemd/system/yunsh-network.service /etc/systemd/system/multi-user.target.wants/yunsh-network.service" >> "${DEBUGFS_SCRIPT}"
 echo "ln /etc/systemd/system/yunsh-bluetooth.service /etc/systemd/system/multi-user.target.wants/yunsh-bluetooth.service" >> "${DEBUGFS_SCRIPT}"
 echo "ln /etc/systemd/system/yunsh-update.service /etc/systemd/system/multi-user.target.wants/yunsh-update.service" >> "${DEBUGFS_SCRIPT}"
 echo "ln /etc/systemd/system/yunsh-appd.service /etc/systemd/system/multi-user.target.wants/yunsh-appd.service" >> "${DEBUGFS_SCRIPT}"
 echo "ln /etc/systemd/system/yunsh-terminal.service /etc/systemd/system/multi-user.target.wants/yunsh-terminal.service" >> "${DEBUGFS_SCRIPT}"
-echo "mkdir /etc/systemd/system/sysinit.target.wants" >> "${DEBUGFS_SCRIPT}"
-echo "ln /etc/systemd/system/yunsh-splash.service /etc/systemd/system/sysinit.target.wants/yunsh-splash.service" >> "${DEBUGFS_SCRIPT}"
+# Keep the splash unit installed but do not enable it until first boot is reliable.
 
 # Network: disable dhcpcd, enable NetworkManager + fstrim
 echo "rm /etc/systemd/system/multi-user.target.wants/dhcpcd.service" >> "${DEBUGFS_SCRIPT}"

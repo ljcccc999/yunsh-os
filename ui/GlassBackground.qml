@@ -104,7 +104,7 @@ Item {
         anchors.right: parent.right
         height: 24
         gradient: Gradient {
-            GradientStop { position: 0.0; color: Qt.rgwa(0,0,0,0.03) }
+            GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.03) }
             GradientStop { position: 1.0; color: "transparent" }
         }
         visible: showFrost
@@ -175,4 +175,5 @@ Item {
     SmoothedAnimation on opacity {
         running: false  // disabled by default, override in main.qml
     }
+}
 }

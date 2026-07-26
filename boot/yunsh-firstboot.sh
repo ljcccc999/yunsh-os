@@ -28,7 +28,7 @@ pct() { CUR=$((CUR+1)); local P=$((CUR*100/TOTAL)); [ "$P" -gt "$1" ] && P=$1
 # ───── Wait for network (up to 120s timeout) ──
 echo -n "  [+] Waiting for network"
 WAIT=0
-TIMEOUT=120   # Max 120 seconds waiting for network
+TIMEOUT=24   # 24 attempts × about 5 seconds = about 2 minutes
 while ! ping -c1 -W2 223.5.5.5 &>/dev/null && \
       ! ping -c1 -W2 114.114.114.114 &>/dev/null && \
       ! curl -s --max-time 3 http://mirrors.tuna.tsinghua.edu.cn/ &>/dev/null && \
@@ -45,7 +45,7 @@ while ! ping -c1 -W2 223.5.5.5 &>/dev/null && \
 done
 echo " [OK]"
 
-if [ $WAIT -gt 60 ]; then
+if [ $WAIT -ge $TIMEOUT ]; then
     MIRROR="http://mirrors.tuna.tsinghua.edu.cn"
 else
     MIRROR="http://deb.debian.org/debian"
@@ -205,10 +205,18 @@ if [ -f /usr/share/yunsh/apps/appstore.apk ]; then
 fi
 
 pct 98 "Cleaning up..."
-rm -f /usr/bin/yunsh-firstboot.sh /etc/yunsh/.firstboot_partial 2>/dev/null || true
+rm -f /etc/yunsh/.firstboot_partial 2>/dev/null || true
 
 pct 100 "Setup complete! Rebooting..."
+if ! command -v qml6 >/dev/null 2>&1 && ! command -v qml >/dev/null 2>&1; then
+    echo ""
+    echo "  [ERROR] Qt/QML installation failed."
+    echo "  Check the Ethernet connection, then reboot to retry."
+    rm -f /etc/yunsh/.firstboot_partial
+    sleep infinity
+fi
 touch /etc/yunsh/.packages_installed
+rm -f /usr/bin/yunsh-firstboot.sh
 sync
 sleep 2
 reboot

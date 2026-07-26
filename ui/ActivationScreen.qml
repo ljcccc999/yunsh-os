@@ -138,7 +138,7 @@ Rectangle {
                 // Version
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "v1.0.1"
+                    text: "v1.0.2"
                     color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
                     font.pixelSize: 11
                 }
