@@ -47,12 +47,12 @@ Rectangle {
         }
     }
 
-    // ── Read Bluetooth status from JSON file ──────────
+    // ── Read Bluetooth status through the local bridge ─
     function pollStatus() {
         var xhr = new XMLHttpRequest()
-        xhr.open("GET", "file:///tmp/yunsh-bluetooth-status.json", true)
+        xhr.open("GET", "http://127.0.0.1:8591/api/bluetooth-status", true)
         xhr.onreadystatechange = function() {
-            if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 0) {
+            if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
                 try {
                     var data = JSON.parse(xhr.responseText)
                     bluetoothOn = data.powered || false
@@ -64,20 +64,24 @@ Rectangle {
         xhr.send()
     }
 
-    // ── Send command to daemon via command file ─────────
-    // QML cannot do Unix socket directly (no C++ socket bridge yet).
-    // Commands are written to a JSON file; the daemon monitors it.
+    // ── Send command to daemon through the HTTP bridge ─
     function sendCommand(command, params, callback) {
         var cmd = { "command": command }
         if (params) {
             for (var k in params) cmd[k] = params[k]
         }
-        // Write command to JSON file — yunsh-bluetooth-daemon polls this
-        var cmdStr = JSON.stringify(cmd)
         var xhr = new XMLHttpRequest()
-        xhr.open("PUT", "file:///tmp/yunsh-bluetooth-cmd.json", false)
-        xhr.send(cmdStr)
-        // The daemon reads /tmp/yunsh-bluetooth-cmd.json and processes it
+        xhr.open("POST", "http://127.0.0.1:8591/api/bluetooth", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                var result = {}
+                try { result = JSON.parse(xhr.responseText) } catch(e) {}
+                if (callback) callback(result)
+                pollStatus()
+            }
+        }
+        xhr.send(JSON.stringify(cmd))
     }
 
     // ── Toggle Bluetooth on/off ───────────────────────
@@ -95,9 +99,10 @@ Rectangle {
         if (scanning) return
         scanning = true
         availableDevices = []
-        sendCommand("scan", { "timeout": scanTimeout })
-        // Poll for scan results (daemon writes status JSON periodically)
-        scanResultTimer.start()
+        sendCommand("scan", { "timeout": scanTimeout }, function(result) {
+            availableDevices = result.devices || []
+            scanning = false
+        })
     }
 
     Timer {
@@ -106,9 +111,9 @@ Rectangle {
         repeat: true
         onTriggered: {
             var xhr = new XMLHttpRequest()
-            xhr.open("GET", "file:///tmp/yunsh-bluetooth-status.json", true)
+            xhr.open("GET", "http://127.0.0.1:8591/api/bluetooth-status", true)
             xhr.onreadystatechange = function() {
-                if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 0) {
+                if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
                     try {
                         var data = JSON.parse(xhr.responseText)
                         // Also try to read scan results from a separate file
@@ -123,6 +128,10 @@ Rectangle {
     function connectToDevice(mac, name) {
         loadingOverlay.visible = true
         loadingText.text = "正在连接到 " + name + "..."
+        sendCommand("connect", {"mac": mac}, function(result) {
+            loadingOverlay.visible = false
+            pollStatus()
+        })
         sendCommand("connect", { "mac": mac })
         Qt.callLater(function() {
             loadingOverlay.visible = false

@@ -17,12 +17,19 @@ Rectangle {
     property real shadowOpacity: 0.6 // Shadow darkness
     property color glassTint: Qt.rgba(0.45, 0.5, 0.7, 0.08) // Slight blue tint
     property bool showBorder: true
+    property alias contentItem: customContent.data
     
     // Apple-style large corner radius
     radius: cornerRadius
     
     // Main glass background - deep translucent with blue tint
     color: Qt.rgba(12/255, 12/255, 25/255, glassOpacity * 0.7)
+
+    Item {
+        id: customContent
+        anchors.fill: parent
+        z: 5
+    }
     
     // Frosted overlay layer (simulates blurred background)
     Rectangle {

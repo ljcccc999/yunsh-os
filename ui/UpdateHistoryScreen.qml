@@ -3,8 +3,6 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import QtQuick.Shapes 1.15
 
-import Yunsh.Components 1.0
-
 /* ==========================================================================
    UpdateHistoryScreen.qml — YUNSH OS Update History
    Displays a chronological list of past system updates.

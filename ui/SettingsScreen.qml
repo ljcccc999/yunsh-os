@@ -19,7 +19,7 @@ Rectangle {
     signal openBluetoothSettings()
     signal openSystemInfo()
 
-    property string osVersionName: "YUNSH OS v1.0.1"
+    property string osVersionName: "YUNSH OS v1.0.2-fixed"
 
     function loadVersionConfig() {
         var xhr = new XMLHttpRequest()
@@ -50,7 +50,7 @@ Rectangle {
     // ── Helper: send command to update daemon ──
     function sendDaemonCmd(cmd) {
         var xhr = new XMLHttpRequest();
-        xhr.open("POST", "http://127.0.0.1:8080/api/update-command", true);
+        xhr.open("POST", "http://127.0.0.1:8591/api/update-config", true);
         xhr.setRequestHeader("Content-Type", "application/json");
         xhr.send(JSON.stringify(cmd));
     }

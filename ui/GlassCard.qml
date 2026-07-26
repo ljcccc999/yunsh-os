@@ -18,11 +18,12 @@ Rectangle {
     property color titleColor: "#FFFFFF"
     property bool isToggle: false
     property bool toggleState: false
+    property alias contentItem: customContent.data
     
     signal clicked()
     signal toggled(bool state)
     
-    width: parent?.width ?? 400
+    width: parent ? parent.width : 400
     height: subtitle ? 64 : 52
     radius: cardCornerRadius
     
@@ -35,6 +36,12 @@ Rectangle {
     // Subtle border
     border.color: Qt.rgba(255/255, 255/255, 255/255, 0.03)
     border.width: 1
+
+    Item {
+        id: customContent
+        anchors.fill: parent
+        z: 5
+    }
     
     // Left accent line (iOS-style)
     Rectangle {

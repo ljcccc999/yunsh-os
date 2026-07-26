@@ -1,5 +1,5 @@
 #!/bin/bash
-# YUNSH OS v1.0.1 - First Boot Setup (v5)
+# YUNSH OS v1.0.2-fixed - First Boot Setup
 # Installs system packages, configures services
 # UI files pre-injected into image
 
@@ -14,7 +14,7 @@ sync
 
 echo ""
 echo "  +------------------------------------------+"
-echo "  |  YUNSH OS v1.0.1 - First Time Setup      |"
+echo "  |  YUNSH OS v1.0.2-fixed - First Setup     |"
 echo "  +------------------------------------------+"
 
 source /usr/bin/yunsh-install-progress.sh 2>/dev/null || true
@@ -45,22 +45,15 @@ while ! ping -c1 -W2 223.5.5.5 &>/dev/null && \
 done
 echo " [OK]"
 
+# Keep the official Debian and Raspberry Pi repositories when reachable.
+# Only switch each repository to its correct TUNA mirror after timeout.
 if [ $WAIT -ge $TIMEOUT ]; then
-    MIRROR="http://mirrors.tuna.tsinghua.edu.cn"
-else
-    MIRROR="http://deb.debian.org/debian"
+    for sf in /etc/apt/sources.list.d/*.sources; do
+        [ -f "$sf" ] || continue
+        sed -i "s|https\\?://deb.debian.org/debian|https://mirrors.tuna.tsinghua.edu.cn/debian|g" "$sf"
+        sed -i "s|https\\?://archive.raspberrypi.com/debian|https://mirrors.tuna.tsinghua.edu.cn/raspberrypi|g" "$sf"
+    done
 fi
-
-# Switch mirrors
-for sf in /etc/apt/sources.list.d/*.sources; do
-    [ -f "$sf" ] || continue
-    sed -i "s|URIs: http://deb.debian.org/debian|URIs: $MIRROR/debian|g" "$sf" 2>/dev/null || true
-    sed -i "s|URIs: http://archive.raspberrypi.com/debian|URIs: $MIRROR/raspberrypi|g" "$sf" 2>/dev/null || true
-done
-grep -q "deb.debian.org" /etc/apt/sources.list 2>/dev/null && {
-    sed -i "s|http://deb.debian.org/debian|$MIRROR/debian|g" /etc/apt/sources.list 2>/dev/null || true
-    sed -i "s|https://deb.debian.org/debian|$MIRROR/debian|g" /etc/apt/sources.list 2>/dev/null || true
-}
 
 install_apt() {
     local step="$1" name="$2"; shift 2
@@ -156,13 +149,14 @@ pct 3 "Updating package lists..."
 apt-get update -qq 2>/dev/null || { sleep 10; apt-get update -qq 2>/dev/null || true; }
 
 # Install packages
-install_apt 8 "Qt6 framework" qt6-base-dev qt6-declarative-dev libqt6svg6 qt6-base-dev-tools qt6-qmltooling-plugins qml6 qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-window qml6-module-qtquick-virtualkeyboard qml6-module-qt-labs-qmlmodels qml6-module-qtquick-templates
+install_apt 8 "Qt6 framework" qt6-base-dev qt6-declarative-dev libqt6svg6 qt6-base-dev-tools qt6-qmltooling-plugins qml6 qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-window qml6-module-qtquick-virtualkeyboard qml6-module-qt-labs-qmlmodels qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtquick-templates
 install_apt 14 "Python environment" python3-pip python3-smbus
 pip3 install smbus2 2>/dev/null || true
-install_apt 20 "WebEngine" qt6-webengine-dev libqt6webenginequick6
-install_apt 26 "Waydroid" lxc python3-dbus waydroid
+install_apt 20 "WebEngine" qt6-webengine-dev libqt6webenginequick6 qml6-module-qtwebengine
+install_apt 24 "Android container dependencies" lxc python3-dbus
+install_apt 26 "Waydroid" waydroid
 install_apt 32 "Network & BT" network-manager wpasupplicant bluez bluez-utils
-install_apt 38 "System tools" openssh-server avahi-daemon i2c-tools curl wget git
+install_apt 38 "System tools" openssh-server avahi-daemon i2c-tools curl wget git python3-pil
 install_apt 44 "Chinese fonts" fonts-noto-cjk
 install_apt 50 "Audio" pulseaudio alsa-utils
 install_apt 56 "OpenGL" mesa-utils libgl1-mesa-dri
@@ -179,15 +173,17 @@ systemctl stop dhcpcd 2>/dev/null || true
 pct 74 "Configuring YUNSH OS..."
 mkdir -p /etc/yunsh
 cat > /etc/yunsh/version.conf << 'V'
-VERSION=v1.0.1
-BUILD=2026.07.12
+VERSION=v1.0.2-fixed
+BUILD=2026.07.26
 V
 
 pct 78 "Configuring firewall & SSH..."
 setup_firewall
 
 pct 84 "Enabling YUNSH services..."
-systemctl enable yunsh-os yunsh-network yunsh-bluetooth yunsh-update fstrim.timer 2>/dev/null || true
+systemctl enable yunsh-os yunsh-local-api yunsh-network yunsh-bluetooth yunsh-update \
+    yunsh-appd yunsh-terminal yunsh-headtracking yunsh-bno085-reader yunsh-powerd \
+    fstrim.timer 2>/dev/null || true
 
 pct 86 "Creating default user..."
 if ! id yunsh &>/dev/null; then
@@ -199,9 +195,17 @@ echo "yunsh-v1" > /etc/hostname
 hostname yunsh-v1 2>/dev/null || true
 
 pct 92 "Installing application store..."
-if [ -f /usr/share/yunsh/apps/appstore.apk ]; then
-    APK_SIZE=$(stat -c%s /usr/share/yunsh/apps/appstore.apk 2>/dev/null || stat -f%z /usr/share/yunsh/apps/appstore.apk 2>/dev/null || echo 0)
-    [ "$APK_SIZE" -gt 100000 ] && waydroid app install /usr/share/yunsh/apps/appstore.apk 2>/dev/null || true
+APK_PATH=/usr/share/yunsh/apps/appstore.apk
+APK_SIZE=$(stat -c%s "$APK_PATH" 2>/dev/null || echo 0)
+if [ "$APK_SIZE" -lt 100000 ]; then
+    curl -fL --connect-timeout 10 --max-time 120 \
+        -o "$APK_PATH" \
+        "https://appdownload.myapp.com/myapp/1104466820/sgame/20191217/com.tencent.android.qqdownloader.apk" \
+        2>/dev/null || true
+fi
+if [ -f "$APK_PATH" ]; then
+    APK_SIZE=$(stat -c%s "$APK_PATH" 2>/dev/null || echo 0)
+    [ "$APK_SIZE" -gt 100000 ] && waydroid app install "$APK_PATH" 2>/dev/null || true
 fi
 
 pct 98 "Cleaning up..."

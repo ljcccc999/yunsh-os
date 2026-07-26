@@ -484,7 +484,7 @@ ApplicationWindow {
     }
 
     function saveActivationFlag() {
-        Qt.quit(42)
+        Qt.exit(42)
     }
 
     // ===== KEYBOARD SHORTCUTS =====
@@ -618,7 +618,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        console.log("YUNSH OS UI v1.0.1.1 (visionOS Ultimate + Task Switcher)")
+        console.log("YUNSH OS UI v1.0.2-fixed")
         checkFirstBoot()
         showFullScreen()
         // Probe head tracking daemon once (won't poll if not found)

@@ -3,7 +3,7 @@
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtWebEngine 6.15  // Qt6 WebEngine
+import QtWebEngine
 
 Item {
     id: browserScreen

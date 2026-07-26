@@ -309,6 +309,8 @@ def handle_connection(conn: socket.socket, runner: "UpdateDaemon"):
     # Store command params for handlers to read
     runner._last_cmd_channel = cmd.get("channel", "stable")
     runner._last_cmd_allow_major_update = cmd.get("allow_major_update", True)
+    runner._last_cmd_auto_update = cmd.get("auto_update", cmd.get("autoUpdate", True))
+    runner._last_cmd_wifi_only = cmd.get("wifi_only", cmd.get("wifiOnly", True))
     response = runner.dispatch_command(action)
     try:
         conn.sendall(json.dumps(response).encode())
@@ -408,14 +410,14 @@ class UpdateDaemon:
         return {"status": "ok", "result": "cancelled"}
 
     def _cmd_set_auto_update(self) -> dict:
-        val = True  # toggled from the command (already read in caller)
+        val = self._last_cmd_auto_update
         self._config["auto_update"] = val
         save_config(self._config)
         write_status(auto_update=val)
         return {"status": "ok", "auto_update": val}
 
     def _cmd_set_wifi_only(self) -> dict:
-        val = True
+        val = self._last_cmd_wifi_only
         self._config["wifi_only"] = val
         save_config(self._config)
         write_status(wifi_only=val)

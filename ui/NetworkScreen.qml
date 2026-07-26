@@ -31,12 +31,12 @@ Rectangle {
         onTriggered: pollStatus()
     }
     
-    // Read network status from file
+    // Read network status through the local privileged bridge.
     function pollStatus() {
         var xhr = new XMLHttpRequest()
-        xhr.open("GET", "file:///tmp/yunsh-network-status.json", true)
+        xhr.open("GET", "http://127.0.0.1:8591/api/network-status", true)
         xhr.onreadystatechange = function() {
-            if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 0) {
+            if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
                 try {
                     var data = JSON.parse(xhr.responseText)
                     connected = data.connected || false
@@ -54,17 +54,39 @@ Rectangle {
         scanning = true
         networks = []
         
-        // Trigger scan via socket (simplified - use script)
-        scanTimer.start()
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/network", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                scanning = false
+                if (xhr.status === 200) {
+                    try {
+                        var data = JSON.parse(xhr.responseText)
+                        var found = data.networks || data.results || []
+                        var mapped = []
+                        for (var i = 0; i < found.length; i++) {
+                            var net = found[i]
+                            mapped.push({
+                                netSSID: net.ssid || net.SSID || "",
+                                netSignal: net.signal || net.strength || 0,
+                                netSecurity: net.security || "",
+                                netLocked: (net.security || "").length > 0,
+                                netConnected: net.connected || false
+                            })
+                        }
+                        networks = mapped
+                    } catch(e) {}
+                }
+            }
+        }
+        xhr.send(JSON.stringify({command: "scan"}))
     }
     
     Timer {
         id: scanTimer
         interval: 2000
         onTriggered: {
-            // On real system, would read scan results from daemon
-            // For now, simulate with nmcli output
-            var proc = scanProcess
             scanning = false
         }
     }
@@ -74,14 +96,23 @@ Rectangle {
         loadingOverlay.visible = true
         loadingText.text = "正在连接到 " + ssid + "..."
         
-        // The real connection happens via backend
-        // QML side shows loading state
-        Qt.callLater(function() {
-            loadingOverlay.visible = false
-            connected = true
-            currentSSID = ssid
-            pollStatus()
-        })
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/network", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                loadingOverlay.visible = false
+                try {
+                    var data = JSON.parse(xhr.responseText)
+                    connected = data.success || false
+                    if (connected) currentSSID = ssid
+                } catch(e) {
+                    connected = false
+                }
+                pollStatus()
+            }
+        }
+        xhr.send(JSON.stringify({command: "connect", ssid: ssid, password: password}))
     }
     
     // visionOS glass header
@@ -214,10 +245,7 @@ Rectangle {
         spacing: 6
         clip: true
         
-        model: ListModel {
-            // Demo networks that will show on RPi
-            ListElement { netSSID: "(扫描中...)" ; netSignal: 0; netSecurity: ""; netLocked: false; netConnected: false }
-        }
+        model: networkScreen.networks
         
         delegate: Item {
             width: parent.width
@@ -240,7 +268,7 @@ Rectangle {
                     
                     Text {
                         anchors.centerIn: parent
-                        text: getSignalIcon(netSignal)
+                        text: getSignalIcon(modelData.netSignal)
                         font.pixelSize: 16
                     }
                 }
@@ -253,14 +281,14 @@ Rectangle {
                     spacing: 3
                     
                     Text {
-                        text: netSSID
+                        text: modelData.netSSID
                         color: "#FFFFFF"
                         font.pixelSize: 15
                         font.weight: Font.Medium
                     }
                     
                     Text {
-                        text: netSecurity ? getSecurityText(netSecurity) : "开放网络"
+                        text: modelData.netSecurity ? getSecurityText(modelData.netSecurity) : "开放网络"
                         color: "#666680"
                         font.pixelSize: 11
                     }
@@ -272,11 +300,11 @@ Rectangle {
                     anchors.rightMargin: 12
                     anchors.verticalCenter: parent.verticalCenter
                     width: 28; height: 28; radius: 14
-                    color: netLocked ? Qt.rgba(255/255, 152/255, 0/255, 0.1) : Qt.rgba(0/255, 230/255, 118/255, 0.1)
+                    color: modelData.netLocked ? Qt.rgba(255/255, 152/255, 0/255, 0.1) : Qt.rgba(0/255, 230/255, 118/255, 0.1)
                     
                     Text {
                         anchors.centerIn: parent
-                        text: netLocked ? "🔒" : "🔓"
+                        text: modelData.netLocked ? "🔒" : "🔓"
                         font.pixelSize: 12
                     }
                 }
@@ -287,11 +315,11 @@ Rectangle {
                     onEntered: parent.color = Qt.rgba(0/255, 212/255, 255/255, 0.08)
                     onExited: parent.color = Qt.rgba(255/255, 255/255, 255/255, 0.03)
                     onClicked: {
-                        if (netLocked) {
-                            passwordDialog.ssid = netSSID
+                        if (modelData.netLocked) {
+                            passwordDialog.ssid = modelData.netSSID
                             passwordDialog.visible = true
                         } else {
-                            connectToNetwork(netSSID, "")
+                            connectToNetwork(modelData.netSSID, "")
                         }
                     }
                 }

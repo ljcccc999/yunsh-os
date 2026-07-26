@@ -243,6 +243,10 @@ cp "${YUNSH_DIR}/system/yunsh-ui-launcher" "${LAUNCHER_FILE}" 2>/dev/null || {
 #!/bin/bash
 cd /usr/share/yunsh/ui || exit 1
 QML_RUNNER=$(command -v qml6 || command -v qml || :)
+if [ -z "$QML_RUNNER" ]; then
+    echo "YUNSH: qml runtime is missing" >&2
+    exit 1
+fi
 if [ ! -f /etc/yunsh/.packages_installed ] && [ -x /usr/bin/yunsh-firstboot.sh ]; then
     /usr/bin/yunsh-firstboot.sh
     touch /etc/yunsh/.packages_installed; sync; sleep 2; reboot; exit 0
@@ -253,13 +257,12 @@ fi
 /usr/bin/yunsh-disk-helper 2>/dev/null || true
 while true; do
     if [ -f /etc/yunsh/.activated ]; then
-        $QML_RUNNER main.qml --activated 2>/dev/null
+        $QML_RUNNER main.qml --activated 2>>/var/log/yunsh-ui.log
     else
-        $QML_RUNNER main.qml --firstboot 2>/dev/null
+        $QML_RUNNER main.qml --firstboot 2>>/var/log/yunsh-ui.log
         QML_EXIT=$?
         [ $QML_EXIT -eq 42 ] && touch /etc/yunsh/.activated 2>/dev/null && sync
     fi
-    [ -f /etc/yunsh/.activated ] || touch /etc/yunsh/.activated 2>/dev/null
     sleep 2
 done
 LAUNCHER
@@ -279,8 +282,8 @@ UC
 add_file "${BUILD_DIR}/yunsh-update.conf" "/etc/yunsh/update.conf"
 
 cat > "${BUILD_DIR}/yunsh-version.conf" << 'VERCONF'
-VERSION=v1.0.2
-BUILD=2026.07.24
+VERSION=v1.0.2-fixed
+BUILD=2026.07.26
 VERCONF
 add_file "${BUILD_DIR}/yunsh-version.conf" "/etc/yunsh/version.conf"
 
@@ -326,6 +329,21 @@ TTYVTDisallocate=no
 WantedBy=multi-user.target
 FBSVC
 add_file "${BUILD_DIR}/yunsh-firstboot.service" "/etc/systemd/system/yunsh-firstboot.service"
+
+cat > "${BUILD_DIR}/yunsh-local-api.service" << 'APISVC'
+[Unit]
+Description=YUNSH OS Local QML API Bridge
+After=yunsh-network.service yunsh-bluetooth.service yunsh-update.service
+[Service]
+Type=simple
+ExecStart=/usr/bin/yunsh-activation-helper
+Restart=always
+RestartSec=2
+User=root
+[Install]
+WantedBy=multi-user.target
+APISVC
+add_file "${BUILD_DIR}/yunsh-local-api.service" "/etc/systemd/system/yunsh-local-api.service"
 
 # Network service
 cat > "${BUILD_DIR}/yunsh-network.service" << 'NSVC'
@@ -446,6 +464,19 @@ WantedBy=multi-user.target
 BNOSVC
 add_file "${BUILD_DIR}/yunsh-bno085-reader.service" "/etc/systemd/system/yunsh-bno085-reader.service"
 
+cat > "${BUILD_DIR}/yunsh-powerd.service" << 'POWERSVC'
+[Unit]
+Description=YUNSH OS Power Manager
+After=local-fs.target
+[Service]
+Type=simple
+ExecStart=/usr/bin/yunsh-powerd
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target
+POWERSVC
+add_file "${BUILD_DIR}/yunsh-powerd.service" "/etc/systemd/system/yunsh-powerd.service"
+
 # Terminal service
 cat > "${BUILD_DIR}/yunsh-terminal.service" << 'TERMSVC'
 [Unit]
@@ -463,28 +494,18 @@ TERMSVC
 add_file "${BUILD_DIR}/yunsh-terminal.service" "/etc/systemd/system/yunsh-terminal.service"
 
 # Enable services
-echo "ln /etc/systemd/system/yunsh-os.service /etc/systemd/system/multi-user.target.wants/yunsh-os.service" >> "${DEBUGFS_SCRIPT}"
-echo "ln /etc/systemd/system/yunsh-firstboot.service /etc/systemd/system/multi-user.target.wants/yunsh-firstboot.service" >> "${DEBUGFS_SCRIPT}"
-echo "ln /etc/systemd/system/yunsh-network.service /etc/systemd/system/multi-user.target.wants/yunsh-network.service" >> "${DEBUGFS_SCRIPT}"
-echo "ln /etc/systemd/system/yunsh-bluetooth.service /etc/systemd/system/multi-user.target.wants/yunsh-bluetooth.service" >> "${DEBUGFS_SCRIPT}"
-echo "ln /etc/systemd/system/yunsh-update.service /etc/systemd/system/multi-user.target.wants/yunsh-update.service" >> "${DEBUGFS_SCRIPT}"
-echo "ln /etc/systemd/system/yunsh-appd.service /etc/systemd/system/multi-user.target.wants/yunsh-appd.service" >> "${DEBUGFS_SCRIPT}"
-echo "ln /etc/systemd/system/yunsh-terminal.service /etc/systemd/system/multi-user.target.wants/yunsh-terminal.service" >> "${DEBUGFS_SCRIPT}"
+for service in yunsh-os yunsh-firstboot yunsh-local-api yunsh-network yunsh-bluetooth \
+               yunsh-update yunsh-appd yunsh-terminal yunsh-headtracking \
+               yunsh-bno085-reader yunsh-powerd; do
+    echo "symlink /etc/systemd/system/multi-user.target.wants/${service}.service ../${service}.service" >> "${DEBUGFS_SCRIPT}"
+done
 # Keep the splash unit installed but do not enable it until first boot is reliable.
 
 # Network: disable dhcpcd, enable NetworkManager + fstrim
 echo "rm /etc/systemd/system/multi-user.target.wants/dhcpcd.service" >> "${DEBUGFS_SCRIPT}"
 
-# Autologin on tty1
-echo "mkdir /etc/systemd/system/getty@tty1.service.d" >> "${DEBUGFS_SCRIPT}"
-AUTOLOGIN_FILE="${BUILD_DIR}/yunsh-autologin.conf"
-cat > "${AUTOLOGIN_FILE}" << 'AUTOLOGIN'
-# YUNSH OS - Auto-login on tty1
-[Service]
-ExecStart=
-ExecStart=-/sbin/agetty --autologin yunsh --noclear %I $TERM
-AUTOLOGIN
-add_file "${AUTOLOGIN_FILE}" "/etc/systemd/system/getty@tty1.service.d/autologin.conf"
+# Keep the stock tty1 getty. The first-boot service owns tty1 while installing,
+# avoiding a race with auto-login before the yunsh user has been created.
 
 # rc.local
 RCLOCAL_FILE="${BUILD_DIR}/yunsh-rc-local"

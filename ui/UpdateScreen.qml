@@ -3,8 +3,6 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import QtQuick.Shapes 1.15
 
-import Yunsh.Components 1.0
-
 /* ==========================================================================
    UpdateScreen.qml — YUNSH OS OTA Update Manager
    visionOS glassmorphism style, pure black background for AR transparency.
@@ -36,7 +34,7 @@ Item {
     /* Backend integration — call this to refresh all data */
     function refreshStatus() {
         var xhr = new XMLHttpRequest();
-        xhr.open("GET", "http://127.0.0.1:8080/api/update-status", true);
+        xhr.open("GET", "http://127.0.0.1:8591/api/update-status", true);
         xhr.onreadystatechange = function() {
             if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
                 try {
@@ -248,7 +246,7 @@ Item {
                     isChecking = true;
                     // Send command to daemon
                     var xhr = new XMLHttpRequest();
-                    xhr.open("POST", "http://127.0.0.1:8080/api/update-check", true);
+                    xhr.open("POST", "http://127.0.0.1:8591/api/update-check", true);
                     xhr.onreadystatechange = function() {
                         if (xhr.readyState === XMLHttpRequest.DONE) {
                             isChecking = false;
@@ -289,7 +287,7 @@ Item {
                 onClicked: {
                     isDownloading = true;
                     var xhr = new XMLHttpRequest();
-                    xhr.open("POST", "http://127.0.0.1:8080/api/update-download", true);
+                    xhr.open("POST", "http://127.0.0.1:8591/api/update-download", true);
                     xhr.onreadystatechange = function() {
                         if (xhr.readyState === XMLHttpRequest.DONE) {
                             if (xhr.status !== 200) {
@@ -582,7 +580,7 @@ Item {
                         onClicked: {
                             isDownloading = false;
                             var xhr = new XMLHttpRequest();
-                            xhr.open("POST", "http://127.0.0.1:8080/api/update-cancel", true);
+                            xhr.open("POST", "http://127.0.0.1:8591/api/update-cancel", true);
                             xhr.send(JSON.stringify({action: "cancel"}));
                         }
                     }
@@ -647,7 +645,7 @@ Item {
                             onClicked: {
                                 autoUpdate = !autoUpdate;
                                 var xhr = new XMLHttpRequest();
-                                xhr.open("POST", "http://127.0.0.1:8080/api/update-config", true);
+                                xhr.open("POST", "http://127.0.0.1:8591/api/update-config", true);
                                 xhr.send(JSON.stringify({
                                     action: "set_auto_update",
                                     value: autoUpdate
@@ -715,7 +713,7 @@ Item {
                             onClicked: {
                                 wifiOnly = !wifiOnly;
                                 var xhr = new XMLHttpRequest();
-                                xhr.open("POST", "http://127.0.0.1:8080/api/update-config", true);
+                                xhr.open("POST", "http://127.0.0.1:8591/api/update-config", true);
                                 xhr.send(JSON.stringify({
                                     action: "set_wifi_only",
                                     value: wifiOnly
