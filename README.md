@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  A spatial operating environment for Raspberry Pi 5 and transparent AR displays.
+  A connected spatial desktop for Raspberry Pi 5 and transparent AR displays.
 </p>
 
 <p align="center">
@@ -14,16 +14,19 @@
   <a href="docs/YUNSH-OS-操作指南.md">User guide</a>
 </p>
 
-YUNSH OS is the connection layer of the YUNSH ecosystem. It combines a dark, optical-display-ready canvas with glass surfaces, floating applications, device services, and a foundation for spatial interaction.
+YUNSH OS is the connection layer of the YUNSH ecosystem. It combines an optical-display-ready desktop, floating applications, connected-device services, and Bluetooth-connected motion tracking in a single Raspberry Pi 5 environment.
 
 ## Experience
 
 ### Spatial workspace
 
 - Floating application windows with move, resize, minimize, close, and full-screen controls.
-- Window pin and follow modes for 3DoF-ready display behavior.
+- Spatial window layouts for 3DoF viewing: front, left angle, right angle, and distance presets.
+- Window pin and follow modes for view-relative display behavior.
 - Home workspace, task switcher, Control Center, and a glass virtual keyboard.
 - Black background designed for transparent optical displays; white glass surfaces preserve legibility.
+
+Spatial layouts are view-relative: head rotation preserves the desktop arrangement as the user looks around. Real-world room anchoring requires future 6DoF visual tracking hardware and is not represented as a current feature.
 
 ### Built-in applications
 
@@ -41,6 +44,17 @@ YUNSH OS is the connection layer of the YUNSH ecosystem. It combines a dark, opt
 - Power, input, splash-screen, and screenshot services.
 - Optional 3DoF input through a Bluetooth-connected motion controller or compatible orientation source.
 
+### YUNSH Link connection modes
+
+YUNSH Link is the companion application for the YUNSH display and YUNSH OS. It uses one of two mutually exclusive Bluetooth connection modes, selected for the active experience.
+
+| Mode | iPhone connection | System behavior |
+| --- | --- | --- |
+| **Phone Mode** | Connects directly to `YUNSH V1 (Glasses)` | Reads motion and glasses battery status, and sends display-brightness controls. This mode is for direct glasses use; Bluetooth carries control and telemetry, not display video. |
+| **YUNSH OS Mode** | Connects only to the Raspberry Pi advertising as `YUNSH V1` | The Raspberry Pi connects to the glasses, relays glasses telemetry and brightness control, reports host power, and receives companion-initiated update requests over its own network connection. |
+
+Only one mode is active at a time. In YUNSH OS Mode, the iPhone does not also connect directly to the glasses; the Raspberry Pi is the single connection and telemetry hub.
+
 ## Architecture
 
 ```text
@@ -53,7 +67,7 @@ Raspberry Pi 5
     └── Optional Bluetooth motion controller → head-tracking service
 ```
 
-The user interface reads the head-tracking service locally. Compatible orientation sources publish yaw, pitch, and roll data to the tracking bridge, allowing hardware and simulated input to share the same UI path.
+The user interface reads the head-tracking service locally. Compatible orientation sources publish yaw, pitch, and roll data to the tracking bridge, allowing hardware and simulated input to share the same UI path. The workspace applies this input to pinned windows and their selected spatial layouts.
 
 ## Requirements
 
@@ -87,7 +101,7 @@ The initial setup prepares the runtime environment and presents the activation f
 
 ## Motion tracking
 
-YUNSH OS supports optional Bluetooth-connected motion tracking for spatial interaction. The head-tracking bridge provides a consistent interface for compatible motion sources and for the built-in development simulator.
+YUNSH OS supports optional Bluetooth-connected motion tracking for spatial interaction. The head-tracking bridge provides a consistent interface for compatible motion sources and for the built-in development simulator. After tracking is available, each floating window can be placed in a front, left-angle, right-angle, or distance layout from its title bar.
 
 ```text
 Bluetooth motion controller → head-tracking bridge → YUNSH OS workspace
