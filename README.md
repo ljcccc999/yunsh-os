@@ -39,7 +39,7 @@ YUNSH OS is the connection layer of the YUNSH ecosystem. It combines a dark, opt
 - Wi-Fi and Bluetooth management.
 - OTA update service and factory-reset workflow.
 - Power, input, splash-screen, and screenshot services.
-- Optional 3DoF input through BNO085 over I²C or a compatible JSON orientation source.
+- Optional 3DoF input through a Bluetooth-connected motion controller or compatible orientation source.
 
 ## Architecture
 
@@ -50,7 +50,7 @@ Raspberry Pi 5
     ├── YUNSH OS shell · Qt Quick workspace · application windows
     ├── System services · network · Bluetooth · updates · power
     ├── Waydroid application environment
-    └── Optional IMU · BNO085 → head-tracking service
+    └── Optional Bluetooth motion controller → head-tracking service
 ```
 
 The user interface reads the head-tracking service locally. Compatible orientation sources publish yaw, pitch, and roll data to the tracking bridge, allowing hardware and simulated input to share the same UI path.
@@ -64,7 +64,7 @@ The user interface reads the head-tracking service locally. Compatible orientati
 | Storage | 16 GB or larger A2 microSD card recommended |
 | Input | USB keyboard and mouse for setup and desktop control |
 | Power | Stable USB-C power supply suitable for Raspberry Pi 5 |
-| Optional tracking | BNO085 connected to the Pi GPIO I²C bus |
+| Optional tracking | Bluetooth-connected motion controller |
 
 ## Install
 
@@ -85,12 +85,12 @@ Compare the result with the matching `.sha256` asset published with the release.
 
 The initial setup prepares the runtime environment and presents the activation flow. Keep the device connected to the network during this step. After setup completes, YUNSH OS opens the desktop workspace.
 
-## 3DoF tracking
+## Motion tracking
 
-YUNSH OS supports an optional BNO085 sensor over I²C. The `yunsh-bno085-reader` service reads the sensor's fused orientation data and delivers it to the local head-tracking service. For development without an IMU, `yunsh-headtracking-sim` provides keyboard and mouse simulation.
+YUNSH OS supports optional Bluetooth-connected motion tracking for spatial interaction. The head-tracking bridge provides a consistent interface for compatible motion sources and for the built-in development simulator.
 
 ```text
-BNO085 → I²C → yunsh-bno085-reader → yunsh-headtracking → YUNSH OS workspace
+Bluetooth motion controller → head-tracking bridge → YUNSH OS workspace
 ```
 
 ## Repository layout
