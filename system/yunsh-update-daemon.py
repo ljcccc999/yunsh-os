@@ -9,6 +9,8 @@ status & info files for other system components to consume.
 Dependencies: none beyond Python 3.8+ stdlib.
 """
 
+from __future__ import annotations
+
 import argparse
 import fcntl
 import hashlib
@@ -21,6 +23,7 @@ import select
 import signal
 import socket
 import stat
+import subprocess
 import sys
 import time
 import traceback
@@ -104,7 +107,13 @@ def save_config(config: dict):
     """Persist config to /etc/yunsh/update.conf."""
     os.makedirs(os.path.dirname(CONF_PATH), exist_ok=True)
     with open(CONF_PATH, "w") as f:
-        for key in ("auto_update", "wifi_only", "update_channel", "github_mirror"):
+        for key in (
+            "auto_update",
+            "wifi_only",
+            "update_channel",
+            "allow_major_update",
+            "github_mirror",
+        ):
             val = config.get(key, DEFAULT_CONFIG[key])
             if isinstance(val, bool):
                 f.write(f"{key}={str(val).lower()}\n")
@@ -177,18 +186,26 @@ def _parse_release(data: dict) -> dict:
     download_url = ""
     sha256 = ""
     asset_id = ""
-    for asset in assets:
-        name = asset.get("name", "").lower()
-        if name.endswith(".img") or name.endswith(".img.xz"):
-            if not download_url:
-                download_url = asset.get("browser_download_url", "")
-                asset_id = asset.get("id", "")
-        if name.endswith(".sha256") or name.endswith(".sha256sum"):
-            sha256 = _fetch_sha256(asset.get("browser_download_url", ""))
-    if not sha256 and body:
-        match = re.search(r"SHA256[\s:]+([a-f0-9]{64})", body, re.IGNORECASE)
-        if match:
-            sha256 = match.group(1)
+    ota_asset = next(
+        (asset for asset in assets
+         if asset.get("name", "").lower().endswith(".ota.tar.gz")),
+        None,
+    )
+    if ota_asset:
+        ota_name = ota_asset.get("name", "").lower()
+        download_url = ota_asset.get("browser_download_url", "")
+        asset_id = ota_asset.get("id", "")
+        checksum_names = {
+            ota_name + ".sha256",
+            ota_name.removesuffix(".tar.gz") + ".sha256",
+        }
+        checksum_asset = next(
+            (asset for asset in assets
+             if asset.get("name", "").lower() in checksum_names),
+            None,
+        )
+        if checksum_asset:
+            sha256 = _fetch_sha256(checksum_asset.get("browser_download_url", ""))
     return {
         "version": tag.lstrip("v"),
         "tag_name": tag,
@@ -269,7 +286,14 @@ def _fetch_sha256(url: str) -> str:
 
 
 def current_version() -> str:
-    """Read currently installed version from update-info.json."""
+    """Read the installed version rather than cached release metadata."""
+    try:
+        with open("/etc/yunsh/version.conf", encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("VERSION="):
+                    return line.split("=", 1)[1].strip().lstrip("v")
+    except OSError:
+        pass
     try:
         with open(INFO_PATH) as f:
             info = json.load(f)
@@ -293,6 +317,9 @@ def handle_connection(conn: socket.socket, runner: "UpdateDaemon"):
             if len(data) > 65536:
                 conn.sendall(json.dumps({"error": "payload too large"}).encode())
                 return
+            if b"\n" in data:
+                data = data.split(b"\n", 1)[0]
+                break
     except (ConnectionResetError, BrokenPipeError):
         pass
 
@@ -313,7 +340,7 @@ def handle_connection(conn: socket.socket, runner: "UpdateDaemon"):
     runner._last_cmd_wifi_only = cmd.get("wifi_only", cmd.get("wifiOnly", True))
     response = runner.dispatch_command(action)
     try:
-        conn.sendall(json.dumps(response).encode())
+        conn.sendall((json.dumps(response) + "\n").encode())
     except OSError:
         pass
 
@@ -331,6 +358,7 @@ class UpdateDaemon:
         self._update_available: bool = False
         self._config = load_config()
         self._state = "idle"  # idle | checking | downloading | applying | error
+        self._updater_process = None
 
         # Create required directories
         for d in ("/etc/yunsh", "/var/log", "/var/run"):
@@ -392,6 +420,15 @@ class UpdateDaemon:
             status["sha256"] = self._latest_release.get("sha256", "")
             status["major_update"] = self._latest_release.get("major_update", False)
             status["prerelease"] = self._latest_release.get("prerelease", False)
+        try:
+            with open(STATUS_PATH, encoding="utf-8") as handle:
+                disk_status = json.load(handle)
+            if disk_status.get("state") in {
+                "downloading", "installing", "restart_required", "error"
+            }:
+                status.update(disk_status)
+        except (OSError, ValueError):
+            pass
         return status
 
     def _cmd_start_download(self) -> dict:
@@ -400,11 +437,13 @@ class UpdateDaemon:
         download_url = self._latest_release.get("download_url", "")
         if not download_url:
             return {"error": "no download URL available"}
-        # Kick off download (simplified — real impl would thread)
-        result = self._perform_download()
-        return result
+        if self._updater_process and self._updater_process.poll() is None:
+            return {"status": "ok", "result": "already_running"}
+        return self._perform_download()
 
     def _cmd_cancel(self) -> dict:
+        if self._updater_process and self._updater_process.poll() is None:
+            self._updater_process.terminate()
         self._state = "idle"
         write_status(state="idle")
         return {"status": "ok", "result": "cancelled"}
@@ -425,6 +464,8 @@ class UpdateDaemon:
 
     def _cmd_set_channel(self) -> dict:
         channel = self._last_cmd_channel or "stable"
+        if channel not in {"stable", "beta"}:
+            return {"error": "update channel must be 'stable' or 'beta'"}
         self._config["update_channel"] = channel
         save_config(self._config)
         write_status(update_channel=channel)
@@ -507,15 +548,18 @@ class UpdateDaemon:
             wifi_only=self._config.get("wifi_only", True),
             update_channel=self._config.get("update_channel", "stable"),
             allow_major_update=self._config.get("allow_major_update", True),
+            error=None,
         )
 
         if available:
             logger.info("Update available: v%s → v%s", cur or "?", latest)
+            if self._config.get("auto_update", False):
+                self._perform_download()
         else:
             logger.info("No update available (current=%s latest=%s)", cur or "?", latest)
 
     def _perform_download(self) -> dict:
-        """Download the update image via api.github.com (GFW-safe)."""
+        """Start the verified OTA installer without blocking the local API."""
         self._state = "downloading"
         release = self._latest_release
         if not release:
@@ -538,18 +582,28 @@ class UpdateDaemon:
         api_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/assets/{asset_id}"
         logger.info("Downloading via API: %s", api_url)
 
-        # yunsh-updater.py will handle the actual download with this URL
+        try:
+            self._updater_process = subprocess.Popen(
+                ["/usr/bin/python3", "/usr/bin/yunsh-updater", "auto"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except OSError as exc:
+            self._state = "error"
+            write_status(state="error", error=str(exc))
+            return {"error": str(exc)}
+
         result = {
             "status": "ok",
-            "message": "download delegated to yunsh-updater.py",
+            "message": "OTA download and installation started",
             "url": api_url,
             "api_download": True,  # signal to use API auth header
             "sha256": release.get("sha256", ""),
             "version": version,
             "asset_id": asset_id,
         }
-        self._state = "idle"
-        write_status(state="idle")
+        write_status(state="downloading", progress_pct=0, error=None)
         return result
 
     # ------------------------------------------------------------------

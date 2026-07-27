@@ -5,11 +5,15 @@ Listens on localhost:8590 for app launch requests from QML UI.
 """
 
 import json
+import os
 import subprocess
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 PORT = 8590
+SCREENSHOT_DIR = os.environ.get(
+    "YUNSH_SCREENSHOT_DIR", "/home/yunsh/Pictures/Screenshots"
+)
 
 # Map internal app IDs to launch actions
 APP_MAP = {
@@ -41,6 +45,8 @@ class AppHandler(BaseHTTPRequestHandler):
             result = self.launch_app(app_id)
         elif action == "screenshot":
             result = self.take_screenshot(req)
+        elif action == "crop":
+            result = self.crop_screenshot(req)
         elif action == "ping":
             result = {"status": "ok", "message": "pong"}
 
@@ -48,6 +54,28 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.end_headers()
         self.wfile.write(json.dumps(result).encode())
+
+    def crop_screenshot(self, req):
+        source = req.get("source", "")
+        if not source.startswith("/tmp/yunsh-screenshot-region-full-"):
+            return {"status": "error", "message": "Invalid screenshot source"}
+        try:
+            from PIL import Image
+            x = max(0, int(req.get("x", 0)))
+            y = max(0, int(req.get("y", 0)))
+            w = max(1, int(req.get("w", 1)))
+            h = max(1, int(req.get("h", 1)))
+            target_dir = SCREENSHOT_DIR
+            os.makedirs(target_dir, exist_ok=True)
+            target = os.path.join(target_dir, f"Screenshot_{int(time.time() * 1000)}.png")
+            with Image.open(source) as image:
+                right = min(image.width, x + w)
+                bottom = min(image.height, y + h)
+                image.crop((x, y, right, bottom)).save(target)
+            os.remove(source)
+            return {"status": "ok", "path": target}
+        except Exception as exc:
+            return {"status": "error", "message": str(exc)}
 
     def take_screenshot(self, req):
         """Capture screenshot via yunsh-screenshotd script."""

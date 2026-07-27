@@ -359,8 +359,16 @@ ApplicationWindow {
                 // Grab the full window and crop to region
                 yunshOS.grabToImage(function(result) {
                     var fullPath = "/tmp/yunsh-screenshot-region-full-" + Date.now() + ".png"
-                    result.saveToFile(fullPath)
-                    console.log("Region screenshot: (" + x + "," + y + " " + w + "x" + h + ") saved to " + fullPath)
+                    if (result.saveToFile(fullPath)) {
+                        var xhr = new XMLHttpRequest()
+                        xhr.open("POST", "http://127.0.0.1:8590/launch", true)
+                        xhr.setRequestHeader("Content-Type", "application/json")
+                        xhr.send(JSON.stringify({
+                            action: "crop",
+                            source: fullPath,
+                            x: x, y: y, w: w, h: h
+                        }))
+                    }
                 })
             }
             onCancelled: screenshotOverlay.visible = false
@@ -457,7 +465,7 @@ ApplicationWindow {
     function takeScreenshot() {
         console.log("Screenshot triggered - full screen capture")
         yunshOS.grabToImage(function(result) {
-            var filename = "/tmp/yunsh-screenshot-" + Date.now() + ".png"
+            var filename = "/home/yunsh/Pictures/Screenshots/Screenshot_" + Date.now() + ".png"
             result.saveToFile(filename)
             console.log("Full screenshot saved to " + filename)
         })
@@ -607,8 +615,9 @@ ApplicationWindow {
     // ─── Mouse movement resets idle timer ──────────
     MouseArea {
         anchors.fill: parent
+        acceptedButtons: Qt.NoButton
+        propagateComposedEvents: true
         hoverEnabled: true
-        propagateComposedEvents: false
         onPositionChanged: {
             idleTimer.restart()
             if (screensaver_item.visible) {

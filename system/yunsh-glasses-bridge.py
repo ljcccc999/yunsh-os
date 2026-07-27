@@ -72,6 +72,8 @@ class GlassesBridge:
         self.brightness_char = None
         self.quaternion_char = None
         for path, interfaces in objects.items():
+            if not self.device_path or not str(path).startswith(self.device_path + "/"):
+                continue
             props = interfaces.get(GATT_CHAR_IFACE, {})
             uuid = str(props.get("UUID", "")).lower()
             if uuid == BATTERY_UUID:

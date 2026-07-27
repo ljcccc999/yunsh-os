@@ -177,7 +177,6 @@ Item {
                     }
                 }
 
-                Clock { id: clock }
                 Timer {
                     interval: 1000; running: true; repeat: true
                     onTriggered: {
@@ -209,7 +208,7 @@ Item {
                             Grid {
                                 anchors.centerIn: parent
                                 spacing: 28
-                                columns: columns
+                                columns: homeScreen.columns
 
                                 Repeater {
                                     model: endIdx - startIdx

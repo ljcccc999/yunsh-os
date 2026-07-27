@@ -132,19 +132,13 @@ Rectangle {
             loadingOverlay.visible = false
             pollStatus()
         })
-        sendCommand("connect", { "mac": mac })
-        Qt.callLater(function() {
-            loadingOverlay.visible = false
-            pollStatus()
-        })
     }
 
     // ── Pair with device ──────────────────────────────
     function pairDevice(mac, name) {
         loadingOverlay.visible = true
         loadingText.text = "正在配对 " + name + "..."
-        sendCommand("pair", { "mac": mac })
-        Qt.callLater(function() {
+        sendCommand("pair", { "mac": mac }, function(result) {
             loadingOverlay.visible = false
             pollStatus()
         })

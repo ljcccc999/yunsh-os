@@ -44,10 +44,8 @@ def btctl(args, timeout=15):
             ["bluetoothctl"] + args,
             capture_output=True, text=True, timeout=timeout
         )
-        if result.returncode == 0:
-            return True, result.stdout
-        else:
-            return True, result.stdout  # bluetoothctl often exits 0 even with errors
+        output = result.stdout or result.stderr
+        return result.returncode == 0, output
     except subprocess.TimeoutExpired:
         return False, "Command timed out"
     except FileNotFoundError:
@@ -108,6 +106,8 @@ def get_controller_info():
 def list_paired_devices():
     """List all paired Bluetooth devices with details"""
     success, output = btctl(["paired-devices"])
+    if not success:
+        success, output = btctl(["devices", "Paired"])
     devices = []
     if success:
         for line in output.splitlines():
@@ -226,61 +226,34 @@ def classify_device_class(bt_class):
 
 def scan_devices(timeout=12):
     """Scan for discoverable Bluetooth devices nearby"""
-    # Start discovery
-    success, _ = btctl(["scan", "off"])  # Clear existing
-    success, output = btctl_stdin(["scan on", f"sleep {timeout}", "scan off"])
-    
-    # Parse discovered devices
-    devices = []
-    if success:
-        for line in output.splitlines():
-            line = line.strip()
-            match = re.match(
-                r"\[NEW\]\s+Device\s+([0-9A-Fa-f:]+)\s+(.*)", line
-            )
-            if not match:
-                match = re.match(
-                    r"Device\s+([0-9A-Fa-f:]+)\s+(.*)", line
-                )
-            if match:
-                mac = match.group(1).upper()
-                name = match.group(2).strip()
-                # Skip already paired devices
-                info = get_device_info(mac)
-                devices.append({
-                    "mac": mac,
-                    "name": name if name != mac else "Unknown",
-                    "paired": info.get("paired", False),
-                    "connected": info.get("connected", False),
-                    "rssi": info.get("rssi", None),
-                    "device_type": info.get("device_type", "unknown"),
-                    "battery": info.get("battery", None)
-                })
-    
-    # Deduplicate by MAC
-    seen = set()
-    unique = []
-    for d in devices:
-        if d["mac"] not in seen:
-            seen.add(d["mac"])
-            unique.append(d)
-    
-    return unique
+    btctl(["scan", "off"])
+    success, _ = btctl(["scan", "on"])
+    if not success:
+        return []
+    time.sleep(max(1, min(timeout, 30)))
+    btctl(["scan", "off"])
+    return list_devices()
 
 
 def pair_device(mac):
     """Pair with a device by MAC address"""
     success, output = btctl_stdin([
+        "agent NoInputNoOutput",
+        "default-agent",
         "pair " + mac,
         "trust " + mac,
     ])
-    paired = "Pairing successful" in output or "successful" in output.lower()
-    trusted = "trust succeeded" in output.lower()
-    success = paired or trusted
+    info = get_device_info(mac)
+    paired = bool(info.get("paired"))
+    trusted = bool(info.get("trusted"))
+    success = paired
     if success:
-        info = get_device_info(mac)
         # The Pi bridge uses the paired nRF address, not its mutable display name.
-        if info.get("name", "").startswith("YUNSH V1") or info.get("alias", "").startswith("YUNSH V1"):
+        names = (info.get("name", ""), info.get("alias", ""))
+        if any(
+            name.startswith(("YUNSH V1（眼镜端）", "YUNSH V1 (Glasses)"))
+            for name in names
+        ):
             tmp = GLASSES_CONF_PATH + ".tmp"
             try:
                 with open(tmp, "w") as handle:
@@ -299,10 +272,10 @@ def pair_device(mac):
 
 def connect_device(mac):
     """Connect to a paired device by MAC address"""
-    success, output = btctl_stdin([
+    btctl_stdin([
         "connect " + mac,
     ])
-    connected = "Connection successful" in output or "connected" in output.lower()
+    connected = bool(get_device_info(mac).get("connected"))
     return {
         "success": connected,
         "connected": connected,
@@ -312,8 +285,8 @@ def connect_device(mac):
 
 def disconnect_device(mac):
     """Disconnect a device by MAC address"""
-    success, output = btctl(["disconnect", mac])
-    disconnected = "Successful disconnected" in output or "disconnected" in output.lower()
+    btctl(["disconnect", mac])
+    disconnected = not bool(get_device_info(mac).get("connected"))
     return {
         "success": disconnected,
         "message": "Disconnected" if disconnected else "Disconnect command sent"
@@ -324,8 +297,18 @@ def unpair_device(mac):
     """Remove/unpair a device by MAC address"""
     # First disconnect if connected
     disconnect_device(mac)
-    success, output = btctl(["remove", mac])
-    removed = "Device has been removed" in output or "removed" in output.lower()
+    btctl(["remove", mac])
+    removed = not bool(get_device_info(mac).get("paired"))
+    try:
+        with open(GLASSES_CONF_PATH, encoding="utf-8") as handle:
+            bound = any(
+                line.partition("=")[2].strip().upper() == mac.upper()
+                for line in handle if line.partition("=")[0].strip() == "address"
+            )
+        if bound:
+            os.remove(GLASSES_CONF_PATH)
+    except OSError:
+        pass
     return {
         "success": removed,
         "message": "Device removed" if removed else "Remove command sent"
@@ -336,10 +319,11 @@ def set_powered(on=True):
     """Turn Bluetooth controller on or off"""
     state = "on" if on else "off"
     success, output = btctl(["power", state])
+    actual = get_controller_info()["powered"]
     return {
-        "success": True,
-        "powered": on,
-        "message": f"Bluetooth turned {state}"
+        "success": success and actual == on,
+        "powered": actual,
+        "message": f"Bluetooth turned {state}" if actual == on else output.strip()
     }
 
 
@@ -464,6 +448,11 @@ def socket_server():
                 try:
                     cmd_data = json.loads(data.decode().strip())
                     result = handle_command(cmd_data)
+                    if cmd_data.get("command", "").lower() in {
+                        "power", "power_on", "power_off", "pair",
+                        "connect", "disconnect", "unpair", "remove",
+                    }:
+                        save_status()
                     response = json.dumps(result) + "\n"
                 except json.JSONDecodeError:
                     response = json.dumps({"success": False, "error": "Invalid JSON"}) + "\n"
@@ -480,6 +469,8 @@ def socket_server():
 
 def main():
     log.info("YUNSH Bluetooth Daemon starting...")
+    btctl(["power", "on"])
+    btctl(["pairable", "on"])
     
     # Initial status dump
     save_status()

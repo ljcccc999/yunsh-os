@@ -60,8 +60,6 @@ Rectangle {
         return -degrees * pixelsPerDegree
     }
 
-    signal pinModeChanged(string mode)
-
     signal closeClicked()
     signal minimizeClicked()
     signal fullscreenClicked()
@@ -193,8 +191,9 @@ Rectangle {
         }
 
         // ─── Title Bar ────────────────────────────────
-        Rectangle {
-            id: titleBar
+    Rectangle {
+        id: titleBar
+        z: 2
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
@@ -369,7 +368,6 @@ Rectangle {
                         : Qt.rgba(1, 1, 1, 0.04)
                     onClicked: {
                         macWindow.togglePinMode()
-                        macWindow.pinModeChanged(macWindow.pinMode)
                     }
                 }
 
@@ -408,8 +406,9 @@ Rectangle {
         }
 
         // ─── Drag to move (title bar area) ────────────
-        MouseArea {
-            id: dragArea
+    MouseArea {
+        id: dragArea
+        z: 1
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right

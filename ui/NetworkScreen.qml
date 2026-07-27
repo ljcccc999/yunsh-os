@@ -114,6 +114,16 @@ Rectangle {
         }
         xhr.send(JSON.stringify({command: "connect", ssid: ssid, password: password}))
     }
+
+    function disconnectNetwork() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/network", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) pollStatus()
+        }
+        xhr.send(JSON.stringify({command: "disconnect"}))
+    }
     
     // visionOS glass header
     Rectangle {
@@ -503,8 +513,7 @@ Rectangle {
                             anchors.fill: parent
                             onClicked: {
                                 disconnectConfirm.visible = false
-                                connected = false
-                                currentSSID = ""
+                                disconnectNetwork()
                             }
                         }
                     }

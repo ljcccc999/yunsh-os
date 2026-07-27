@@ -46,7 +46,7 @@ Item {
             anchors.fill: parent; anchors.margins: -16; radius: 40
             color: "transparent"
             layer.enabled: true
-            layer.effect: DropShadow {
+            layer.effect: DropShadowEffect {
                 radius: 48; samples: 97
                 color: Qt.rgba(0, 0, 0, 0.5)
                 horizontalOffset: 0; verticalOffset: 12

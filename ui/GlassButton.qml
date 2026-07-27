@@ -4,11 +4,14 @@ Rectangle {
     id: button
     property url iconSource: ""
     property color bgColor: Qt.rgba(1, 1, 1, 0.12)
+    property color hoverBgColor: Qt.lighter(bgColor, 1.2)
+    property color pressedBgColor: Qt.darker(hoverBgColor, 1.15)
     property alias contentItem: customContent.data
     signal clicked()
 
     radius: height / 2
-    color: mouse.containsMouse ? Qt.lighter(bgColor, 1.2) : bgColor
+    color: mouse.pressed ? pressedBgColor : (mouse.containsMouse ? hoverBgColor : bgColor)
+    opacity: enabled ? 1 : 0.45
     border.width: 1
     border.color: Qt.rgba(1, 1, 1, 0.15)
 
@@ -31,6 +34,7 @@ Rectangle {
         id: mouse
         anchors.fill: parent
         hoverEnabled: true
+        enabled: button.enabled
         onClicked: button.clicked()
     }
 }

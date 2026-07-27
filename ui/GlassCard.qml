@@ -111,6 +111,7 @@ Rectangle {
     
     // Toggle switch (iOS UISwitch style)
     Rectangle {
+        z: 2
         anchors.right: parent.right
         anchors.rightMargin: 14
         anchors.verticalCenter: parent.verticalCenter

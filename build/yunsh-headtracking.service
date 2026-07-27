@@ -1,6 +1,6 @@
 [Unit]
 Description=YUNSH OS Head Tracking
-After=multi-user.target
+After=local-fs.target
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-headtracking

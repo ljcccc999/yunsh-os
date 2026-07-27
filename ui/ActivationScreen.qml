@@ -29,6 +29,34 @@ Rectangle {
     property string accountConfirmPassword: ""
     property bool accountValid: false
     property string accountError: ""
+    property bool activationConfigReady: false
+    property string activationConfigError: ""
+
+    function applyActivationConfiguration() {
+        activationConfigReady = false
+        activationConfigError = ""
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 15000
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                try {
+                    var response = JSON.parse(xhr.responseText)
+                    activationConfigReady = response.success === true
+                    activationConfigError = response.success ? "" : (response.error || "配置失败")
+                } catch(e) {
+                    activationConfigError = "无法保存激活设置"
+                }
+            }
+        }
+        xhr.send(JSON.stringify({
+            action: "configure_activation",
+            language: selectedLanguage,
+            keyboard: selectedKeyboard,
+            password: accountPassword
+        }))
+    }
 
     // ─── Background layers ──────────────────────────
     // Ambient glow (visionOS atmospheric)
@@ -443,7 +471,7 @@ Rectangle {
                         Text { anchors.centerIn: parent; text: "跳过"; color: "#8888A0"; font.pixelSize: 14 }
                         MouseArea {
                             anchors.fill: parent; hoverEnabled: true
-                            onClicked: currentStep = 4
+                            onClicked: currentStep = 3
                         }
                     }
                     
@@ -474,13 +502,13 @@ Rectangle {
                                                 if (resp.success) {
                                                     wifiConnected = true
                                                     wifiStatusText = "已连接: " + wifiSSIDInput.text
-                                                    Qt.callLater(function() { currentStep = 4 })
+                                                    Qt.callLater(function() { currentStep = 3 })
                                                 } else {
                                                     wifiStatusText = "连接失败: " + (resp.error || "未知错误")
                                                 }
                                             } catch(e) {
                                                 wifiStatusText = "连接失败 — 已跳过"
-                                                Qt.callLater(function() { currentStep = 4 })
+                                                Qt.callLater(function() { currentStep = 3 })
                                             }
                                         }
                                     }
@@ -490,7 +518,7 @@ Rectangle {
                                         password: wifiPassInput.text
                                     }))
                                 } else {
-                                    currentStep = 4
+                                    currentStep = 3
                                 }
                             }
                         }
@@ -560,6 +588,8 @@ Rectangle {
                             verticalAlignment: TextInput.AlignVCenter
                             color: "#FFFFFF"; font.pixelSize: 15
                             placeholderText: "yunsh"
+                            text: "yunsh"
+                            readOnly: true
                             placeholderTextColor: Qt.rgba(255/255, 255/255, 255/255, 0.2)
                             onTextChanged: {
                                 accountUsername = text.length > 0 ? text : "yunsh"
@@ -679,10 +709,17 @@ Rectangle {
 
         property int progressValue: 0
         property int _timerCount: 0
+        onVisibleChanged: {
+            if (visible) {
+                progressValue = 0
+                _timerCount = 0
+                applyActivationConfiguration()
+            }
+        }
 
         Timer {
             interval: 80
-            running: currentStep === 4 && progressValue < 100
+            running: currentStep === 4 && activationConfigReady && progressValue < 100
             repeat: true
             onTriggered: {
                 _timerCount++
@@ -701,6 +738,13 @@ Rectangle {
                     })
                 }
             }
+        }
+
+        Timer {
+            interval: 2000
+            running: currentStep === 4 && !activationConfigReady && activationConfigError.length > 0
+            repeat: false
+            onTriggered: applyActivationConfiguration()
         }
 
         Rectangle {
@@ -739,7 +783,9 @@ Rectangle {
 
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "正在安装应用宝和系统组件"
+                    text: activationConfigError.length > 0
+                        ? activationConfigError
+                        : "正在保存系统设置"
                     color: Qt.rgba(255/255, 255/255, 255/255, 0.4)
                     font.pixelSize: 12
                 }
@@ -770,9 +816,9 @@ Rectangle {
 
                     readonly property var statusMessages: [
                         "正在准备系统环境...",
-                        "正在安装应用宝...",
-                        "正在配置 Waydroid...",
-                        "正在下载 UI 组件...",
+                        "正在保存语言与键盘设置...",
+                        "正在保护本地账户...",
+                        "正在检查设备服务...",
                         "正在优化系统...",
                         "即将完成..."
                     ]

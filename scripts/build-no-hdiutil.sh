@@ -122,12 +122,16 @@ MTOOL="mcopy -i ${BOOT_IMG}"
 echo ""
 echo "→ config.txt..."
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null > "${BUILD_DIR}/yunsh-config-new.txt"
-cat >> "${BUILD_DIR}/yunsh-config-new.txt" << 'YUNSHCONF'
+KMS_OVERLAY=""
+if ! grep -q '^dtoverlay=vc4-kms-v3d' "${BUILD_DIR}/yunsh-config-new.txt"; then
+    KMS_OVERLAY="dtoverlay=vc4-kms-v3d"
+fi
+cat >> "${BUILD_DIR}/yunsh-config-new.txt" << YUNSHCONF
 
 # === YUNSH OS Settings ===
 arm_64bit=1
 [pi5]
-dtoverlay=vc4-kms-v3d
+${KMS_OVERLAY}
 disable_splash=1
 framebuffer_width=1920
 framebuffer_height=1080
@@ -145,8 +149,12 @@ echo ""
 echo "→ cmdline.txt..."
 mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null > "${BUILD_DIR}/yunsh-cmdline-new.txt"
 CMDLINE=$(cat "${BUILD_DIR}/yunsh-cmdline-new.txt")
-# Add quiet mode, framebuffer config, disable splash logging
-echo "${CMDLINE} logo.nologo consoleblank=0 cma=256M systemd.show_status=1 systemd.log_target=console" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
+# Reserve tty1 for the logo and visible first-setup progress.
+CMDLINE=$(printf '%s\n' "${CMDLINE}" | sed -E \
+    -e 's/(^| )console=tty1( |$)/ /g' \
+    -e 's/(^| )(quiet|splash|logo\.nologo|consoleblank=[^ ]+|loglevel=[^ ]+|systemd\.show_status=[^ ]+|systemd\.log_target=[^ ]+|vt\.global_cursor_default=[^ ]+|cma=[^ ]+)( |$)/ /g' \
+    -e 's/  +/ /g')
+echo "${CMDLINE} quiet splash logo.nologo consoleblank=0 loglevel=3 vt.global_cursor_default=0 cma=256M systemd.show_status=false" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
 mdel -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null || true
 mcopy -i "${BOOT_IMG}" "${BUILD_DIR}/yunsh-cmdline-new.txt" ::/cmdline.txt
 echo "  ✓ cmdline.txt modified"
@@ -304,13 +312,21 @@ echo "mkdir /etc/systemd/system/multi-user.target.wants" >> "${DEBUGFS_SCRIPT}"
 cat > "${BUILD_DIR}/yunsh-os.service" << 'SVC'
 [Unit]
 Description=YUNSH OS v1.0 AR Glasses UI
-After=network.target yunsh-firstboot.service
-Wants=network.target yunsh-firstboot.service
+After=network.target yunsh-firstboot.service yunsh-splash.service
+Wants=network.target yunsh-firstboot.service yunsh-splash.service
+Conflicts=getty@tty1.service
+ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-ui-launcher
 Restart=always
+RestartSec=2
 User=root
+StandardInput=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=no
 [Install]
 WantedBy=multi-user.target
 SVC
@@ -320,9 +336,10 @@ add_file "${BUILD_DIR}/yunsh-os.service" "/etc/systemd/system/yunsh-os.service"
 cat > "${BUILD_DIR}/yunsh-firstboot.service" << 'FBSVC'
 [Unit]
 Description=YUNSH OS First Boot Installer
-After=network.target
-Wants=network.target
+After=network.target yunsh-splash.service
+Wants=network.target yunsh-splash.service
 Before=yunsh-os.service
+Conflicts=getty@tty1.service
 ConditionPathExists=!/etc/yunsh/.packages_installed
 [Service]
 Type=oneshot
@@ -424,7 +441,7 @@ Description=YUNSH OS OTA Update Daemon
 After=network-online.target
 [Service]
 Type=simple
-ExecStart=/usr/bin/yunsh-update-daemon
+ExecStart=/usr/bin/yunsh-update-daemon --foreground
 Restart=always
 User=root
 [Install]
@@ -450,15 +467,14 @@ add_file "${BUILD_DIR}/yunsh-appd.service" "/etc/systemd/system/yunsh-appd.servi
 cat > "${BUILD_DIR}/yunsh-splash.service" << 'SSVC'
 [Unit]
 Description=YUNSH OS Boot Splash
-DefaultDependencies=no
 After=local-fs.target
-Before=sysinit.target
+Before=yunsh-firstboot.service yunsh-os.service
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/yunsh-splash
 RemainAfterExit=yes
 [Install]
-WantedBy=sysinit.target
+WantedBy=multi-user.target
 SSVC
 add_file "${BUILD_DIR}/yunsh-splash.service" "/etc/systemd/system/yunsh-splash.service"
 
@@ -482,7 +498,7 @@ add_file "${BUILD_DIR}/yunsh-firewall.service" "/etc/systemd/system/yunsh-firewa
 cat > "${BUILD_DIR}/yunsh-headtracking.service" << 'HTSVC'
 [Unit]
 Description=YUNSH OS Head Tracking
-After=multi-user.target
+After=local-fs.target
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-headtracking
@@ -496,7 +512,7 @@ add_file "${BUILD_DIR}/yunsh-headtracking.service" "/etc/systemd/system/yunsh-he
 cat > "${BUILD_DIR}/yunsh-bno085-reader.service" << 'BNOSVC'
 [Unit]
 Description=YUNSH OS BNO085 IMU Reader
-After=multi-user.target
+After=local-fs.target
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-bno085-reader
@@ -538,11 +554,9 @@ add_file "${BUILD_DIR}/yunsh-terminal.service" "/etc/systemd/system/yunsh-termin
 # Enable services
 for service in yunsh-os yunsh-firstboot yunsh-local-api yunsh-network yunsh-bluetooth \
                yunsh-update yunsh-link-ble yunsh-glasses-bridge yunsh-appd yunsh-terminal yunsh-headtracking \
-               yunsh-bno085-reader yunsh-powerd; do
+               yunsh-bno085-reader yunsh-powerd yunsh-splash; do
     echo "symlink /etc/systemd/system/multi-user.target.wants/${service}.service ../${service}.service" >> "${DEBUGFS_SCRIPT}"
 done
-# Keep the splash unit installed but do not enable it until first boot is reliable.
-
 # Network: disable dhcpcd, enable NetworkManager + fstrim
 echo "rm /etc/systemd/system/multi-user.target.wants/dhcpcd.service" >> "${DEBUGFS_SCRIPT}"
 
@@ -555,7 +569,6 @@ cat > "${RCLOCAL_FILE}" << 'RCLOCAL'
 #!/bin/sh
 # YUNSH OS - Late init
 modprobe i2c-dev 2>/dev/null || true
-/usr/bin/yunsh-splash 2>/dev/null || true
 exit 0
 RCLOCAL
 chmod +x "${RCLOCAL_FILE}"
@@ -600,7 +613,14 @@ echo "debugfs injection ✓"
 # ─── Step 9: e2fsck ────────────────────────────────
 echo ""
 echo "=== Running e2fsck ==="
-"${E2FSPROGS}/sbin/e2fsck" -fy "${ROOT_PARTITION_IMG}" 2>&1 || true
+set +e
+"${E2FSPROGS}/sbin/e2fsck" -fy "${ROOT_PARTITION_IMG}" 2>&1
+FSCK_RESULT=$?
+set -e
+if [ "${FSCK_RESULT}" -gt 1 ]; then
+    echo "ERROR: e2fsck failed with status ${FSCK_RESULT}"
+    exit "${FSCK_RESULT}"
+fi
 echo "e2fsck ✓"
 
 # ─── Step 10: Write root back ─────────────────────
@@ -624,6 +644,43 @@ echo "Files injected:"
 "${E2FSPROGS}/sbin/debugfs" -R "ls -l /usr/share/yunsh/ui" "${ROOT_TEST_IMG}" 2>/dev/null | head -5 || true
 echo "(partial listing, see build log for complete)"
 
+REQUIRED_ROOT_FILES="
+/usr/bin/yunsh-ui-launcher
+/usr/bin/yunsh-firstboot.sh
+/usr/bin/yunsh-activation-helper
+/usr/bin/yunsh-network-daemon
+/usr/bin/yunsh-bluetooth-daemon
+/usr/bin/yunsh-update-daemon
+/usr/bin/yunsh-updater
+/usr/bin/yunsh-link-ble
+/usr/bin/yunsh-glasses-bridge
+/usr/bin/yunsh-headtracking
+/usr/share/yunsh/ui/main.qml
+/usr/share/yunsh/ui/HomeScreen.qml
+/usr/share/yunsh/logo/logo-256.png
+/etc/yunsh/version.conf
+/etc/systemd/system/yunsh-os.service
+/etc/systemd/system/yunsh-firstboot.service
+/etc/systemd/system/multi-user.target.wants/yunsh-os.service
+/etc/systemd/system/multi-user.target.wants/yunsh-firstboot.service
+"
+for required in ${REQUIRED_ROOT_FILES}; do
+    if ! "${E2FSPROGS}/sbin/debugfs" -R "stat ${required}" "${ROOT_TEST_IMG}" 2>&1 |
+        grep -q '^Inode:'; then
+        echo "ERROR: required image file is missing: ${required}"
+        exit 1
+    fi
+done
+set +e
+"${E2FSPROGS}/sbin/e2fsck" -fn "${ROOT_TEST_IMG}" >/dev/null 2>&1
+FSCK_VERIFY=$?
+set -e
+if [ "${FSCK_VERIFY}" -gt 1 ]; then
+    echo "ERROR: final root filesystem verification failed (${FSCK_VERIFY})"
+    exit "${FSCK_VERIFY}"
+fi
+echo "  ✓ Required boot, desktop, service, OTA, and tracking files verified"
+
 # Cleanup
 rm -f "${ROOT_PARTITION_IMG}" "${ROOT_TEST_IMG}" "${LAUNCHER_FILE}" "${DEBUGFS_SCRIPT}"
 
@@ -631,6 +688,9 @@ rm -f "${ROOT_PARTITION_IMG}" "${ROOT_TEST_IMG}" "${LAUNCHER_FILE}" "${DEBUGFS_S
 echo ""
 echo "=== Compressing ==="
 xz -v -f "${OUTPUT_FILE}" 2>&1
+xz -t "${OUTPUT_FILE}.xz"
+shasum -a 256 "${OUTPUT_FILE}.xz" > "${OUTPUT_FILE}.xz.sha256"
+"${YUNSH_DIR}/scripts/build-ota.sh"
 echo ""
 echo "============================================"
 echo "  ✅ Build complete!"
@@ -640,4 +700,4 @@ echo "Output: ${OUTPUT_FILE}.xz"
 echo "Size: $(ls -lh "${OUTPUT_FILE}.xz" | awk '{print $5}')"
 echo ""
 echo "Flash to SD card:"
-echo "  sudo dd if=${OUTPUT_FILE}.xz of=/dev/rdisk2 bs=1m status=progress"
+echo "  xz -dc ${OUTPUT_FILE}.xz | sudo dd of=/dev/rdisk2 bs=1m"

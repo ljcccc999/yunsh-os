@@ -1,5 +1,5 @@
 #!/bin/bash
-# YUNSH OS v1.0.2-fixed - First Boot Setup
+# YUNSH OS - First Boot Setup
 # Installs system packages, configures services
 # UI files pre-injected into image
 
@@ -14,7 +14,7 @@ sync
 
 echo ""
 echo "  +------------------------------------------+"
-echo "  |  YUNSH OS v1.0.2-fixed - First Setup     |"
+echo "  |  YUNSH OS - First Setup                  |"
 echo "  +------------------------------------------+"
 
 source /usr/bin/yunsh-install-progress.sh 2>/dev/null || true
@@ -25,35 +25,30 @@ pct() { CUR=$((CUR+1)); local P=$((CUR*100/TOTAL)); [ "$P" -gt "$1" ] && P=$1
     else echo "  [$P%] $2"; fi
 }
 
-# ───── Wait for network (up to 120s timeout) ──
+# ───── Wait for network (up to about 120s) ──
 echo -n "  [+] Waiting for network"
 WAIT=0
-TIMEOUT=24   # 24 attempts × about 5 seconds = about 2 minutes
-while ! ping -c1 -W2 223.5.5.5 &>/dev/null && \
-      ! ping -c1 -W2 114.114.114.114 &>/dev/null && \
-      ! curl -s --max-time 3 http://mirrors.tuna.tsinghua.edu.cn/ &>/dev/null && \
-      ! curl -s --max-time 3 http://deb.debian.org/ &>/dev/null; do
+TIMEOUT=24
+network_ready() {
+    curl -fsI --connect-timeout 2 --max-time 4 \
+        https://deb.debian.org/debian/dists/bookworm/InRelease &>/dev/null ||
+    curl -fsI --connect-timeout 2 --max-time 4 \
+        https://mirrors.tuna.tsinghua.edu.cn/debian/dists/bookworm/InRelease &>/dev/null
+}
+while ! network_ready; do
     WAIT=$((WAIT+1))
     if [ $WAIT -ge $TIMEOUT ]; then
         echo " [TIMEOUT]"
-        echo "  ⚠ Network not available after ${TIMEOUT}s, continuing anyway..."
-        break
+        echo "  [ERROR] First setup needs an Internet connection."
+        echo "  Connect Ethernet, then reboot to retry."
+        rm -f /etc/yunsh/.firstboot_partial
+        exit 1
     fi
     [ $((WAIT % 12)) -eq 0 ] && echo -n $'\n  [+] Waiting for network'
     echo -n "."
     sleep 5
 done
 echo " [OK]"
-
-# Keep the official Debian and Raspberry Pi repositories when reachable.
-# Only switch each repository to its correct TUNA mirror after timeout.
-if [ $WAIT -ge $TIMEOUT ]; then
-    for sf in /etc/apt/sources.list.d/*.sources; do
-        [ -f "$sf" ] || continue
-        sed -i "s|https\\?://deb.debian.org/debian|https://mirrors.tuna.tsinghua.edu.cn/debian|g" "$sf"
-        sed -i "s|https\\?://archive.raspberrypi.com/debian|https://mirrors.tuna.tsinghua.edu.cn/raspberrypi|g" "$sf"
-    done
-fi
 
 install_apt() {
     local step="$1" name="$2"; shift 2
@@ -149,20 +144,33 @@ pct 3 "Updating package lists..."
 apt-get update -qq 2>/dev/null || { sleep 10; apt-get update -qq 2>/dev/null || true; }
 
 # Install packages
-install_apt 8 "Qt6 framework" qt6-base-dev qt6-declarative-dev libqt6svg6 qt6-base-dev-tools qt6-qmltooling-plugins qml6 qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-window qml6-module-qtquick-virtualkeyboard qml6-module-qt-labs-qmlmodels qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtquick-templates
+install_apt 8 "Qt6 framework" qt6-base-dev qt6-declarative-dev libqt6svg6 libqt6opengl6 qt6-base-dev-tools qt6-qmltooling-plugins qml-qt6 qmlscene-qt6 qml6-module-qtqml qml6-module-qtqml-workerscript qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-window qml6-module-qtquick-virtualkeyboard qml6-module-qt-labs-qmlmodels qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtquick-templates
 install_apt 14 "Python environment" python3-pip python3-smbus
 pip3 install smbus2 2>/dev/null || true
 install_apt 20 "WebEngine" qt6-webengine-dev libqt6webenginequick6 qml6-module-qtwebengine
 install_apt 24 "Android container dependencies" lxc python3-dbus python3-gi
-install_apt 26 "Waydroid" waydroid
-install_apt 32 "Network & BT" network-manager wpasupplicant bluez bluez-utils
+install_apt 32 "Network & BT" network-manager wpasupplicant bluez
 install_apt 38 "System tools" openssh-server avahi-daemon i2c-tools curl wget git python3-pil
 install_apt 44 "Chinese fonts" fonts-noto-cjk
 install_apt 50 "Audio" pulseaudio alsa-utils
 install_apt 56 "OpenGL" mesa-utils libgl1-mesa-dri
 
+# Waydroid is hosted in its official repository, not Debian main. Keep this
+# optional so an Android repository outage can never block the YUNSH desktop.
+pct 58 "Preparing Android runtime..."
+if ! command -v waydroid >/dev/null 2>&1; then
+    curl -fsSL --connect-timeout 10 --max-time 30 \
+        https://repo.waydro.id/waydroid.gpg \
+        -o /usr/share/keyrings/waydroid.gpg 2>/dev/null &&
+    echo "deb [signed-by=/usr/share/keyrings/waydroid.gpg] https://repo.waydro.id/ bookworm main" \
+        > /etc/apt/sources.list.d/waydroid.list &&
+    apt-get update -qq 2>/dev/null &&
+    apt-get install -yqq --no-install-recommends waydroid 2>/dev/null || true
+fi
+
 pct 62 "Configuring Waydroid..."
-[ -f "/usr/lib/waydroid/data/config.py" ] && timeout 120 waydroid init </dev/null 2>/dev/null || true
+command -v waydroid >/dev/null 2>&1 &&
+    timeout 120 waydroid init </dev/null 2>/dev/null || true
 
 pct 68 "Starting core services..."
 systemctl enable NetworkManager bluetooth ssh 2>/dev/null || true
@@ -172,10 +180,6 @@ systemctl stop dhcpcd 2>/dev/null || true
 
 pct 74 "Configuring YUNSH OS..."
 mkdir -p /etc/yunsh
-cat > /etc/yunsh/version.conf << 'V'
-VERSION=v1.0.2-fixed
-BUILD=2026.07.26
-V
 
 pct 78 "Configuring firewall & SSH..."
 setup_firewall
@@ -212,12 +216,20 @@ pct 98 "Cleaning up..."
 rm -f /etc/yunsh/.firstboot_partial 2>/dev/null || true
 
 pct 100 "Setup complete! Rebooting..."
-if ! command -v qml6 >/dev/null 2>&1 && ! command -v qml >/dev/null 2>&1; then
+CORE_PACKAGES="qml-qt6 libqt6opengl6 qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-shapes qml6-module-qtwebengine"
+CORE_MISSING=""
+for package in $CORE_PACKAGES; do
+    dpkg-query -W -f='${Status}' "$package" 2>/dev/null |
+        grep -q "install ok installed" || CORE_MISSING="$CORE_MISSING $package"
+done
+if { [ ! -x /usr/lib/qt6/bin/qml ] && \
+      ! command -v qml6 >/dev/null 2>&1 && \
+      ! command -v qml >/dev/null 2>&1; } || [ -n "$CORE_MISSING" ]; then
     echo ""
-    echo "  [ERROR] Qt/QML installation failed."
+    echo "  [ERROR] Required desktop packages are missing:$CORE_MISSING"
     echo "  Check the Ethernet connection, then reboot to retry."
     rm -f /etc/yunsh/.firstboot_partial
-    sleep infinity
+    exit 1
 fi
 touch /etc/yunsh/.packages_installed
 rm -f /usr/bin/yunsh-firstboot.sh

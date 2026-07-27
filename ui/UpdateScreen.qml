@@ -30,6 +30,8 @@ Item {
     property string lastCheckTime: ""
     property string changelog: ""
     property bool showChangelog: false
+    property string updateError: ""
+    property bool rebootRequired: false
 
     /* Backend integration — call this to refresh all data */
     function refreshStatus() {
@@ -47,6 +49,10 @@ Item {
                     lastCheckTime = data.lastCheckTime || "";
                     changelog = data.changelog || "";
                     updateAvailable = data.updateAvailable || false;
+                    downloadProgress = data.progress || 0;
+                    updateError = data.error || "";
+                    rebootRequired = data.rebootRequired || false;
+                    isDownloading = data.state === "downloading" || data.state === "installing";
                 } catch(e) {
                     console.warn("UpdateScreen: failed to parse status:", e);
                 }
@@ -57,6 +63,13 @@ Item {
 
     Component.onCompleted: {
         refreshStatus();
+    }
+
+    Timer {
+        interval: 1000
+        running: isDownloading
+        repeat: true
+        onTriggered: refreshStatus()
     }
 
     /* ---- Background (transparent - GlassBackground shows through) ---- */
@@ -82,7 +95,7 @@ Item {
             width: 40
             height: 40
             radius: 20
-            iconSource: "qrc:/icons/chevron-left-white.svg"
+            iconSource: "/usr/share/yunsh/icons/chevron-left-white.svg"
             bgColor: Qt.rgba(1, 1, 1, 0.15)
             onClicked: root.backToHome()
         }
@@ -153,8 +166,8 @@ Item {
 
                         GlassIcon {
                             source: updateAvailable
-                                   ? "qrc:/icons/exclamationmark-circle.svg"
-                                   : "qrc:/icons/checkmark-circle.svg"
+                                   ? "/usr/share/yunsh/icons/exclamationmark-circle.svg"
+                                   : "/usr/share/yunsh/icons/checkmark-circle.svg"
                             iconColor: updateAvailable ? "#FFD60A" : "#30D158"
                             size: 20
                         }
@@ -232,7 +245,7 @@ Item {
 
                     Image {
                         visible: !isChecking
-                        source: "qrc:/icons/arrow.clockwise.svg"
+                        source: "/usr/share/yunsh/icons/arrow.clockwise.svg"
                         width: 18
                         height: 18
                         opacity: 0.8
@@ -258,6 +271,14 @@ Item {
                     };
                     xhr.send(JSON.stringify({action: "check"}));
                 }
+            }
+
+            Text {
+                Layout.alignment: Qt.AlignHCenter
+                visible: rebootRequired
+                text: "更新已安装，请重新启动 YUNSH OS"
+                color: "#30D158"
+                font.pixelSize: 15
             }
 
             /* ==========================================================
@@ -499,11 +520,20 @@ Item {
 
                     Text {
                         Layout.alignment: Qt.AlignHCenter
-                        text: "正在更新 YUNSH OS…"
+                    text: "正在更新 YUNSH OS…"
                         color: "#FFFFFF"
                         font.pixelSize: 18
                         font.weight: Font.Medium
                         font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
+                    }
+
+                    Text {
+                        Layout.alignment: Qt.AlignHCenter
+                        visible: updateError.length > 0
+                        text: updateError
+                        color: "#FF453A"
+                        font.pixelSize: 13
+                        wrapMode: Text.WordWrap
                     }
 
                     /* Linear progress bar */
@@ -762,7 +792,7 @@ Item {
                     }
 
                     Image {
-                        source: "qrc:/icons/chevron.right.svg"
+                        source: "/usr/share/yunsh/icons/chevron.right.svg"
                         width: 12
                         height: 12
                         opacity: 0.4

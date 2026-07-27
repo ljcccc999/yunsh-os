@@ -49,7 +49,7 @@ Item {
             width: 40
             height: 40
             radius: 20
-            iconSource: "qrc:/icons/chevron-left-white.svg"
+            iconSource: "/usr/share/yunsh/icons/chevron-left-white.svg"
             bgColor: Qt.rgba(1, 1, 1, 0.15)
             onClicked: root.backToUpdates()
         }

@@ -59,43 +59,45 @@ def nmcli_json(args, timeout=15):
     return False, {"error": output}
 
 
+def split_nmcli(line):
+    """Split nmcli terse output while preserving escaped ':' and '\\'."""
+    fields = []
+    current = []
+    escaped = False
+    for char in line:
+        if escaped:
+            current.append(char)
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        elif char == ":":
+            fields.append("".join(current))
+            current = []
+        else:
+            current.append(char)
+    fields.append("".join(current))
+    return fields
+
+
 def scan_wifi():
     """Scan Wi-Fi networks"""
-    success, result = nmcli_json(["-f", "SSID,SIGNAL,SECURITY,BARS,MODE,CHAN", "device", "wifi", "list"])
+    success, text = run_nmcli([
+        "-t", "-e", "yes", "-f", "SSID,SIGNAL,SECURITY,BARS,CHAN",
+        "device", "wifi", "list", "--rescan", "yes",
+    ], timeout=25)
     if success:
         networks = []
-        if isinstance(result, dict):
-            # nmcli JSON output varies by version. Try multiple key patterns.
-            raw_networks = result.get("wifi-networks", result.get("NETWORKS", []))
-            for entry in raw_networks:
-                aps = entry.get("access-points", [entry])
-                for ap in aps:
-                    if not isinstance(ap, dict):
-                        continue
-                    ssid = ap.get("ssid", ap.get("SSID", ""))
-                    if ssid:
-                        networks.append({
-                            "ssid": str(ssid),
-                            "signal": ap.get("signal", ap.get("SIGNAL", 0)),
-                            "security": ap.get("security", ap.get("SECURITY", "")),
-                            "bars": ap.get("bars", ap.get("BARS", "")),
-                            "chan": ap.get("chan", ap.get("CHAN", 0))
-                        })
-        # Sort by signal strength
-        networks.sort(key=lambda n: n["signal"], reverse=True)
-        return {"success": True, "networks": networks}
-    # Fallback: parse text output
-    success, text = run_nmcli(["-f", "SSID,SIGNAL,SECURITY,BARS", "device", "wifi", "list"])
-    if success:
-        networks = []
-        for line in text.strip().split("\n")[1:]:  # Skip header
-            parts = line.split()
-            if len(parts) >= 3:
+        seen = set()
+        for line in text.strip().splitlines():
+            parts = split_nmcli(line)
+            if len(parts) >= 5 and parts[0] and parts[0] not in seen:
+                seen.add(parts[0])
                 networks.append({
                     "ssid": parts[0],
                     "signal": int(parts[1]) if parts[1].isdigit() else 0,
                     "security": parts[2],
-                    "bars": parts[3] if len(parts) > 3 else ""
+                    "bars": parts[3],
+                    "chan": int(parts[4]) if parts[4].isdigit() else 0,
                 })
         networks.sort(key=lambda n: n["signal"], reverse=True)
         return {"success": True, "networks": networks}
@@ -104,16 +106,15 @@ def scan_wifi():
 
 def get_status():
     """Get current Wi-Fi connection status"""
-    success, data = nmcli_json(["-t", "connection", "show", "--active"])
     wifi_connected = False
     ssid = ""
     ip = ""
     
     # Check specific wifi status
-    s2, d2 = run_nmcli(["-t", "-f", "ACTIVE,SSID,SIGNAL,SECURITY", "device", "wifi"])
+    s2, d2 = run_nmcli(["-t", "-e", "yes", "-f", "ACTIVE,SSID,SIGNAL,SECURITY", "device", "wifi"])
     if s2:
         for line in d2.strip().split("\n"):
-            parts = line.split(":")
+            parts = split_nmcli(line)
             if len(parts) >= 4 and parts[0] == "yes":
                 wifi_connected = True
                 ssid = parts[1]

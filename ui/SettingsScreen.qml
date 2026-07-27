@@ -308,7 +308,7 @@ Rectangle {
                 subtitle: "清除数据，保留系统文件"
                 showArrow: true
                 titleColor: "#FF5252"
-                onClicked: factoryResetDialog.open()
+                onClicked: factoryResetDialog.visible = true
             }
         }
         
@@ -381,12 +381,10 @@ Rectangle {
                             anchors.fill: parent; hoverEnabled: true
                             onClicked: {
                                 factoryResetDialog.visible = false
-                                // Trigger factory reset script
-                                var cmd = "/usr/bin/yunsh-factory-reset &";
-                                console.log("Triggering factory reset: " + cmd);
-                                Qt.callLater(function() {
-                                    Qt.quit()
-                                })
+                                var xhr = new XMLHttpRequest()
+                                xhr.open("POST", "http://127.0.0.1:8591/api/factory-reset", true)
+                                xhr.setRequestHeader("Content-Type", "application/json")
+                                xhr.send("{}")
                             }
                         }
                     }

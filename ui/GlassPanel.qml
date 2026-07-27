@@ -17,13 +17,17 @@ Rectangle {
     property real shadowOpacity: 0.6 // Shadow darkness
     property color glassTint: Qt.rgba(0.45, 0.5, 0.7, 0.08) // Slight blue tint
     property bool showBorder: true
+    property color panelColor: Qt.rgba(12/255, 12/255, 25/255, glassOpacity * 0.7)
+    property color borderColor: Qt.rgba(255/255, 255/255, 255/255, 0.05)
+    property real borderWidth: 1
+    property bool glowBorder: false
     property alias contentItem: customContent.data
     
     // Apple-style large corner radius
     radius: cornerRadius
     
     // Main glass background - deep translucent with blue tint
-    color: Qt.rgba(12/255, 12/255, 25/255, glassOpacity * 0.7)
+    color: panelColor
 
     Item {
         id: customContent
@@ -70,8 +74,8 @@ Rectangle {
         anchors.fill: parent
         radius: cornerRadius
         color: "transparent"
-        border.color: Qt.rgba(255/255, 255/255, 255/255, showBorder ? 0.05 : 0)
-        border.width: 1
+        border.color: showBorder ? borderColor : "transparent"
+        border.width: borderWidth
         visible: showBorder
     }
     

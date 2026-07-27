@@ -1,0 +1,49 @@
+#!/bin/bash
+# YUNSH OS dedicated Qt Quick launcher for Raspberry Pi DRM/KMS.
+set -u
+
+cd /usr/share/yunsh/ui || exit 1
+
+export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-eglfs}"
+export QT_QPA_EGLFS_INTEGRATION="${QT_QPA_EGLFS_INTEGRATION:-eglfs_kms}"
+export QT_QPA_EGLFS_ALWAYS_SET_MODE=1
+export QTWEBENGINE_DISABLE_SANDBOX=1
+export QTWEBENGINE_CHROMIUM_FLAGS="${QTWEBENGINE_CHROMIUM_FLAGS:---no-sandbox --disable-dev-shm-usage}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/yunsh-runtime}"
+
+install -d -m 0700 "$XDG_RUNTIME_DIR"
+install -d -o yunsh -g yunsh /home/yunsh/Pictures/Screenshots 2>/dev/null || \
+    install -d /home/yunsh/Pictures/Screenshots
+
+if [ -x /usr/lib/qt6/bin/qml ]; then
+    QML_RUNNER=/usr/lib/qt6/bin/qml
+elif [ -x /usr/lib/qt6/bin/qmlscene ]; then
+    QML_RUNNER=/usr/lib/qt6/bin/qmlscene
+else
+    QML_RUNNER="$(command -v qml6 || command -v qml || true)"
+fi
+if [ -z "$QML_RUNNER" ]; then
+    echo "YUNSH: Qt QML runtime is not installed." >&2
+    exit 1
+fi
+
+if [ ! -f /etc/yunsh/.packages_installed ]; then
+    echo "YUNSH: First-boot setup has not completed." >&2
+    exit 1
+fi
+
+/usr/bin/yunsh-disk-helper 2>/dev/null || true
+
+while true; do
+    if [ -f /etc/yunsh/.activated ]; then
+        "$QML_RUNNER" main.qml --activated 2>>/var/log/yunsh-ui.log
+    else
+        "$QML_RUNNER" main.qml --firstboot 2>>/var/log/yunsh-ui.log
+        QML_EXIT=$?
+        if [ "$QML_EXIT" -eq 42 ]; then
+            touch /etc/yunsh/.activated
+            sync
+        fi
+    fi
+    sleep 2
+done

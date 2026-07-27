@@ -31,11 +31,14 @@ AD_MANAGER_IFACE = "org.bluez.LEAdvertisingManager1"
 SERVICE_IFACE = "org.bluez.GattService1"
 CHAR_IFACE = "org.bluez.GattCharacteristic1"
 AD_IFACE = "org.bluez.LEAdvertisement1"
+AGENT_IFACE = "org.bluez.Agent1"
+AGENT_MANAGER_IFACE = "org.bluez.AgentManager1"
 UPDATE_SOCKET = "/tmp/yunsh-update.sock"
 GLASSES_STATUS_PATH = "/tmp/yunsh-glasses-status.json"
 POWER_STATUS_PATH = "/tmp/yunsh-power-status.json"
 GLASSES_CONTROL_PATH = "/tmp/yunsh-glasses-control.json"
 APP_PATH = "/top/yunsh/link"
+AGENT_PATH = f"{APP_PATH}/agent"
 SERVICE_UUID = "F000BB00-0451-4000-B000-000000000000"
 COMMAND_UUID = "F000BB01-0451-4000-B000-000000000000"
 STATUS_UUID = "F000BB02-0451-4000-B000-000000000000"
@@ -77,20 +80,43 @@ def write_glasses_brightness(value) -> dict:
 
 
 def compact_status(result: dict) -> dict:
-    """Keep the BLE payload small enough for common iPhone ATT MTUs."""
+    """Use compact wire keys so notifications fit a normal iPhone ATT MTU."""
     glasses = read_json(GLASSES_STATUS_PATH)
     power = read_json(POWER_STATUS_PATH)
     return {
-        "currentVersion": result.get("current_version", "—"),
-        "latestVersion": result.get("latest_version", "—"),
-        "updateAvailable": bool(result.get("update_available", False)),
-        "state": result.get("state", "error" if result.get("error") else "ready"),
-        "detail": result.get("error", result.get("result", "Ready"))[:72],
-        "glassesConnected": bool(glasses.get("connected", False)),
-        "glassesBattery": glasses.get("battery"),
-        "glassesBrightness": glasses.get("brightness"),
-        "hostBattery": power.get("battery") if power.get("available") else None,
+        "cv": result.get("current_version", "—"),
+        "lv": result.get("latest_version", "—"),
+        "ua": bool(result.get("update_available", False)),
+        "s": result.get("state", "error" if result.get("error") else "ready"),
+        "d": result.get("error", result.get("result", "Ready"))[:24],
+        "gc": bool(glasses.get("connected", False)),
+        "gb": glasses.get("battery"),
+        "gl": glasses.get("brightness"),
+        "hb": power.get("battery") if power.get("available") else None,
     }
+
+
+class PairingAgent(dbus.service.Object):
+    """BlueZ Just Works agent for encrypted iPhone characteristics."""
+
+    def __init__(self, bus):
+        super().__init__(bus, AGENT_PATH)
+
+    @dbus.service.method(AGENT_IFACE)
+    def Release(self):
+        pass
+
+    @dbus.service.method(AGENT_IFACE, in_signature="o")
+    def RequestAuthorization(self, _device):
+        return
+
+    @dbus.service.method(AGENT_IFACE, in_signature="os")
+    def AuthorizeService(self, _device, _uuid):
+        return
+
+    @dbus.service.method(AGENT_IFACE)
+    def Cancel(self):
+        pass
 
 
 class Application(dbus.service.Object):
@@ -200,6 +226,9 @@ class CommandCharacteristic(Characteristic):
             if action == "set_glasses_brightness":
                 self.status.refresh(write_glasses_brightness(payload.get("value")))
                 return
+            if action == "install":
+                self.status.refresh(update_command("start_download"))
+                return
             if action not in {"get_status", "check"}:
                 raise ValueError("unsupported command")
             self.status.refresh(update_command(action))
@@ -241,6 +270,16 @@ def main():
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     bus = dbus.SystemBus()
     adapter = find_adapter(bus)
+    PairingAgent(bus)
+    agent_manager = dbus.Interface(bus.get_object(BLUEZ, "/org/bluez"), AGENT_MANAGER_IFACE)
+    try:
+        agent_manager.RegisterAgent(AGENT_PATH, "NoInputNoOutput")
+    except dbus.DBusException:
+        pass
+    try:
+        agent_manager.RequestDefaultAgent(AGENT_PATH)
+    except dbus.DBusException:
+        pass
     app = Application(bus)
     service = Service(bus, 0, SERVICE_UUID)
     status = StatusCharacteristic(bus, 0, service)

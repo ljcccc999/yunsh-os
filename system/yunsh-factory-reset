@@ -28,19 +28,29 @@ rm -rf /home/*/Desktop 2>/dev/null || true
 rm -rf /home/*/Downloads 2>/dev/null || true
 echo "✓ 用户文件（截图/文档）已清除"
 
-# ─── Delete user accounts ───
-for userdir in /home/*; do
-    username=$(basename "$userdir")
-    if [ "$username" != "root" ] && [ -d "$userdir" ]; then
-        userdel -r "$username" 2>/dev/null || true
-    fi
-done
-echo "✓ 用户账号已删除"
+# Keep the built-in yunsh account. Removing it would require first-boot setup
+# to run again, which factory reset must never do.
+install -d -o yunsh -g yunsh /home/yunsh 2>/dev/null || true
+echo "✓ 系统账号已保留"
 
 # ─── Reset user settings (language, Wi-Fi, Bluetooth) ───
 # Only remove user-preference files, keep system config
 rm -f /etc/yunsh/language.conf 2>/dev/null || true
 rm -f /etc/yunsh/region.conf 2>/dev/null || true
+rm -f /etc/yunsh/glasses.conf 2>/dev/null || true
+if command -v nmcli >/dev/null 2>&1; then
+    nmcli -t -e yes -f UUID,TYPE connection show 2>/dev/null |
+    while IFS=: read -r connection_uuid connection_type; do
+        [ "$connection_type" = "802-11-wireless" ] &&
+            nmcli connection delete uuid "$connection_uuid" >/dev/null 2>&1 || true
+    done
+fi
+if command -v bluetoothctl >/dev/null 2>&1; then
+    bluetoothctl paired-devices 2>/dev/null | awk '/^Device / {print $2}' |
+    while read -r address; do
+        bluetoothctl remove "$address" >/dev/null 2>&1 || true
+    done
+fi
 # Keep: version.conf, update.conf, .packages_installed
 echo "✓ 用户偏好已重置（保留系统配置）"
 
@@ -49,9 +59,8 @@ if command -v waydroid &>/dev/null; then
     waydroid session stop 2>/dev/null || true
 fi
 rm -rf /var/lib/waydroid/data/* 2>/dev/null || true
-rm -rf /var/lib/waydroid/images 2>/dev/null || true
-rm -rf /var/lib/waydroid/rootfs 2>/dev/null || true
-echo "✓ Waydroid 安卓应用及数据已清除"
+# Preserve Android system images/rootfs so no reinstall or redownload is needed.
+echo "✓ Waydroid 用户数据已清除（系统镜像保留）"
 
 # ─── Clear caches and temp ───
 rm -rf /root/.cache 2>/dev/null || true
