@@ -689,7 +689,11 @@ echo ""
 echo "=== Compressing ==="
 xz -v -f "${OUTPUT_FILE}" 2>&1
 xz -t "${OUTPUT_FILE}.xz"
-shasum -a 256 "${OUTPUT_FILE}.xz" > "${OUTPUT_FILE}.xz.sha256"
+(
+    cd "${OUTPUT_DIR}"
+    shasum -a 256 "$(basename "${OUTPUT_FILE}.xz")" \
+        > "$(basename "${OUTPUT_FILE}.xz.sha256")"
+)
 "${YUNSH_DIR}/scripts/build-ota.sh"
 echo ""
 echo "============================================"

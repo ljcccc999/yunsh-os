@@ -65,5 +65,8 @@ PY
 
 mkdir -p "${OUTPUT_DIR}"
 tar -C "${STAGING}" -czf "${OUTPUT}" manifest.json payload
-shasum -a 256 "${OUTPUT}" > "${OUTPUT}.sha256"
+(
+    cd "${OUTPUT_DIR}"
+    shasum -a 256 "$(basename "${OUTPUT}")" > "$(basename "${OUTPUT}.sha256")"
+)
 echo "OTA bundle: ${OUTPUT}"
