@@ -6,12 +6,21 @@ set -e
 YUNSH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${YUNSH_DIR}/build"
 OUTPUT_DIR="${YUNSH_DIR}/output"
-OUTPUT_FILE="${OUTPUT_DIR}/YUNSH-OS-v1.0.2.img"
+VERSION_CONF="${BUILD_DIR}/yunsh-version.conf"
+if [ ! -f "${VERSION_CONF}" ]; then
+    printf 'VERSION=v1.0.3\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
+fi
+VERSION="$(awk -F= '$1 == "VERSION" { print $2; exit }' "${VERSION_CONF}")"
+if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.]+)?$ ]]; then
+    echo "ERROR: invalid VERSION in ${VERSION_CONF}: ${VERSION}"
+    exit 1
+fi
+OUTPUT_FILE="${OUTPUT_DIR}/YUNSH-OS-${VERSION}.img"
 E2FSPROGS="/opt/homebrew/Cellar/e2fsprogs/1.47.4"
 DEBUGFS="${E2FSPROGS}/sbin/debugfs"
 
 echo "============================================"
-echo "  YUNSH OS v1.0 - Image Builder (no hdiutil)"
+echo "  YUNSH OS ${VERSION} - Image Builder (no hdiutil)"
 echo "============================================"
 
 # ─── Step 1: Find base image ──────────────────────
@@ -47,7 +56,9 @@ echo "Root: sectors $ROOT_START-$ROOT_END ($ROOT_SIZE sectors)"
 echo ""
 echo "=== Creating working copy ==="
 mkdir -p "${OUTPUT_DIR}"
-cp "${RPI_IMAGE}" "${OUTPUT_FILE}"
+if ! cp -c "${RPI_IMAGE}" "${OUTPUT_FILE}" 2>/dev/null; then
+    cp "${RPI_IMAGE}" "${OUTPUT_FILE}"
+fi
 echo "  ✓ ${OUTPUT_FILE}"
 
 # ─── Step 4: Generate splash screens ──────────────
@@ -208,6 +219,8 @@ add_file "${YUNSH_DIR}/system/yunsh-update-daemon.py" "/usr/bin/yunsh-update-dae
 add_file "${YUNSH_DIR}/system/yunsh-updater.py" "/usr/bin/yunsh-updater"
 add_file "${YUNSH_DIR}/system/yunsh-network-daemon.py" "/usr/bin/yunsh-network-daemon"
 add_file "${YUNSH_DIR}/system/yunsh-bluetooth-daemon.py" "/usr/bin/yunsh-bluetooth-daemon"
+add_file "${YUNSH_DIR}/system/yunsh-link-ble.py" "/usr/bin/yunsh-link-ble"
+add_file "${YUNSH_DIR}/system/yunsh-glasses-bridge.py" "/usr/bin/yunsh-glasses-bridge"
 add_file "${YUNSH_DIR}/system/yunsh-headtracking" "/usr/bin/yunsh-headtracking"
 add_file "${YUNSH_DIR}/system/yunsh-bno085-reader" "/usr/bin/yunsh-bno085-reader"
 add_file "${YUNSH_DIR}/system/yunsh-headtracking-sim" "/usr/bin/yunsh-headtracking-sim"
@@ -281,11 +294,7 @@ update_channel=stable
 UC
 add_file "${BUILD_DIR}/yunsh-update.conf" "/etc/yunsh/update.conf"
 
-cat > "${BUILD_DIR}/yunsh-version.conf" << 'VERCONF'
-VERSION=v1.0.2-fixed
-BUILD=2026.07.26
-VERCONF
-add_file "${BUILD_DIR}/yunsh-version.conf" "/etc/yunsh/version.conf"
+add_file "${VERSION_CONF}" "/etc/yunsh/version.conf"
 
 # systemd services
 echo "mkdir /etc/systemd/system" >> "${DEBUGFS_SCRIPT}"
@@ -374,6 +383,39 @@ User=root
 WantedBy=multi-user.target
 BSVC
 add_file "${BUILD_DIR}/yunsh-bluetooth.service" "/etc/systemd/system/yunsh-bluetooth.service"
+
+# Bluetooth companion service for YUNSH Link on iPhone
+cat > "${BUILD_DIR}/yunsh-link-ble.service" << 'LINKSVC'
+[Unit]
+Description=YUNSH Link Bluetooth Companion
+After=bluetooth.service yunsh-update.service
+Wants=bluetooth.service
+[Service]
+Type=simple
+ExecStart=/usr/bin/yunsh-link-ble
+Restart=always
+RestartSec=3
+User=root
+[Install]
+WantedBy=multi-user.target
+LINKSVC
+add_file "${BUILD_DIR}/yunsh-link-ble.service" "/etc/systemd/system/yunsh-link-ble.service"
+
+cat > "${BUILD_DIR}/yunsh-glasses-bridge.service" << 'GLASSESSVC'
+[Unit]
+Description=YUNSH V1 Glasses Bluetooth Bridge
+After=bluetooth.service yunsh-bluetooth.service yunsh-headtracking.service
+Wants=bluetooth.service yunsh-headtracking.service
+[Service]
+Type=simple
+ExecStart=/usr/bin/yunsh-glasses-bridge
+Restart=always
+RestartSec=3
+User=root
+[Install]
+WantedBy=multi-user.target
+GLASSESSVC
+add_file "${BUILD_DIR}/yunsh-glasses-bridge.service" "/etc/systemd/system/yunsh-glasses-bridge.service"
 
 # Update service
 cat > "${BUILD_DIR}/yunsh-update.service" << 'USVC'
@@ -495,7 +537,7 @@ add_file "${BUILD_DIR}/yunsh-terminal.service" "/etc/systemd/system/yunsh-termin
 
 # Enable services
 for service in yunsh-os yunsh-firstboot yunsh-local-api yunsh-network yunsh-bluetooth \
-               yunsh-update yunsh-appd yunsh-terminal yunsh-headtracking \
+               yunsh-update yunsh-link-ble yunsh-glasses-bridge yunsh-appd yunsh-terminal yunsh-headtracking \
                yunsh-bno085-reader yunsh-powerd; do
     echo "symlink /etc/systemd/system/multi-user.target.wants/${service}.service ../${service}.service" >> "${DEBUGFS_SCRIPT}"
 done
@@ -526,6 +568,8 @@ add_file "${BUILD_DIR}/yunsh-hostname" "/etc/hostname"
 
 # Set permissions
 for bin in yunsh-update-daemon yunsh-updater yunsh-network-daemon yunsh-bluetooth-daemon \
+           yunsh-link-ble \
+           yunsh-glasses-bridge \
            yunsh-screenshotd yunsh-factory-reset yunsh-install-progress.sh yunsh-inputd \
            yunsh-powerd yunsh-firstboot.sh yunsh-iptables.sh yunsh-ui-launcher yunsh-splash \
            yunsh-appd yunsh-terminal yunsh-disk-helper yunsh-headtracking yunsh-headtracking-sim \

@@ -4,6 +4,7 @@
 
 PIDFILE="/var/run/yunsh-powerd.pid"
 BATTERY_PATH="/sys/class/power_supply"
+STATUS_PATH="/tmp/yunsh-power-status.json"
 
 echo "YUNSH: Power daemon starting..."
 
@@ -19,6 +20,7 @@ check_battery() {
             [ -f "$bat/status" ] && status=$(cat "$bat/status")
             
             echo "YUNSH: Battery: ${level}% (${status})"
+            printf '{"available":true,"battery":%s,"status":"%s"}\n' "$level" "$status" > "${STATUS_PATH}.tmp" && mv "${STATUS_PATH}.tmp" "$STATUS_PATH"
             
             # Low battery warning
             if [ "$level" -lt 15 ] && [ "$status" = "Discharging" ]; then
@@ -49,6 +51,7 @@ while true; do
     done
 
     if ! $HAS_BATTERY; then
+        printf '{"available":false,"battery":null}\n' > "${STATUS_PATH}.tmp" && mv "${STATUS_PATH}.tmp" "$STATUS_PATH"
         # No battery - desktop mode, sleep much longer
         sleep 300
         continue

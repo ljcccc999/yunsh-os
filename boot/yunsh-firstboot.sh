@@ -153,7 +153,7 @@ install_apt 8 "Qt6 framework" qt6-base-dev qt6-declarative-dev libqt6svg6 qt6-ba
 install_apt 14 "Python environment" python3-pip python3-smbus
 pip3 install smbus2 2>/dev/null || true
 install_apt 20 "WebEngine" qt6-webengine-dev libqt6webenginequick6 qml6-module-qtwebengine
-install_apt 24 "Android container dependencies" lxc python3-dbus
+install_apt 24 "Android container dependencies" lxc python3-dbus python3-gi
 install_apt 26 "Waydroid" waydroid
 install_apt 32 "Network & BT" network-manager wpasupplicant bluez bluez-utils
 install_apt 38 "System tools" openssh-server avahi-daemon i2c-tools curl wget git python3-pil
@@ -181,7 +181,7 @@ pct 78 "Configuring firewall & SSH..."
 setup_firewall
 
 pct 84 "Enabling YUNSH services..."
-systemctl enable yunsh-os yunsh-local-api yunsh-network yunsh-bluetooth yunsh-update \
+systemctl enable yunsh-os yunsh-local-api yunsh-network yunsh-bluetooth yunsh-update yunsh-link-ble yunsh-glasses-bridge \
     yunsh-appd yunsh-terminal yunsh-headtracking yunsh-bno085-reader yunsh-powerd \
     fstrim.timer 2>/dev/null || true
 

@@ -19,6 +19,7 @@ import time
 SOCKET_PATH = "/tmp/yunsh-bluetooth.sock"
 STATUS_PATH = "/tmp/yunsh-bluetooth-status.json"
 LOG_PATH = "/var/log/yunsh-bluetooth.log"
+GLASSES_CONF_PATH = "/etc/yunsh/glasses.conf"
 
 # Setup logging
 logging.basicConfig(
@@ -275,8 +276,21 @@ def pair_device(mac):
     ])
     paired = "Pairing successful" in output or "successful" in output.lower()
     trusted = "trust succeeded" in output.lower()
+    success = paired or trusted
+    if success:
+        info = get_device_info(mac)
+        # The Pi bridge uses the paired nRF address, not its mutable display name.
+        if info.get("name", "").startswith("YUNSH V1") or info.get("alias", "").startswith("YUNSH V1"):
+            tmp = GLASSES_CONF_PATH + ".tmp"
+            try:
+                with open(tmp, "w") as handle:
+                    handle.write(f"address={mac.upper()}\n")
+                os.replace(tmp, GLASSES_CONF_PATH)
+                log.info("Registered YUNSH V1 glasses controller: %s", mac)
+            except OSError as exc:
+                log.warning("Could not store glasses address: %s", exc)
     return {
-        "success": paired or trusted,
+        "success": success,
         "paired": paired,
         "trusted": trusted,
         "message": "Paired successfully" if (paired or trusted) else "Pairing failed or timeout"

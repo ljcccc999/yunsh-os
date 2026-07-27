@@ -1,0 +1,260 @@
+#!/usr/bin/env python3
+"""YUNSH Link BLE companion service for the Raspberry Pi.
+
+The Pi advertises as ``YUNSH V1`` with a small encrypted GATT service.  It
+bridges update status and explicit update checks to the existing local update
+daemon.  The update image itself is never transferred over Bluetooth: YUNSH OS
+downloads it over its own Wi-Fi connection.
+
+Protocol (all UUIDs are intentionally separate from the glasses controller):
+  F000BB00-0451-4000-B000-000000000000  YUNSH OS service
+  F000BB01-0451-4000-B000-000000000000  encrypted JSON command (write)
+  F000BB02-0451-4000-B000-000000000000  encrypted JSON status  (read/notify)
+"""
+
+import json
+import os
+import socket
+import sys
+
+import dbus
+import dbus.exceptions
+import dbus.mainloop.glib
+import dbus.service
+from gi.repository import GLib
+
+BLUEZ = "org.bluez"
+OM_IFACE = "org.freedesktop.DBus.ObjectManager"
+PROPS_IFACE = "org.freedesktop.DBus.Properties"
+GATT_MANAGER_IFACE = "org.bluez.GattManager1"
+AD_MANAGER_IFACE = "org.bluez.LEAdvertisingManager1"
+SERVICE_IFACE = "org.bluez.GattService1"
+CHAR_IFACE = "org.bluez.GattCharacteristic1"
+AD_IFACE = "org.bluez.LEAdvertisement1"
+UPDATE_SOCKET = "/tmp/yunsh-update.sock"
+GLASSES_STATUS_PATH = "/tmp/yunsh-glasses-status.json"
+POWER_STATUS_PATH = "/tmp/yunsh-power-status.json"
+GLASSES_CONTROL_PATH = "/tmp/yunsh-glasses-control.json"
+APP_PATH = "/top/yunsh/link"
+SERVICE_UUID = "F000BB00-0451-4000-B000-000000000000"
+COMMAND_UUID = "F000BB01-0451-4000-B000-000000000000"
+STATUS_UUID = "F000BB02-0451-4000-B000-000000000000"
+
+
+def update_command(action: str) -> dict:
+    """Call the privileged local update daemon, never shelling user input."""
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            sock.settimeout(15)
+            sock.connect(UPDATE_SOCKET)
+            sock.sendall((json.dumps({"action": action}) + "\n").encode())
+            data = b""
+            while not data.endswith(b"\n"):
+                chunk = sock.recv(4096)
+                if not chunk:
+                    break
+                data += chunk
+        return json.loads(data.decode() or "{}")
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def read_json(path: str) -> dict:
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return {}
+
+
+def write_glasses_brightness(value) -> dict:
+    level = max(0, min(100, int(value)))
+    tmp = GLASSES_CONTROL_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as handle:
+        json.dump({"brightness": level}, handle)
+    os.replace(tmp, GLASSES_CONTROL_PATH)
+    return {"result": "brightness_requested", "brightness": level}
+
+
+def compact_status(result: dict) -> dict:
+    """Keep the BLE payload small enough for common iPhone ATT MTUs."""
+    glasses = read_json(GLASSES_STATUS_PATH)
+    power = read_json(POWER_STATUS_PATH)
+    return {
+        "currentVersion": result.get("current_version", "—"),
+        "latestVersion": result.get("latest_version", "—"),
+        "updateAvailable": bool(result.get("update_available", False)),
+        "state": result.get("state", "error" if result.get("error") else "ready"),
+        "detail": result.get("error", result.get("result", "Ready"))[:72],
+        "glassesConnected": bool(glasses.get("connected", False)),
+        "glassesBattery": glasses.get("battery"),
+        "glassesBrightness": glasses.get("brightness"),
+        "hostBattery": power.get("battery") if power.get("available") else None,
+    }
+
+
+class Application(dbus.service.Object):
+    def __init__(self, bus):
+        self.path = APP_PATH
+        self.services = []
+        super().__init__(bus, self.path)
+
+    def add_service(self, service):
+        self.services.append(service)
+
+    def get_path(self):
+        return dbus.ObjectPath(self.path)
+
+    @dbus.service.method(OM_IFACE, out_signature="a{oa{sa{sv}}}")
+    def GetManagedObjects(self):
+        response = {}
+        for service in self.services:
+            response[service.get_path()] = service.get_properties()
+            for characteristic in service.characteristics:
+                response[characteristic.get_path()] = characteristic.get_properties()
+        return response
+
+
+class Service(dbus.service.Object):
+    def __init__(self, bus, index, uuid):
+        self.path = f"{APP_PATH}/service{index}"
+        self.uuid = uuid
+        self.primary = True
+        self.characteristics = []
+        super().__init__(bus, self.path)
+
+    def get_path(self):
+        return dbus.ObjectPath(self.path)
+
+    def add_characteristic(self, characteristic):
+        self.characteristics.append(characteristic)
+
+    def get_properties(self):
+        return {SERVICE_IFACE: {"UUID": self.uuid, "Primary": self.primary, "Characteristics": dbus.Array([c.get_path() for c in self.characteristics], signature="o")}}
+
+
+class Characteristic(dbus.service.Object):
+    def __init__(self, bus, index, uuid, service, flags):
+        self.path = f"{service.path}/char{index}"
+        self.uuid = uuid
+        self.service = service
+        self.flags = flags
+        super().__init__(bus, self.path)
+
+    def get_path(self):
+        return dbus.ObjectPath(self.path)
+
+    def get_properties(self):
+        return {CHAR_IFACE: {"Service": self.service.get_path(), "UUID": self.uuid, "Flags": dbus.Array(self.flags, signature="s")}}
+
+    @dbus.service.method(PROPS_IFACE, in_signature="s", out_signature="a{sv}")
+    def GetAll(self, interface):
+        if interface != CHAR_IFACE:
+            raise dbus.exceptions.DBusException("org.freedesktop.DBus.Error.InvalidArgs", "Invalid interface")
+        return self.get_properties()[CHAR_IFACE]
+
+
+class StatusCharacteristic(Characteristic):
+    def __init__(self, bus, index, service):
+        super().__init__(bus, index, STATUS_UUID, service, ["encrypt-read", "notify"])
+        self.notifying = False
+        self.value = self._encode(update_command("get_status"))
+
+    def _encode(self, result):
+        return dbus.Array(json.dumps(compact_status(result), separators=(",", ":")).encode(), signature="y")
+
+    def refresh(self, result=None):
+        self.value = self._encode(result if result is not None else update_command("get_status"))
+        if self.notifying:
+            self.PropertiesChanged(CHAR_IFACE, {"Value": self.value}, [])
+
+    @dbus.service.method(CHAR_IFACE, in_signature="a{sv}", out_signature="ay")
+    def ReadValue(self, _options):
+        self.refresh()
+        return self.value
+
+    @dbus.service.method(CHAR_IFACE)
+    def StartNotify(self):
+        self.notifying = True
+        self.refresh()
+
+    @dbus.service.method(CHAR_IFACE)
+    def StopNotify(self):
+        self.notifying = False
+
+    @dbus.service.signal(PROPS_IFACE, signature="sa{sv}as")
+    def PropertiesChanged(self, interface, changed, invalidated):
+        pass
+
+
+class CommandCharacteristic(Characteristic):
+    def __init__(self, bus, index, service, status):
+        super().__init__(bus, index, COMMAND_UUID, service, ["encrypt-write"])
+        self.status = status
+
+    @dbus.service.method(CHAR_IFACE, in_signature="aya{sv}")
+    def WriteValue(self, value, _options):
+        try:
+            payload = json.loads(bytes(value).decode())
+            action = payload.get("action")
+            if action == "set_glasses_brightness":
+                self.status.refresh(write_glasses_brightness(payload.get("value")))
+                return
+            if action not in {"get_status", "check"}:
+                raise ValueError("unsupported command")
+            self.status.refresh(update_command(action))
+        except Exception as exc:
+            self.status.refresh({"error": str(exc)})
+
+
+class Advertisement(dbus.service.Object):
+    def __init__(self, bus):
+        self.path = f"{APP_PATH}/advertisement0"
+        super().__init__(bus, self.path)
+
+    def get_path(self):
+        return dbus.ObjectPath(self.path)
+
+    def get_properties(self):
+        return {AD_IFACE: {"Type": "peripheral", "ServiceUUIDs": dbus.Array([SERVICE_UUID], signature="s"), "LocalName": "YUNSH V1"}}
+
+    @dbus.service.method(PROPS_IFACE, in_signature="s", out_signature="a{sv}")
+    def GetAll(self, interface):
+        if interface != AD_IFACE:
+            raise dbus.exceptions.DBusException("org.freedesktop.DBus.Error.InvalidArgs", "Invalid interface")
+        return self.get_properties()[AD_IFACE]
+
+    @dbus.service.method(AD_IFACE)
+    def Release(self):
+        pass
+
+
+def find_adapter(bus):
+    objects = dbus.Interface(bus.get_object(BLUEZ, "/"), OM_IFACE).GetManagedObjects()
+    for path, interfaces in objects.items():
+        if GATT_MANAGER_IFACE in interfaces and AD_MANAGER_IFACE in interfaces:
+            return path
+    raise RuntimeError("No BLE GATT-capable BlueZ adapter found")
+
+
+def main():
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    bus = dbus.SystemBus()
+    adapter = find_adapter(bus)
+    app = Application(bus)
+    service = Service(bus, 0, SERVICE_UUID)
+    status = StatusCharacteristic(bus, 0, service)
+    service.add_characteristic(CommandCharacteristic(bus, 0, service, status))
+    service.add_characteristic(status)
+    app.add_service(service)
+    advertisement = Advertisement(bus)
+
+    gatt = dbus.Interface(bus.get_object(BLUEZ, adapter), GATT_MANAGER_IFACE)
+    advertising = dbus.Interface(bus.get_object(BLUEZ, adapter), AD_MANAGER_IFACE)
+    gatt.RegisterApplication(app.get_path(), {}, reply_handler=lambda: None, error_handler=lambda err: sys.exit(f"GATT registration failed: {err}"))
+    advertising.RegisterAdvertisement(advertisement.get_path(), {}, reply_handler=lambda: None, error_handler=lambda err: sys.exit(f"Advertisement failed: {err}"))
+    GLib.MainLoop().run()
+
+
+if __name__ == "__main__":
+    main()

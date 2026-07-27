@@ -437,6 +437,8 @@ add_file "${YUNSH_DIR}/system/yunsh-update-daemon.py" "/usr/bin/yunsh-update-dae
 add_file "${YUNSH_DIR}/system/yunsh-updater.py" "/usr/bin/yunsh-updater"
 add_file "${YUNSH_DIR}/system/yunsh-network-daemon.py" "/usr/bin/yunsh-network-daemon"
 add_file "${YUNSH_DIR}/system/yunsh-bluetooth-daemon.py" "/usr/bin/yunsh-bluetooth-daemon"
+add_file "${YUNSH_DIR}/system/yunsh-link-ble.py" "/usr/bin/yunsh-link-ble"
+add_file "${YUNSH_DIR}/system/yunsh-glasses-bridge.py" "/usr/bin/yunsh-glasses-bridge"
 add_file "${YUNSH_DIR}/system/yunsh-headtracking" "/usr/bin/yunsh-headtracking"
 add_file "${YUNSH_DIR}/system/yunsh-bno085-reader" "/usr/bin/yunsh-bno085-reader"
 add_file "${YUNSH_DIR}/system/yunsh-headtracking-sim" "/usr/bin/yunsh-headtracking-sim"
@@ -635,6 +637,40 @@ User=root
 WantedBy=multi-user.target
 BSVC
 add_file "${BSVC_FILE}" "/etc/systemd/system/yunsh-bluetooth.service"
+
+LINKSVC_FILE="${BUILD_DIR}/yunsh-link-ble.service"
+cat > "${LINKSVC_FILE}" << 'LINKSVC'
+[Unit]
+Description=YUNSH Link Bluetooth Companion
+After=bluetooth.service yunsh-update.service
+Wants=bluetooth.service
+[Service]
+Type=simple
+ExecStart=/usr/bin/yunsh-link-ble
+Restart=always
+RestartSec=3
+User=root
+[Install]
+WantedBy=multi-user.target
+LINKSVC
+add_file "${LINKSVC_FILE}" "/etc/systemd/system/yunsh-link-ble.service"
+
+GLASSESSVC_FILE="${BUILD_DIR}/yunsh-glasses-bridge.service"
+cat > "${GLASSESSVC_FILE}" << 'GLASSESSVC'
+[Unit]
+Description=YUNSH V1 Glasses Bluetooth Bridge
+After=bluetooth.service yunsh-bluetooth.service yunsh-headtracking.service
+Wants=bluetooth.service yunsh-headtracking.service
+[Service]
+Type=simple
+ExecStart=/usr/bin/yunsh-glasses-bridge
+Restart=always
+RestartSec=3
+User=root
+[Install]
+WantedBy=multi-user.target
+GLASSESSVC
+add_file "${GLASSESSVC_FILE}" "/etc/systemd/system/yunsh-glasses-bridge.service"
 
 # Update daemon
 USVC_FILE="${BUILD_DIR}/yunsh-update.service"
