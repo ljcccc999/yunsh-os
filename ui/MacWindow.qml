@@ -24,6 +24,25 @@ Rectangle {
     // "following" = follows user's gaze (always in view)
     property string pinMode: "pinned"
 
+    // ─── Spatial window placement (3DoF) ─────────────────
+    // These are view-relative presets: they create a readable 2.5D desktop
+    // on the existing single-display pipeline.  They are not world anchors;
+    // stable room anchoring needs a future 6DoF visual tracking system.
+    property string spatialPlacement: "front" // front, left, right, far
+    property real spatialYaw: spatialPlacement === "left" ? -20
+                            : spatialPlacement === "right" ? 20 : 0
+    property real spatialOffsetX: spatialPlacement === "left" ? -300
+                                : spatialPlacement === "right" ? 300 : 0
+    property real spatialScale: spatialPlacement === "far" ? 0.76
+                               : spatialPlacement === "left" || spatialPlacement === "right" ? 0.88 : 1.0
+
+    function cycleSpatialPlacement() {
+        if (spatialPlacement === "front") spatialPlacement = "left"
+        else if (spatialPlacement === "left") spatialPlacement = "right"
+        else if (spatialPlacement === "right") spatialPlacement = "far"
+        else spatialPlacement = "front"
+    }
+
     // ─── 3DoF Head Tracking ───────────────────────────────
     // Current head rotation (set by main.qml from IMU daemon)
     property real headYaw: 0.0
@@ -52,6 +71,7 @@ Rectangle {
     // ─── Materialize Animation (Apple: glass surfaces materialize, don't just fade) ──
     property bool animateEnter: true
     property bool isClosing: false
+    property real entranceScale: 1.0
 
     // Window open: scale 0.95 + fade in
     transform: [
@@ -59,11 +79,21 @@ Rectangle {
             id: winScale
             origin.x: macWindow.width / 2
             origin.y: macWindow.height / 2
-            xScale: 1.0
-            yScale: 1.0
+            xScale: macWindow.spatialScale * macWindow.entranceScale
+            yScale: macWindow.spatialScale * macWindow.entranceScale
+            Behavior on xScale { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+            Behavior on yScale { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+        },
+        Rotation {
+            id: spatialRotation
+            origin.x: macWindow.width / 2
+            origin.y: macWindow.height / 2
+            axis { x: 0; y: 1; z: 0 }
+            angle: macWindow.spatialYaw
+            Behavior on angle { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
         },
         Translate {
-            x: macWindow.computeHeadOffsetX()
+            x: macWindow.computeHeadOffsetX() + macWindow.spatialOffsetX
             y: macWindow.computeHeadOffsetY()
         }
     ]
@@ -71,13 +101,11 @@ Rectangle {
     // Open animation (replaces original translate transform)
     Component.onCompleted: {
         if (animateEnter) {
-            winScale.xScale = 0.95
-            winScale.yScale = 0.95
+            macWindow.entranceScale = 0.95
             macWindow.opacity = 0
         }
         // Animate in immediately
-        winScale.xScale = 1.0
-        winScale.yScale = 1.0
+        macWindow.entranceScale = 1.0
         macWindow.opacity = 1.0
     }
 
@@ -85,8 +113,7 @@ Rectangle {
     function animateOut(callback) {
         if (isClosing) return
         isClosing = true
-        winScale.xScale = 0.92
-        winScale.yScale = 0.92
+        macWindow.entranceScale = 0.92
         macWindow.opacity = 0
         closeAnimCallback = callback || function(){}
     }
@@ -224,6 +251,46 @@ Rectangle {
                         onExited: parent.color = "#2BC840"
                         onClicked: macWindow.fullscreenClicked()
                     }
+                }
+            }
+
+            // Spatial placement selector: front → left → right → far.
+            Rectangle {
+                id: spatialButton
+                anchors.right: pinButton.left; anchors.rightMargin: 10
+                anchors.verticalCenter: parent.verticalCenter
+                width: 32; height: 32; radius: 8
+                color: spatialButtonMouse.containsMouse
+                    ? Qt.rgba(0/255, 212/255, 255/255, 0.18)
+                    : Qt.rgba(1, 1, 1, 0.04)
+                border.color: macWindow.spatialPlacement === "front"
+                    ? Qt.rgba(1, 1, 1, 0.06)
+                    : Qt.rgba(0/255, 212/255, 255/255, 0.32)
+
+                Text {
+                    anchors.centerIn: parent
+                    text: macWindow.spatialPlacement === "left" ? "◀"
+                        : macWindow.spatialPlacement === "right" ? "▶"
+                        : macWindow.spatialPlacement === "far" ? "◌" : "▣"
+                    color: macWindow.spatialPlacement === "front" ? Qt.rgba(1, 1, 1, 0.65) : "#00D4FF"
+                    font.pixelSize: 14
+                }
+                MouseArea {
+                    id: spatialButtonMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: macWindow.cycleSpatialPlacement()
+                }
+                Text {
+                    anchors.top: parent.bottom; anchors.topMargin: 6
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: macWindow.spatialPlacement === "front" ? "空间位置：正前"
+                        : macWindow.spatialPlacement === "left" ? "空间位置：左侧"
+                        : macWindow.spatialPlacement === "right" ? "空间位置：右侧" : "空间位置：远处"
+                    color: Qt.rgba(1, 1, 1, 0.55)
+                    font.pixelSize: 10
+                    visible: spatialButtonMouse.containsMouse
                 }
             }
 
