@@ -1,15 +1,14 @@
 #!/bin/bash
-# YUNSH OS dedicated Qt Quick launcher for Raspberry Pi DRM/KMS.
+# YUNSH OS Qt Quick launcher on a Wayland compositor.
 set -u
 
 cd /usr/share/yunsh/ui || exit 1
 
-export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-eglfs}"
-export QT_QPA_EGLFS_INTEGRATION="${QT_QPA_EGLFS_INTEGRATION:-eglfs_kms}"
-export QT_QPA_EGLFS_ALWAYS_SET_MODE=1
+export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-wayland}"
 export QTWEBENGINE_DISABLE_SANDBOX=1
 export QTWEBENGINE_CHROMIUM_FLAGS="${QTWEBENGINE_CHROMIUM_FLAGS:---no-sandbox --disable-dev-shm-usage}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/yunsh-runtime}"
+export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
 
 install -d -m 0700 "$XDG_RUNTIME_DIR"
 install -d -o yunsh -g yunsh /home/yunsh/Pictures/Screenshots 2>/dev/null || \
@@ -33,6 +32,26 @@ if [ ! -f /etc/yunsh/.packages_installed ]; then
 fi
 
 /usr/bin/yunsh-disk-helper 2>/dev/null || true
+
+# Waydroid requires a real Wayland session. Weston owns DRM/KMS and composes
+# both the YUNSH shell and Android surfaces on the same display.
+if ! command -v weston >/dev/null 2>&1; then
+    echo "YUNSH: Weston is not installed." >&2
+    exit 1
+fi
+if [ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]; then
+    weston --backend=drm-backend.so --shell=kiosk-shell.so \
+        --socket="$WAYLAND_DISPLAY" --idle-time=0 \
+        >>/var/log/yunsh-weston.log 2>&1 &
+    for _ in $(seq 1 50); do
+        [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && break
+        sleep 0.1
+    done
+fi
+[ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] || {
+    echo "YUNSH: Wayland compositor failed to start." >&2
+    exit 1
+}
 
 while true; do
     if [ -f /etc/yunsh/.activated ]; then

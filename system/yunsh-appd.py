@@ -19,8 +19,7 @@ SCREENSHOT_DIR = os.environ.get(
 APP_MAP = {
     "appstore": {
         "type": "waydroid",
-        "package": "com.tencent.android.qqdownloader",
-        "name": "应用宝"
+        "name": "Android Apps"
     },
 }
 
@@ -112,15 +111,9 @@ class AppHandler(BaseHTTPRequestHandler):
         app = APP_MAP[app_id]
         try:
             if app["type"] == "waydroid":
-                # Ensure Waydroid session is running
-                subprocess.run(
-                    ["waydroid", "session", "start"],
-                    capture_output=True, timeout=30
-                )
-                time.sleep(1)
                 result = subprocess.run(
-                    ["waydroid", "app", "launch", app["package"]],
-                    capture_output=True, text=True, timeout=30
+                    ["/usr/bin/yunsh-android", "launch-store"],
+                    capture_output=True, text=True, timeout=120
                 )
             else:
                 return {"status": "error", "message": f"Unknown type: {app['type']}"}

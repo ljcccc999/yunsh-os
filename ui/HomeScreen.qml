@@ -31,7 +31,7 @@ Item {
         { name: "设置", icon: "settings.svg",        color: "#00D4FF",   action: "settings" },
         { name: "Browser", icon: "settings.svg",      color: "#4CAF50",   action: "browser" },
         { name: "Metaverse", icon: "metaverse.svg",   color: "#9C27B0",   action: "metaverse" },
-        { name: "应用宝", icon: "appstore.svg",        color: "#FF9800",   action: "appstore" },
+        { name: "Android Apps", icon: "appstore.svg", color: "#FF9800",   action: "appstore" },
         { name: "文件", icon: "files.svg",             color: "#2196F3",   action: "files" },
         { name: "终端", icon: "terminal.svg",          color: "#00D4FF",   action: "terminal" },
         { name: "相册", icon: "photos.svg",            color: "#FFC107",   action: "photos" }

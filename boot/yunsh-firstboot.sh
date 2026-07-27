@@ -148,15 +148,14 @@ install_apt 8 "Qt6 framework" qt6-base-dev qt6-declarative-dev libqt6svg6 libqt6
 install_apt 14 "Python environment" python3-pip python3-smbus
 pip3 install smbus2 2>/dev/null || true
 install_apt 20 "WebEngine" qt6-webengine-dev libqt6webenginequick6 qml6-module-qtwebengine
-install_apt 24 "Android container dependencies" lxc python3-dbus python3-gi
+install_apt 24 "Android display and container runtime" lxc python3-dbus python3-gi weston libwayland-client0 qml6-module-qtwayland-compositor qt6-wayland
 install_apt 32 "Network & BT" network-manager wpasupplicant bluez
-install_apt 38 "System tools" openssh-server avahi-daemon i2c-tools curl wget git python3-pil
+install_apt 38 "System tools" openssh-server avahi-daemon i2c-tools curl wget git unzip python3-pil
 install_apt 44 "Chinese fonts" fonts-noto-cjk
 install_apt 50 "Audio" pulseaudio alsa-utils
 install_apt 56 "OpenGL" mesa-utils libgl1-mesa-dri
 
-# Waydroid is hosted in its official repository, not Debian main. Keep this
-# optional so an Android repository outage can never block the YUNSH desktop.
+# Waydroid and a working Android image are core YUNSH OS components.
 pct 58 "Preparing Android runtime..."
 if ! command -v waydroid >/dev/null 2>&1; then
     curl -fsSL --connect-timeout 10 --max-time 30 \
@@ -167,10 +166,21 @@ if ! command -v waydroid >/dev/null 2>&1; then
     apt-get update -qq 2>/dev/null &&
     apt-get install -yqq --no-install-recommends waydroid 2>/dev/null || true
 fi
+command -v waydroid >/dev/null 2>&1 || {
+    echo "  [ERROR] Android runtime installation failed."
+    rm -f /etc/yunsh/.firstboot_partial
+    exit 1
+}
 
 pct 62 "Configuring Waydroid..."
-command -v waydroid >/dev/null 2>&1 &&
-    timeout 120 waydroid init </dev/null 2>/dev/null || true
+if [ ! -f /var/lib/waydroid/waydroid.cfg ]; then
+    timeout 1800 waydroid init -s FOSS </dev/null ||
+    timeout 1800 waydroid init </dev/null || {
+        echo "  [ERROR] Android system image initialization failed."
+        rm -f /etc/yunsh/.firstboot_partial
+        exit 1
+    }
+fi
 
 pct 68 "Starting core services..."
 systemctl enable NetworkManager bluetooth ssh 2>/dev/null || true
@@ -198,25 +208,21 @@ ssh-keygen -A 2>/dev/null || true
 echo "yunsh-v1" > /etc/hostname
 hostname yunsh-v1 2>/dev/null || true
 
-pct 92 "Installing application store..."
-APK_PATH=/usr/share/yunsh/apps/appstore.apk
-APK_SIZE=$(stat -c%s "$APK_PATH" 2>/dev/null || echo 0)
-if [ "$APK_SIZE" -lt 100000 ]; then
-    curl -fL --connect-timeout 10 --max-time 120 \
-        -o "$APK_PATH" \
-        "https://appdownload.myapp.com/myapp/1104466820/sgame/20191217/com.tencent.android.qqdownloader.apk" \
-        2>/dev/null || true
-fi
-if [ -f "$APK_PATH" ]; then
-    APK_SIZE=$(stat -c%s "$APK_PATH" 2>/dev/null || echo 0)
-    [ "$APK_SIZE" -gt 100000 ] && waydroid app install "$APK_PATH" 2>/dev/null || true
-fi
+pct 92 "Preparing Android application store..."
+# Installation occurs after Weston is available. A verified F-Droid APK is
+# embedded by the image builder, so App installation never depends on Tencent's
+# frequently changing download URL.
+[ -x /usr/bin/yunsh-android ] || {
+    echo "  [ERROR] Android application controller is missing."
+    rm -f /etc/yunsh/.firstboot_partial
+    exit 1
+}
 
 pct 98 "Cleaning up..."
 rm -f /etc/yunsh/.firstboot_partial 2>/dev/null || true
 
 pct 100 "Setup complete! Rebooting..."
-CORE_PACKAGES="qml-qt6 libqt6opengl6 qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-shapes qml6-module-qtwebengine"
+CORE_PACKAGES="qml-qt6 libqt6opengl6 qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-shapes qml6-module-qtwebengine qt6-wayland weston waydroid unzip"
 CORE_MISSING=""
 for package in $CORE_PACKAGES; do
     dpkg-query -W -f='${Status}' "$package" 2>/dev/null |

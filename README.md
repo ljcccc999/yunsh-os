@@ -34,7 +34,8 @@ Spatial layouts are view-relative: head rotation preserves the desktop arrangeme
 - Persistent PTY terminal.
 - Screenshot capture with in-context preview and photo library.
 - Settings, system information, update center, network, and Bluetooth management.
-- Optional Android runtime integration through Waydroid. Android applications require a compatible Wayland session and must be validated separately on the target hardware.
+- Integrated Android application environment through Waydroid on the YUNSH Wayland session.
+- Built-in Android app catalogue with a verified F-Droid fallback, plus APK side-loading through `yunsh-android install-apk`.
 
 ### Device services
 
@@ -63,7 +64,7 @@ AR Display
 Raspberry Pi 5
     ├── YUNSH OS shell · Qt Quick workspace · application windows
     ├── System services · network · Bluetooth · updates · power
-    ├── Optional Waydroid application environment
+    ├── Wayland-composited Waydroid application environment
     └── Optional Bluetooth motion controller → head-tracking service
 ```
 

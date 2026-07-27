@@ -86,10 +86,11 @@ for name in ['yunsh-splash-logo.bmp', 'yunsh-splash-full.bmp', 'yunsh-splash-ful
 "
 }
 
-# ─── Step 5: Download 应用宝 APK (best-effort) ──
+# ─── Step 5: Download a verified Android app store ──
 echo ""
-echo "=== Downloading 应用宝 APK ==="
+echo "=== Downloading Android app store ==="
 APK_FILE="${BUILD_DIR}/apps/appstore.apk"
+FDROID_FILE="${BUILD_DIR}/apps/fdroid.apk"
 mkdir -p "${BUILD_DIR}/apps"
 if [ ! -f "$APK_FILE" ] || [ "$(stat -f%z "$APK_FILE" 2>/dev/null || echo 0)" -lt 1000000 ]; then
     for url in \
@@ -99,10 +100,25 @@ if [ ! -f "$APK_FILE" ] || [ "$(stat -f%z "$APK_FILE" 2>/dev/null || echo 0)" -l
         curl -L -o "${APK_FILE}" --max-time 30 "$url" 2>/dev/null && break || true
     done
     if [ ! -f "$APK_FILE" ] || [ "$(stat -f%z "$APK_FILE" 2>/dev/null || echo 0)" -lt 100000 ]; then
-        echo "placeholder" > "$APK_FILE"
-        echo "  ⚠ 使用运行时下载方式"
+        rm -f "$APK_FILE"
+        echo "  Tencent Appstore unavailable; using F-Droid"
     fi
 fi
+if [ ! -f "$FDROID_FILE" ] || [ "$(stat -f%z "$FDROID_FILE" 2>/dev/null || echo 0)" -lt 1000000 ]; then
+    curl -fL --connect-timeout 15 --max-time 300 \
+        -o "${FDROID_FILE}.download" https://f-droid.org/F-Droid.apk
+    mv "${FDROID_FILE}.download" "$FDROID_FILE"
+fi
+python3 - "$FDROID_FILE" <<'PY'
+import os, sys, zipfile
+p = sys.argv[1]
+if os.path.getsize(p) < 1_000_000 or not zipfile.is_zipfile(p):
+    raise SystemExit("ERROR: downloaded F-Droid file is not a valid APK")
+with zipfile.ZipFile(p) as z:
+    if "AndroidManifest.xml" not in z.namelist():
+        raise SystemExit("ERROR: APK has no AndroidManifest.xml")
+print(f"  ✓ verified APK container ({os.path.getsize(p)} bytes)")
+PY
 
 # ─── Step 6: Inject boot partition (mtools) ────────
 echo ""
@@ -154,7 +170,7 @@ CMDLINE=$(printf '%s\n' "${CMDLINE}" | sed -E \
     -e 's/(^| )console=tty1( |$)/ /g' \
     -e 's/(^| )(quiet|splash|logo\.nologo|consoleblank=[^ ]+|loglevel=[^ ]+|systemd\.show_status=[^ ]+|systemd\.log_target=[^ ]+|vt\.global_cursor_default=[^ ]+|cma=[^ ]+)( |$)/ /g' \
     -e 's/  +/ /g')
-echo "${CMDLINE} quiet splash logo.nologo consoleblank=0 loglevel=3 vt.global_cursor_default=0 cma=256M systemd.show_status=false" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
+echo "${CMDLINE} quiet splash logo.nologo consoleblank=0 loglevel=3 vt.global_cursor_default=0 cma=256M psi=1 systemd.show_status=false" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
 mdel -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null || true
 mcopy -i "${BOOT_IMG}" "${BUILD_DIR}/yunsh-cmdline-new.txt" ::/cmdline.txt
 echo "  ✓ cmdline.txt modified"
@@ -239,6 +255,7 @@ add_file "${YUNSH_DIR}/system/yunsh-inputd" "/usr/bin/yunsh-inputd"
 add_file "${YUNSH_DIR}/system/yunsh-powerd" "/usr/bin/yunsh-powerd"
 add_file "${YUNSH_DIR}/system/yunsh-activation-helper" "/usr/bin/yunsh-activation-helper"
 add_file "${YUNSH_DIR}/system/yunsh-appd.py" "/usr/bin/yunsh-appd"
+add_file "${YUNSH_DIR}/system/yunsh-android" "/usr/bin/yunsh-android"
 add_file "${YUNSH_DIR}/system/yunsh-terminal.py" "/usr/bin/yunsh-terminal"
 add_file "${YUNSH_DIR}/system/yunsh-disk-helper" "/usr/bin/yunsh-disk-helper"
 add_file "${YUNSH_DIR}/system/yunsh-logrotate.conf" "/etc/logrotate.d/yunsh"
@@ -246,16 +263,15 @@ add_file "${YUNSH_DIR}/.gitignore" "/root/.gitignore"
 add_file "${YUNSH_DIR}/boot/yunsh-firstboot.sh" "/usr/bin/yunsh-firstboot.sh"
 add_file "${YUNSH_DIR}/boot/yunsh-iptables.sh" "/usr/bin/yunsh-iptables.sh"
 
-# APK
+# Android application stores
 APK_FILE="${BUILD_DIR}/apps/appstore.apk"
+FDROID_FILE="${BUILD_DIR}/apps/fdroid.apk"
 if [ -f "$APK_FILE" ] && [ "$(stat -f%z "$APK_FILE" 2>/dev/null || stat -c%s "$APK_FILE" 2>/dev/null)" -gt 1000000 ]; then
     add_file "$APK_FILE" "/usr/share/yunsh/apps/appstore.apk"
-    echo "  应用宝 APK injected (real)"
-else
-    echo "placeholder" > "${BUILD_DIR}/apps/appstore.apk"
-    add_file "${BUILD_DIR}/apps/appstore.apk" "/usr/share/yunsh/apps/appstore.apk"
-    echo "  应用宝 APK 占位"
+    echo "  Tencent Appstore APK injected"
 fi
+add_file "$FDROID_FILE" "/usr/share/yunsh/apps/fdroid.apk"
+echo "  F-Droid APK injected (verified fallback)"
 
 # Launcher script
 LAUNCHER_FILE="${BUILD_DIR}/yunsh-ui-launcher"
@@ -586,7 +602,7 @@ for bin in yunsh-update-daemon yunsh-updater yunsh-network-daemon yunsh-bluetoot
            yunsh-screenshotd yunsh-factory-reset yunsh-install-progress.sh yunsh-inputd \
            yunsh-powerd yunsh-firstboot.sh yunsh-iptables.sh yunsh-ui-launcher yunsh-splash \
            yunsh-appd yunsh-terminal yunsh-disk-helper yunsh-headtracking yunsh-headtracking-sim \
-           yunsh-bno085-reader yunsh-activation-helper; do
+           yunsh-bno085-reader yunsh-activation-helper yunsh-android; do
     echo "set_inode_field /usr/bin/${bin} mode 0100755" >> "${DEBUGFS_SCRIPT}"
 done
 echo "set_inode_field /etc/rc.local mode 0100755" >> "${DEBUGFS_SCRIPT}"

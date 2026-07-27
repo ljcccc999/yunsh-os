@@ -1,0 +1,96 @@
+#!/bin/bash
+# YUNSH OS Android runtime controller.
+set -u
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/yunsh-runtime}"
+export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
+STORE_DIR="${YUNSH_ANDROID_STORE_DIR:-/usr/share/yunsh/apps}"
+STATE_DIR="${YUNSH_ANDROID_STATE_DIR:-/var/lib/yunsh}"
+WAYDROID_DATA_DIR="${YUNSH_WAYDROID_DATA_DIR:-/var/lib/waydroid}"
+FDROID_APK="$STORE_DIR/fdroid.apk"
+TENCENT_APK="$STORE_DIR/appstore.apk"
+
+mkdir -p "$XDG_RUNTIME_DIR" "$STORE_DIR" "$STATE_DIR"
+chmod 0700 "$XDG_RUNTIME_DIR"
+
+valid_apk() {
+    [ -f "$1" ] &&
+        [ "$(stat -c%s "$1" 2>/dev/null || echo 0)" -gt 1000000 ] &&
+        unzip -p "$1" AndroidManifest.xml >/dev/null 2>&1
+}
+
+wait_ready() {
+    local count=0
+    while [ "$count" -lt 90 ]; do
+        waydroid status 2>/dev/null | grep -q "Session:.*RUNNING" && return 0
+        count=$((count + 1))
+        sleep 1
+    done
+    return 1
+}
+
+ensure_runtime() {
+    command -v waydroid >/dev/null 2>&1 || {
+        echo "Android runtime is not installed" >&2
+        return 1
+    }
+    [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] || {
+        echo "Wayland display is not ready" >&2
+        return 1
+    }
+    [ -f "$WAYDROID_DATA_DIR/waydroid.cfg" ] || {
+        echo "Android runtime is not initialized" >&2
+        return 1
+    }
+    systemctl start waydroid-container.service >/dev/null 2>&1 || true
+    if ! waydroid status 2>/dev/null | grep -q "Session:.*RUNNING"; then
+        nohup waydroid session start >>/var/log/yunsh-android.log 2>&1 &
+    fi
+    wait_ready
+}
+
+install_store() {
+    ensure_runtime || return 1
+    if valid_apk "$TENCENT_APK"; then
+        waydroid app install "$TENCENT_APK" &&
+            touch "$STATE_DIR/.tencent-appstore-installed"
+    fi
+    if valid_apk "$FDROID_APK"; then
+        waydroid app install "$FDROID_APK" &&
+            touch "$STATE_DIR/.fdroid-installed"
+    fi
+    waydroid app list 2>/dev/null |
+        grep -Eq 'com\.tencent\.android\.qqdownloader|org\.fdroid\.fdroid'
+}
+
+launch_store() {
+    ensure_runtime || return 1
+    local packages
+    packages="$(waydroid app list 2>/dev/null || true)"
+    if echo "$packages" | grep -q 'com.tencent.android.qqdownloader'; then
+        exec waydroid app launch com.tencent.android.qqdownloader
+    fi
+    if ! echo "$packages" | grep -q 'org.fdroid.fdroid'; then
+        install_store || return 1
+    fi
+    exec waydroid app launch org.fdroid.fdroid
+}
+
+case "${1:-status}" in
+    ensure) ensure_runtime ;;
+    install-store) install_store ;;
+    launch-store) launch_store ;;
+    install-apk)
+        [ -n "${2:-}" ] && valid_apk "$2" || {
+            echo "A valid APK path is required" >&2
+            exit 2
+        }
+        ensure_runtime && waydroid app install "$2"
+        ;;
+    status)
+        ensure_runtime >/dev/null &&
+            waydroid app list 2>/dev/null |
+            grep -Eq 'com\.tencent\.android\.qqdownloader|org\.fdroid\.fdroid'
+        ;;
+    *) echo "Usage: yunsh-android {ensure|install-store|launch-store|install-apk PATH|status}" >&2; exit 2 ;;
+esac

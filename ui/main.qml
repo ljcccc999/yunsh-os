@@ -32,7 +32,7 @@ ApplicationWindow {
         "metaverse": { name: "Metaverse", icon: "/usr/share/yunsh/icons/metaverse.svg", color: "#9C27B0" },
         "terminal": { name: "终端", icon: "/usr/share/yunsh/icons/terminal.svg", color: "#00D4FF" },
         "photos": { name: "相册", icon: "/usr/share/yunsh/icons/photos.svg", color: "#FFC107" },
-        "appstore": { name: "应用宝", icon: "/usr/share/yunsh/icons/appstore.svg", color: "#FF9800" },
+        "appstore": { name: "Android Apps", icon: "/usr/share/yunsh/icons/appstore.svg", color: "#FF9800" },
         "files": { name: "文件", icon: "/usr/share/yunsh/icons/files.svg", color: "#2196F3" },
         "update": { name: "系统更新", icon: "/usr/share/yunsh/icons/update.svg", color: "#00D4FF" },
         "about": { name: "关于", icon: "/usr/share/yunsh/icons/about.svg", color: "#607D8B" },
