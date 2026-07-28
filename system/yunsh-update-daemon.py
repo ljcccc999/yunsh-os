@@ -181,6 +181,7 @@ def _github_api(channel: str, mirror: str = "") -> str:
 def _parse_release(data: dict) -> dict:
     tag = data.get("tag_name", "")
     published = data.get("published_at", "")
+    updated = data.get("updated_at", published)
     body = data.get("body", "")
     prerelease = data.get("prerelease", False)
     assets = data.get("assets", [])
@@ -214,6 +215,9 @@ def _parse_release(data: dict) -> dict:
         "changelog": body,
         "sha256": sha256,
         "published_at": published,
+        # A public release can rebuild v1.0.3 without changing its product
+        # version. Keep an internal date revision for same-version OTA.
+        "build": _build_key(updated),
         "prerelease": prerelease,
         "asset_id": asset_id,
     }
@@ -264,6 +268,12 @@ def _compare_versions(v1: str, v2: str) -> int:
     if suffix1 > suffix2:
         return 1
     return 0
+
+
+def _build_key(value: str) -> int:
+    """Normalize YYYY.MM.DD / ISO-8601 build metadata to YYYYMMDD."""
+    digits = "".join(re.findall(r"\d", str(value)))
+    return int(digits[:8]) if len(digits) >= 8 else 0
 
 
 def wifi_connected() -> bool:
@@ -345,6 +355,18 @@ def current_version() -> str:
             return info.get("current_version", "")
     except (FileNotFoundError, json.JSONDecodeError):
         return ""
+
+
+def current_build() -> int:
+    """Read the internal build revision while preserving VERSION for users."""
+    try:
+        with open("/etc/yunsh/version.conf", encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("BUILD="):
+                    return _build_key(line.split("=", 1)[1].strip())
+    except OSError:
+        pass
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -454,7 +476,9 @@ class UpdateDaemon:
         status = {
             "state": self._state,
             "current_version": current_version(),
+            "current_build": current_build(),
             "latest_version": "",
+            "latest_build": 0,
             "update_available": self._update_available,
             "last_check_ts": self._last_check_ts,
             "auto_update": self._config.get("auto_update", False),
@@ -463,6 +487,7 @@ class UpdateDaemon:
         }
         if self._latest_release:
             status["latest_version"] = self._latest_release.get("version", "")
+            status["latest_build"] = self._latest_release.get("build", 0)
             status["latest_tag"] = self._latest_release.get("tag_name", "")
             status["changelog"] = self._latest_release.get("changelog", "")
             status["download_url"] = self._latest_release.get("download_url", "")
@@ -571,12 +596,17 @@ class UpdateDaemon:
             return
 
         cur = current_version()
+        cur_build = current_build()
         latest = release.get("version", "")
+        latest_build = int(release.get("build", 0) or 0)
         is_newer = (_compare_versions(latest, cur) > 0) if cur else True
         is_major = is_major_update(cur, latest) if (cur and latest) else False
         allow_major = self._config.get("allow_major_update", True)
 
-        available = bool(latest) and latest != cur and is_newer
+        available = bool(latest) and (
+            (latest != cur and is_newer)
+            or (latest == cur and latest_build > cur_build)
+        )
         if available and is_major and not allow_major:
             logger.info("Major update blocked by user setting: v%s → v%s", cur, latest)
             available = False
@@ -590,7 +620,9 @@ class UpdateDaemon:
         # Persist update-info.json
         info = {
             "current_version": cur or "1.0.3",
+            "current_build": cur_build,
             "latest_version": latest,
+            "latest_build": latest_build,
             "update_available": available,
             "last_check_ts": self._last_check_ts,
             "last_check_iso": time.strftime(
@@ -611,7 +643,9 @@ class UpdateDaemon:
         write_status(
             state="idle" if not available else "update_available",
             current_version=cur or "1.0.3",
+            current_build=cur_build,
             latest_version=latest,
+            latest_build=latest_build,
             update_available=available,
             major_update=release.get("major_update", False),
             last_check_ts=self._last_check_ts,

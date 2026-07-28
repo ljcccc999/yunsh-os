@@ -15,11 +15,13 @@ import time
 import urllib.error
 import urllib.request
 
-RESULT_PATH = "/tmp/yunsh-update-result.json"
-STATUS_PATH = "/tmp/yunsh-update-status.json"
-INFO_PATH = "/etc/yunsh/update-info.json"
-DOWNLOAD_PATH = "/var/lib/yunsh-update/update.ota.tar.gz"
-BACKUP_ROOT = "/var/lib/yunsh-update/backups"
+# The defaults are the production locations.  Overrides make the installer
+# testable against a staged root without ever writing to the host system.
+RESULT_PATH = os.environ.get("YUNSH_OTA_RESULT_PATH", "/tmp/yunsh-update-result.json")
+STATUS_PATH = os.environ.get("YUNSH_OTA_STATUS_PATH", "/tmp/yunsh-update-status.json")
+INFO_PATH = os.environ.get("YUNSH_OTA_INFO_PATH", "/etc/yunsh/update-info.json")
+DOWNLOAD_PATH = os.environ.get("YUNSH_OTA_DOWNLOAD_PATH", "/var/lib/yunsh-update/update.ota.tar.gz")
+BACKUP_ROOT = os.environ.get("YUNSH_OTA_BACKUP_ROOT", "/var/lib/yunsh-update/backups")
 INSTALL_ROOT = os.environ.get("YUNSH_OTA_ROOT", "/")
 
 ALLOWED_PREFIXES = (
@@ -159,6 +161,7 @@ def install_bundle(bundle_path: str) -> dict:
             if manifest.get("format") != "yunsh-ota-v1":
                 raise ValueError("unsupported OTA bundle format")
             version = str(manifest.get("version", "")).lstrip("v")
+            build = str(manifest.get("build", ""))
             if not version:
                 raise ValueError("OTA manifest has no version")
 
@@ -231,6 +234,7 @@ def install_bundle(bundle_path: str) -> dict:
             result = {
                 "success": True,
                 "version": version,
+                "build": build,
                 "files_installed": len(files),
                 "backup": backup,
                 "reboot_required": True,
@@ -241,6 +245,7 @@ def install_bundle(bundle_path: str) -> dict:
                 state="restart_required",
                 progress_pct=100,
                 current_version=version,
+                current_build=build,
                 update_available=False,
                 error=None,
                 reboot_required=True,

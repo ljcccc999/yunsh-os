@@ -11,11 +11,14 @@ if [ ! -f "${VERSION_CONF}" ]; then
     printf 'VERSION=v1.0.3\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
 fi
 VERSION="$(awk -F= '$1 == "VERSION" { print $2; exit }' "${VERSION_CONF}")"
+BUILD_ID="${YUNSH_BUILD_ID:-$(date +%Y.%m.%d)}"
 if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.]+)?$ ]]; then
     echo "ERROR: invalid VERSION in ${VERSION_CONF}: ${VERSION}"
     exit 1
 fi
 OUTPUT_FILE="${OUTPUT_DIR}/YUNSH-OS-${VERSION}.img"
+IMAGE_VERSION_CONF="${BUILD_DIR}/yunsh-version-image.conf"
+printf 'VERSION=%s\nBUILD=%s\n' "${VERSION}" "${BUILD_ID}" > "${IMAGE_VERSION_CONF}"
 # Homebrew upgrades e2fsprogs independently. Resolve its stable prefix instead
 # of baking a Cellar version into the image builder.
 E2FSPROGS="${YUNSH_E2FSPROGS_PREFIX:-}"
@@ -315,7 +318,7 @@ update_channel=stable
 UC
 add_file "${BUILD_DIR}/yunsh-update.conf" "/etc/yunsh/update.conf"
 
-add_file "${VERSION_CONF}" "/etc/yunsh/version.conf"
+add_file "${IMAGE_VERSION_CONF}" "/etc/yunsh/version.conf"
 
 # systemd services
 echo "mkdir /etc/systemd/system" >> "${DEBUGFS_SCRIPT}"
@@ -735,7 +738,7 @@ fi
 echo "  ✓ Required boot, desktop, service, OTA, and tracking files verified"
 
 # Cleanup
-rm -f "${ROOT_PARTITION_IMG}" "${ROOT_TEST_IMG}" "${LAUNCHER_FILE}" "${DEBUGFS_SCRIPT}"
+rm -f "${ROOT_PARTITION_IMG}" "${ROOT_TEST_IMG}" "${LAUNCHER_FILE}" "${DEBUGFS_SCRIPT}" "${IMAGE_VERSION_CONF}"
 
 # ─── Step 12: Compress ───────────────────────────
 echo ""

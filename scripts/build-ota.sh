@@ -7,6 +7,7 @@ BUILD_DIR="${YUNSH_DIR}/build"
 OUTPUT_DIR="${YUNSH_DIR}/output"
 VERSION_CONF="${BUILD_DIR}/yunsh-version.conf"
 VERSION="$(awk -F= '$1 == "VERSION" { print $2; exit }' "${VERSION_CONF}")"
+BUILD_ID="${YUNSH_BUILD_ID:-$(date +%Y.%m.%d)}"
 OUTPUT="${OUTPUT_DIR}/YUNSH-OS-${VERSION}.ota.tar.gz"
 STAGING="$(mktemp -d)"
 trap 'rm -rf "${STAGING}"' EXIT
@@ -22,7 +23,8 @@ mkdir -p \
 cp "${YUNSH_DIR}"/ui/*.qml "${STAGING}/payload/usr/share/yunsh/ui/"
 cp "${YUNSH_DIR}"/ui/icons/* "${STAGING}/payload/usr/share/yunsh/icons/"
 cp "${YUNSH_DIR}"/logo/*.png "${STAGING}/payload/usr/share/yunsh/logo/"
-cp "${VERSION_CONF}" "${STAGING}/payload/etc/yunsh/version.conf"
+printf 'VERSION=%s\nBUILD=%s\n' "${VERSION}" "${BUILD_ID}" \
+    > "${STAGING}/payload/etc/yunsh/version.conf"
 
 # Keep OTA paths identical to the paths used by the full image builder.  Source
 # filenames such as yunsh-appd.py are intentionally installed without their
@@ -80,13 +82,13 @@ for service in "${BUILD_DIR}"/yunsh-*.service; do
     chmod 0644 "${STAGING}/payload/etc/systemd/system/$(basename "${service}")"
 done
 
-python3 - "${STAGING}" "${VERSION}" <<'PY'
+python3 - "${STAGING}" "${VERSION}" "${BUILD_ID}" <<'PY'
 import hashlib
 import json
 import os
 import sys
 
-root, version = sys.argv[1:]
+root, version, build = sys.argv[1:]
 payload = os.path.join(root, "payload")
 files = {}
 for current, _dirs, names in os.walk(payload):
@@ -99,6 +101,7 @@ with open(os.path.join(root, "manifest.json"), "w", encoding="utf-8") as handle:
     json.dump({
         "format": "yunsh-ota-v1",
         "version": version.lstrip("v"),
+        "build": build,
         "files": files,
     }, handle, indent=2, sort_keys=True)
 PY

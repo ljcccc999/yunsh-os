@@ -64,6 +64,7 @@ AR Display
 Raspberry Pi 5
     ├── YUNSH OS shell · Qt Quick workspace · application windows
     ├── System services · network · Bluetooth · updates · power
+    ├── DRM/KMS + V3D Mesa graphics · Wayland-composited applications
     ├── Wayland-composited Waydroid application environment
     └── Optional Bluetooth motion controller → head-tracking service
 ```
@@ -98,7 +99,7 @@ Compare the result with the matching `.sha256` asset published with the release.
 
 ## First boot
 
-The initial setup downloads the required desktop packages and then reboots once into the activation flow. Connect Ethernet before the first power-on and keep the device online until setup finishes. A temporary network failure retries automatically without marking the setup complete. Completing or skipping activation creates a persistent activation marker, so later boots open the desktop directly.
+The initial setup downloads the required desktop packages, including the Raspberry Pi 5 DRM/KMS, EGL, OpenGL, and Vulkan runtime, and then reboots once into the activation flow. Connect Ethernet before the first power-on and keep the device online until setup finishes. A temporary network failure retries automatically without marking the setup complete. Completing or skipping activation creates a persistent activation marker, so later boots open the desktop directly.
 
 Factory reset clears user data, saved Wi-Fi networks, Bluetooth pairings, and the activation marker. It preserves YUNSH OS, installed desktop dependencies, and the current system version, then returns to activation on the next boot.
 

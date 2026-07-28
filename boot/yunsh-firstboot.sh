@@ -161,7 +161,11 @@ install_apt 32 "Network & BT" network-manager wpasupplicant bluez
 install_apt 38 "System tools" openssh-server avahi-daemon i2c-tools curl wget git unzip python3-pil
 install_apt 44 "Chinese fonts" fonts-noto-cjk
 install_apt 50 "Audio" pulseaudio alsa-utils
-install_apt 56 "OpenGL" mesa-utils libgl1-mesa-dri
+# Raspberry Pi 5 uses the BCM2712 VideoCore VII through the DRM/KMS + V3D
+# stack. Keep both EGL/OpenGL (Qt Quick/Weston) and Vulkan (Waydroid and
+# future spatial compositor work) in the first-boot transaction, rather than
+# silently falling back to an incomplete software graphics stack.
+install_apt 56 "Pi 5 graphics runtime" mesa-utils libgl1-mesa-dri libegl1 mesa-vulkan-drivers
 
 # Waydroid remains a core component, but its repository and Android image are
 # external network dependencies. They must never block activation or desktop
@@ -214,7 +218,7 @@ pct 98 "Cleaning up..."
 rm -f /etc/yunsh/.firstboot_partial 2>/dev/null || true
 
 pct 100 "Setup complete! Rebooting..."
-CORE_PACKAGES="qml-qt6 libqt6opengl6 qml6-module-qtqml qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtwebengine qt6-wayland weston network-manager bluez python3-pil python3-dbus python3-gi unzip"
+CORE_PACKAGES="qml-qt6 libqt6opengl6 qml6-module-qtqml qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtwebengine qt6-wayland weston network-manager bluez python3-pil python3-dbus python3-gi unzip libegl1 libgl1-mesa-dri mesa-vulkan-drivers"
 CORE_MISSING=""
 for package in $CORE_PACKAGES; do
     dpkg-query -W -f='${Status}' "$package" 2>/dev/null |
