@@ -81,6 +81,7 @@ Item {
         visible: showStatusBar
         z: 100
         onScreenshotTriggered: homeScreen.takeScreenshot()
+        onOpenControlCenter: homeScreen.showControlCenter()
     }
 
     // ─── Main Content ────────────────────────────
@@ -233,7 +234,7 @@ Item {
                                 anchors.bottom: parent.bottom
                                 anchors.bottomMargin: 16
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: "YUNSH OS v1.0.2-fixed"
+                                text: "YUNSH OS v1.0.3"
                                 color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
                                 font.pixelSize: 11
                                 visible: pageIndex === 0

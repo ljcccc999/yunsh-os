@@ -1,6 +1,7 @@
 [Unit]
 Description=YUNSH OS Head Tracking
 After=local-fs.target
+ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-headtracking

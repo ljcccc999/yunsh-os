@@ -5,7 +5,7 @@ import QtQuick.Controls 2.15
 Item {
     id: metaverseScreen
     anchors.fill: parent
-    visible: false
+    visible: true
     
     signal backToHome()
     

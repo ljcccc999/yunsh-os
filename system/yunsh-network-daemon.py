@@ -34,9 +34,11 @@ log = logging.getLogger("yunsh-network")
 def run_nmcli(args, timeout=15):
     """Run nmcli command and return (success, output)"""
     try:
+        environment = dict(os.environ)
+        environment["LC_ALL"] = "C"
         result = subprocess.run(
-            ["nmcli"] + args,
-            capture_output=True, text=True, timeout=timeout
+            ["nmcli"] + args, capture_output=True, text=True,
+            timeout=timeout, env=environment,
         )
         if result.returncode == 0:
             return True, result.stdout
@@ -107,9 +109,14 @@ def scan_wifi():
 def get_status():
     """Get current Wi-Fi connection status"""
     wifi_connected = False
+    wifi_enabled = False
     ssid = ""
     ip = ""
     
+    radio_ok, radio_state = run_nmcli(["radio", "wifi"])
+    if radio_ok:
+        wifi_enabled = radio_state.strip().lower() == "enabled"
+
     # Check specific wifi status
     s2, d2 = run_nmcli(["-t", "-e", "yes", "-f", "ACTIVE,SSID,SIGNAL,SECURITY", "device", "wifi"])
     if s2:
@@ -119,25 +126,54 @@ def get_status():
                 wifi_connected = True
                 ssid = parts[1]
     
-    # Get IP
-    s3, d3 = run_nmcli(["-t", "-f", "DEVICE,IP4", "device", "show"])
+    # Resolve the active Wi-Fi interface first, then query its first IPv4
+    # address. Device names are not assumed to be wlan0.
+    interface = ""
+    s3, d3 = run_nmcli([
+        "-t", "-e", "yes", "-f", "DEVICE,TYPE,STATE", "device", "status"
+    ])
     if s3:
-        for line in d3.strip().split("\n"):
-            if ":" in line:
-                dev, ipinfo = line.split(":", 1)
-                if ipinfo and "wlan" in dev.lower():
-                    ip = ipinfo.strip()
+        for line in d3.strip().splitlines():
+            parts = split_nmcli(line)
+            if (
+                len(parts) >= 3
+                and parts[1] == "wifi"
+                and parts[2] in {"connected", "connected (externally)"}
+            ):
+                interface = parts[0]
+                break
+    if interface:
+        s4, d4 = run_nmcli(["-g", "IP4.ADDRESS", "device", "show", interface])
+        if s4 and d4.strip():
+            ip = d4.strip().splitlines()[0].split("/", 1)[0]
     
     return {
         "connected": wifi_connected,
+        "enabled": wifi_enabled,
         "ssid": ssid,
         "ip_address": ip,
-        "interface": "wlan0"
+        "interface": interface
+    }
+
+
+def set_powered(on=True):
+    """Enable or disable the Wi-Fi radio through NetworkManager."""
+    success, output = run_nmcli(["radio", "wifi", "on" if on else "off"])
+    status = get_status()
+    actual = bool(status.get("enabled"))
+    return {
+        "success": success and actual == on,
+        "enabled": actual,
+        "message": "Wi-Fi enabled" if actual else (
+            "Wi-Fi disabled" if success else output.strip()
+        ),
     }
 
 
 def connect_wifi(ssid, password=None):
     """Connect to a Wi-Fi network"""
+    if not isinstance(ssid, str) or not ssid:
+        return {"success": False, "message": "SSID is required"}
     if password:
         success, output = run_nmcli([
             "device", "wifi", "connect", ssid,
@@ -156,8 +192,8 @@ def connect_wifi(ssid, password=None):
 def disconnect():
     """Disconnect current Wi-Fi"""
     status = get_status()
-    if status["ssid"]:
-        success, output = run_nmcli(["connection", "down", status["ssid"]])
+    if status["interface"]:
+        success, output = run_nmcli(["device", "disconnect", status["interface"]])
         return {"success": success, "message": "Disconnected" if success else output.strip()}
     return {"success": True, "message": "Not connected"}
 
@@ -166,8 +202,12 @@ def save_status():
     """Write current status to status file"""
     try:
         status = get_status()
-        with open(STATUS_PATH, "w") as f:
+        temporary = STATUS_PATH + ".tmp"
+        with open(temporary, "w") as f:
             json.dump(status, f)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary, STATUS_PATH)
         return status
     except Exception as e:
         log.error(f"Failed to save status: {e}")
@@ -190,6 +230,12 @@ def handle_command(cmd_data):
         )
     elif cmd == "disconnect":
         result = disconnect()
+    elif cmd == "power":
+        result = set_powered(bool(cmd_data.get("enabled", True)))
+    elif cmd == "power_on":
+        result = set_powered(True)
+    elif cmd == "power_off":
+        result = set_powered(False)
     else:
         result = {"success": False, "error": f"Unknown command: {cmd}"}
     

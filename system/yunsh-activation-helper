@@ -11,6 +11,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HOST = "127.0.0.1"
 PORT = 8591
 YUNSH_CONFIG_DIR = os.environ.get("YUNSH_CONFIG_DIR", "/etc/yunsh")
+GLASSES_STATUS_PATH = os.environ.get(
+    "YUNSH_GLASSES_STATUS_PATH", "/tmp/yunsh-glasses-status.json"
+)
+GLASSES_CONTROL_PATH = os.environ.get(
+    "YUNSH_GLASSES_CONTROL_PATH", "/tmp/yunsh-glasses-control.json"
+)
 SOCKETS = {
     "network": "/tmp/yunsh-network.sock",
     "bluetooth": "/tmp/yunsh-bluetooth.sock",
@@ -95,6 +101,48 @@ def configure_activation(payload):
         return {"success": False, "error": str(exc)}
 
 
+def set_glasses_brightness(payload):
+    try:
+        value = max(0, min(100, int(payload.get("value"))))
+        temp_path = GLASSES_CONTROL_PATH + ".tmp"
+        with open(temp_path, "w", encoding="utf-8") as handle:
+            json.dump({"brightness": value}, handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, GLASSES_CONTROL_PATH)
+        return {"success": True, "brightness": value}
+    except (OSError, TypeError, ValueError) as exc:
+        return {"success": False, "error": str(exc)}
+
+
+def set_volume(payload):
+    try:
+        value = max(0, min(100, int(payload.get("value"))))
+    except (TypeError, ValueError) as exc:
+        return {"success": False, "error": str(exc)}
+    commands = (
+        ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{value}%"],
+        ["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{value}%"],
+        ["amixer", "sset", "Master", f"{value}%"],
+    )
+    errors = []
+    for command in commands:
+        try:
+            result = subprocess.run(
+                command, capture_output=True, text=True, timeout=10
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            errors.append(str(exc))
+            continue
+        if result.returncode == 0:
+            return {"success": True, "volume": value}
+        errors.append(result.stderr.strip() or result.stdout.strip())
+    return {
+        "success": False,
+        "error": next((error for error in errors if error), "No audio output is available"),
+    }
+
+
 def read_json(path, default=None):
     try:
         with open(path, "r", encoding="utf-8") as handle:
@@ -165,6 +213,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send(read_json("/tmp/yunsh-network-status.json", {"connected": False}))
         elif self.path == "/api/bluetooth-status":
             self._send(read_json("/tmp/yunsh-bluetooth-status.json", {"powered": False}))
+        elif self.path == "/api/glasses-status":
+            self._send(read_json(GLASSES_STATUS_PATH, {"connected": False}))
+        elif self.path == "/api/power-status":
+            self._send(read_json("/tmp/yunsh-power-status.json", {"available": False}))
         else:
             self._send({"success": True, "message": "YUNSH local API"})
 
@@ -187,6 +239,16 @@ class Handler(BaseHTTPRequestHandler):
                 result = {"success": True, "message": "factory reset started"}
             except OSError as exc:
                 result = {"success": False, "error": str(exc)}
+        elif self.path == "/api/glasses":
+            if payload.get("action") == "set_brightness":
+                result = set_glasses_brightness(payload)
+            else:
+                result = {"success": False, "error": "Unsupported glasses action"}
+        elif self.path == "/api/audio":
+            if payload.get("action") == "set_volume":
+                result = set_volume(payload)
+            else:
+                result = {"success": False, "error": "Unsupported audio action"}
         else:
             action = payload.get("action")
             if action == "connect_wifi":

@@ -17,7 +17,7 @@ Item {
     signal backToHome()
 
     /* ---- State ---- */
-    property string currentVersion: "1.0.0"
+    property string currentVersion: "1.0.3"
     property string latestVersion: ""
     property bool updateAvailable: false
     property bool isChecking: false
@@ -41,17 +41,18 @@ Item {
             if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
                 try {
                     var data = JSON.parse(xhr.responseText);
-                    currentVersion = data.currentVersion || "1.0.0";
+                    currentVersion = data.currentVersion || "1.0.3";
                     latestVersion = data.latestVersion || "";
                     updateAvailable = data.updateAvailable || false;
                     autoUpdate = data.autoUpdate || false;
-                    wifiOnly = data.wifiOnly || true;
+                    wifiOnly = typeof data.wifiOnly === "boolean" ? data.wifiOnly : true;
                     lastCheckTime = data.lastCheckTime || "";
                     changelog = data.changelog || "";
                     updateAvailable = data.updateAvailable || false;
                     downloadProgress = data.progress || 0;
                     updateError = data.error || "";
                     rebootRequired = data.rebootRequired || false;
+                    isChecking = data.state === "checking";
                     isDownloading = data.state === "downloading" || data.state === "installing";
                 } catch(e) {
                     console.warn("UpdateScreen: failed to parse status:", e);
@@ -67,7 +68,7 @@ Item {
 
     Timer {
         interval: 1000
-        running: isDownloading
+        running: isDownloading || isChecking
         repeat: true
         onTriggered: refreshStatus()
     }
@@ -262,10 +263,11 @@ Item {
                     xhr.open("POST", "http://127.0.0.1:8591/api/update-check", true);
                     xhr.onreadystatechange = function() {
                         if (xhr.readyState === XMLHttpRequest.DONE) {
-                            isChecking = false;
-                            root.refreshStatus();
                             if (xhr.status !== 200) {
+                                isChecking = false;
                                 console.warn("Check failed:", xhr.status);
+                            } else {
+                                root.refreshStatus();
                             }
                         }
                     };

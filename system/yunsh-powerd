@@ -18,6 +18,14 @@ check_battery() {
             
             [ -f "$bat/capacity" ] && level=$(cat "$bat/capacity")
             [ -f "$bat/status" ] && status=$(cat "$bat/status")
+
+            case "$level" in
+                ''|*[!0-9]*)
+                    echo "YUNSH: Battery capacity is unavailable for $bat"
+                    continue
+                    ;;
+            esac
+            [ "$level" -gt 100 ] && level=100
             
             echo "YUNSH: Battery: ${level}% (${status})"
             printf '{"available":true,"battery":%s,"status":"%s"}\n' "$level" "$status" > "${STATUS_PATH}.tmp" && mv "${STATUS_PATH}.tmp" "$STATUS_PATH"

@@ -17,6 +17,30 @@ Rectangle {
     property string currentPhoto: ""
     
     signal backToHome()
+
+    function deleteCurrentPhoto() {
+        if (currentPhoto.length === 0)
+            return
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8590/launch", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return
+            try {
+                var result = JSON.parse(xhr.responseText)
+                if (result.status === "ok") {
+                    currentPhoto = ""
+                    showGrid = true
+                    headerText.text = "相册"
+                }
+            } catch (error) {}
+        }
+        xhr.send(JSON.stringify({
+            action: "delete_screenshot",
+            path: currentPhoto
+        }))
+    }
     
     // ─── Header ────────────────────────────────────
     Rectangle {
@@ -198,6 +222,7 @@ Rectangle {
             color: Qt.rgba(12/255, 12/255, 25/255, 0.6)
             border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
             border.width: 1
+            z: 2
 
             // Frost
             Rectangle {
@@ -207,18 +232,30 @@ Rectangle {
 
             Row {
                 anchors.centerIn: parent
-                spacing: 40
+                spacing: 28
 
-                Text { text: "🗑"; font.pixelSize: 20; color: "#FF5252" }
-                Text { text: "⬇"; font.pixelSize: 20; color: "#00D4FF" }
-                Text { text: "✕"; font.pixelSize: 20; color: Qt.rgba(255/255, 255/255, 255/255, 0.5) }
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                onClicked: {
-                    showGrid = true
-                    headerText.text = "相册"
+                Text {
+                    text: "删除"
+                    font.pixelSize: 14
+                    color: "#FF5252"
+                    MouseArea {
+                        anchors.fill: parent
+                        anchors.margins: -10
+                        onClicked: photosScreen.deleteCurrentPhoto()
+                    }
+                }
+                Text {
+                    text: "返回"
+                    font.pixelSize: 14
+                    color: "#00D4FF"
+                    MouseArea {
+                        anchors.fill: parent
+                        anchors.margins: -10
+                        onClicked: {
+                            showGrid = true
+                            headerText.text = "相册"
+                        }
+                    }
                 }
             }
         }
@@ -226,6 +263,7 @@ Rectangle {
         // Tap anywhere to go back
         MouseArea {
             anchors.fill: parent
+            z: 1
             onClicked: {
                 showGrid = true
                 headerText.text = "相册"

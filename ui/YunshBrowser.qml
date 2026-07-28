@@ -8,7 +8,7 @@ import QtWebEngine
 Item {
     id: browserScreen
     anchors.fill: parent
-    visible: false
+    visible: true
     z: 90
 
     signal backToHome()
@@ -18,6 +18,83 @@ Item {
     property int loadProgress: 0
     property string pageTitle: ""
     property string _pendingDomain: ""  // original domain input, for http fallback
+    property string downloadStatus: ""
+    property string downloadedApkPath: ""
+    property bool downloadBusy: false
+    property bool desktopMode: false
+    property string defaultUserAgent: ""
+
+    function setDesktopMode(enabled) {
+        desktopMode = enabled
+        if (defaultUserAgent.length === 0)
+            defaultUserAgent = browserProfile.httpUserAgent
+        browserProfile.httpUserAgent = enabled
+            ? "Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+            : defaultUserAgent
+        webView.reload()
+    }
+
+    function installDownloadedApk() {
+        if (downloadedApkPath.length === 0)
+            return
+        downloadBusy = true
+        downloadStatus = "正在安装 Android 应用…"
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8590/launch", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 190000
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return
+            downloadBusy = false
+            try {
+                var data = JSON.parse(xhr.responseText)
+                downloadStatus = data.status === "ok"
+                    ? "Android 应用安装完成"
+                    : (data.message || "安装失败")
+            } catch (error) {
+                downloadStatus = "无法连接 Android 安装服务"
+            }
+        }
+        xhr.send(JSON.stringify({
+            action: "install_apk",
+            path: downloadedApkPath
+        }))
+    }
+
+    WebEngineProfile {
+        id: browserProfile
+        storageName: "yunsh-browser"
+        offTheRecord: false
+        persistentStoragePath: "/home/yunsh/.local/share/yunsh-browser"
+        cachePath: "/home/yunsh/.cache/yunsh-browser"
+        downloadPath: "/home/yunsh/Downloads"
+
+        Component.onCompleted: {
+            browserScreen.defaultUserAgent = httpUserAgent
+        }
+
+        onDownloadRequested: function(download) {
+            download.downloadDirectory = "/home/yunsh/Downloads"
+            browserScreen.downloadStatus = "正在下载 " + download.suggestedFileName
+            browserScreen.downloadedApkPath = ""
+            browserScreen.downloadBusy = true
+            download.accept()
+        }
+
+        onDownloadFinished: function(download) {
+            browserScreen.downloadBusy = false
+            if (download.state === WebEngineDownloadRequest.DownloadCompleted) {
+                var path = download.downloadDirectory + "/" + download.downloadFileName
+                browserScreen.downloadStatus = "已保存到 Downloads"
+                if (download.downloadFileName.toLowerCase().endsWith(".apk"))
+                    browserScreen.downloadedApkPath = path
+            } else {
+                browserScreen.downloadStatus = download.interruptReasonString.length > 0
+                    ? download.interruptReasonString : "下载未完成"
+            }
+        }
+    }
 
     // Transparent background (GlassBackground shows through)
     Rectangle { anchors.fill: parent; color: "transparent" }
@@ -188,6 +265,7 @@ Item {
         anchors.right: parent.right
         anchors.bottom: bottomBar.top
         url: currentUrl
+        profile: browserProfile
 
         // Background color
         backgroundColor: "#000000"
@@ -222,15 +300,56 @@ Item {
         // Secure connection indicator
         property bool isSecure: false
         onCertificateError: function(error) {
-            // Accept self-signed certs (for testing)
-            error.accept()
+            console.warn("Rejected invalid TLS certificate:", error.description)
+            error.rejectCertificate()
         }
 
         // New window requests (open in same view)
         onNewWindowRequested: function(request) {
-            request.action = WebEngineNewWindowRequest.IgnoreRequest
-            if (request.requestedUrl.toString() !== "") {
-                webView.url = request.requestedUrl
+            request.openIn(webView)
+        }
+    }
+
+    Rectangle {
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: bottomBar.top
+        anchors.bottomMargin: 12
+        width: Math.min(parent.width - 40, 520)
+        height: downloadStatus.length > 0 ? 52 : 0
+        radius: 18
+        color: Qt.rgba(12/255, 12/255, 25/255, 0.94)
+        border.color: Qt.rgba(0/255, 212/255, 255/255, 0.20)
+        visible: downloadStatus.length > 0
+        z: 20
+
+        Row {
+            anchors.fill: parent
+            anchors.leftMargin: 18
+            anchors.rightMargin: 10
+            spacing: 12
+
+            Text {
+                width: parent.width - (downloadedApkPath.length > 0 ? 110 : 24)
+                anchors.verticalCenter: parent.verticalCenter
+                text: downloadStatus
+                elide: Text.ElideMiddle
+                color: "#FFFFFF"
+                font.pixelSize: 13
+            }
+
+            GlassButton {
+                width: 88
+                height: 34
+                anchors.verticalCenter: parent.verticalCenter
+                visible: downloadedApkPath.length > 0
+                enabled: !downloadBusy
+                onClicked: browserScreen.installDownloadedApk()
+                Text {
+                    anchors.centerIn: parent
+                    text: downloadBusy ? "安装中…" : "安装 APK"
+                    color: "#00D4FF"
+                    font.pixelSize: 12
+                }
             }
         }
     }
@@ -277,11 +396,25 @@ Item {
                 }
             }
 
-            // Desktop site toggle (not implemented, just visual)
+            // Desktop site user-agent toggle
             Column {
                 spacing: 2; width: 60
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "🖥"; color: "#A0B0C0"; font.pixelSize: 16 }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "桌面版"; color: "#A0B0C0"; font.pixelSize: 10 }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "🖥"
+                    color: desktopMode ? "#00D4FF" : "#A0B0C0"
+                    font.pixelSize: 16
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: desktopMode ? "桌面版 ✓" : "桌面版"
+                    color: desktopMode ? "#00D4FF" : "#A0B0C0"
+                    font.pixelSize: 10
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: browserScreen.setDesktopMode(!desktopMode)
+                }
             }
         }
     }

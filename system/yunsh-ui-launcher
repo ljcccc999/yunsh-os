@@ -7,12 +7,18 @@ cd /usr/share/yunsh/ui || exit 1
 export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-wayland}"
 export QTWEBENGINE_DISABLE_SANDBOX=1
 export QTWEBENGINE_CHROMIUM_FLAGS="${QTWEBENGINE_CHROMIUM_FLAGS:---no-sandbox --disable-dev-shm-usage}"
+export QML_XHR_ALLOW_FILE_READ=1
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/yunsh-runtime}"
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
 
 install -d -m 0700 "$XDG_RUNTIME_DIR"
-install -d -o yunsh -g yunsh /home/yunsh/Pictures/Screenshots 2>/dev/null || \
-    install -d /home/yunsh/Pictures/Screenshots
+install -d -o yunsh -g yunsh \
+    /home/yunsh/Pictures/Screenshots /home/yunsh/Downloads \
+    /home/yunsh/.cache/yunsh-browser /home/yunsh/.local/share/yunsh-browser \
+    2>/dev/null || {
+        install -d /home/yunsh/Pictures/Screenshots
+        install -d /home/yunsh/Downloads
+    }
 
 if [ -x /usr/lib/qt6/bin/qml ]; then
     QML_RUNNER=/usr/lib/qt6/bin/qml

@@ -34,7 +34,7 @@ Spatial layouts are view-relative: head rotation preserves the desktop arrangeme
 - Persistent PTY terminal.
 - Screenshot capture with in-context preview and photo library.
 - Settings, system information, update center, network, and Bluetooth management.
-- Integrated Android application environment through Waydroid on the YUNSH Wayland session.
+- Integrated Android application environment through Waydroid on the YUNSH Wayland session; its background preparation never blocks the desktop or activation flow.
 - Built-in Android app catalogue with a verified F-Droid fallback, plus APK side-loading through `yunsh-android install-apk`.
 
 ### Device services
@@ -98,7 +98,7 @@ Compare the result with the matching `.sha256` asset published with the release.
 
 ## First boot
 
-The initial setup downloads the required desktop packages and then reboots once into the activation flow. Connect Ethernet before the first power-on and keep the device online until setup finishes. Completing or skipping activation creates a persistent activation marker, so later boots open the desktop directly.
+The initial setup downloads the required desktop packages and then reboots once into the activation flow. Connect Ethernet before the first power-on and keep the device online until setup finishes. A temporary network failure retries automatically without marking the setup complete. Completing or skipping activation creates a persistent activation marker, so later boots open the desktop directly.
 
 Factory reset clears user data, saved Wi-Fi networks, Bluetooth pairings, and the activation marker. It preserves YUNSH OS, installed desktop dependencies, and the current system version, then returns to activation on the next boot.
 

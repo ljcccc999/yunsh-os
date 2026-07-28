@@ -7,7 +7,7 @@ import QtQuick.Layouts 1.15
 GlassPanel {
     id: aboutScreen
     anchors.fill: parent
-    visible: false
+    visible: true
     glassOpacity: 0.3
     cornerRadius: 28
     blurRadius: 28
@@ -125,7 +125,7 @@ GlassPanel {
             // OS version
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "YUNSH OS v1.0.2-fixed"
+                text: "YUNSH OS v1.0.3"
                 color: "#8888A0"
                 font.pixelSize: 15
                 font.weight: Font.Medium
@@ -147,7 +147,7 @@ GlassPanel {
                 model: [
                     { label: "设备名称", value: "YUNSH V1" },
                     { label: "型号", value: "YS-V1-001" },
-                    { label: "系统版本", value: "YUNSH OS 1.0.0" },
+                    { label: "系统版本", value: "YUNSH OS 1.0.3" },
                     { label: "内核版本", value: "Linux 6.6.58" },
                     { label: "处理器", value: "BCM2712 (Cortex-A76)" },
                     { label: "内存", value: "4GB LPDDR4" },

@@ -14,6 +14,100 @@ Item {
     property string wifiSSID: ""
     property string btDevice: ""
     property string currentTime: "00:00"
+    property int brightnessLevel: 72
+    property int volumeLevel: 55
+
+    function postJson(path, payload, callback) {
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591" + path, true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE && callback)
+                callback(xhr)
+        }
+        xhr.send(JSON.stringify(payload))
+    }
+
+    function refreshSystemState() {
+        var networkRequest = new XMLHttpRequest()
+        networkRequest.open("GET", "http://127.0.0.1:8591/api/network-status", true)
+        networkRequest.onreadystatechange = function() {
+            if (networkRequest.readyState === XMLHttpRequest.DONE && networkRequest.status === 200) {
+                try {
+                    var network = JSON.parse(networkRequest.responseText)
+                    wifiOn = network.enabled === true
+                    wifiSSID = network.ssid || ""
+                } catch (error) {}
+            }
+        }
+        networkRequest.send()
+
+        var bluetoothRequest = new XMLHttpRequest()
+        bluetoothRequest.open("GET", "http://127.0.0.1:8591/api/bluetooth-status", true)
+        bluetoothRequest.onreadystatechange = function() {
+            if (bluetoothRequest.readyState === XMLHttpRequest.DONE && bluetoothRequest.status === 200) {
+                try {
+                    var bluetooth = JSON.parse(bluetoothRequest.responseText)
+                    bluetoothOn = bluetooth.powered === true
+                    var paired = bluetooth.paired_devices || []
+                    btDevice = ""
+                    for (var i = 0; i < paired.length; i++) {
+                        if (paired[i].connected) {
+                            btDevice = paired[i].name || ""
+                            break
+                        }
+                    }
+                } catch (error) {}
+            }
+        }
+        bluetoothRequest.send()
+
+        var glassesRequest = new XMLHttpRequest()
+        glassesRequest.open("GET", "http://127.0.0.1:8591/api/glasses-status", true)
+        glassesRequest.onreadystatechange = function() {
+            if (glassesRequest.readyState === XMLHttpRequest.DONE && glassesRequest.status === 200) {
+                try {
+                    var glasses = JSON.parse(glassesRequest.responseText)
+                    if (typeof glasses.brightness === "number")
+                        brightnessLevel = glasses.brightness
+                } catch (error) {}
+            }
+        }
+        glassesRequest.send()
+    }
+
+    function applyWifiPower() {
+        postJson("/api/network", {
+            command: "power",
+            enabled: wifiOn
+        }, function() { refreshSystemState() })
+    }
+
+    function applyBluetoothPower() {
+        postJson("/api/bluetooth", {
+            command: bluetoothOn ? "power_on" : "power_off"
+        }, function() { refreshSystemState() })
+    }
+
+    Timer {
+        id: brightnessApplyTimer
+        interval: 120
+        repeat: false
+        onTriggered: controlCenterRoot.postJson("/api/glasses", {
+            action: "set_brightness",
+            value: brightnessLevel
+        })
+    }
+
+    Timer {
+        id: volumeApplyTimer
+        interval: 120
+        repeat: false
+        onTriggered: controlCenterRoot.postJson("/api/audio", {
+            action: "set_volume",
+            value: volumeLevel
+        })
+    }
 
     // ─── Signals ─────────────────────────────────────────────────────────
     signal dismissPanel()
@@ -77,13 +171,12 @@ Item {
         transform: Translate {
             id: panelTranslate
             y: controlCenterRoot.visible ? 0 : -30
+            Behavior on y {
+                NumberAnimation { duration: 250; easing.type: Easing.OutBack }
+            }
         }
 
         Behavior on opacity {
-            NumberAnimation { duration: 250; easing.type: Easing.OutBack }
-        }
-
-        Behavior on transform {
             NumberAnimation { duration: 250; easing.type: Easing.OutBack }
         }
 
@@ -361,14 +454,14 @@ Item {
                                 color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
 
                                 Rectangle {
-                                    width: parent.width * 0.72
+                                    width: parent.width * brightnessLevel / 100
                                     height: parent.height; radius: 3
                                     color: Qt.rgba(0/255, 212/255, 255/255, 0.4)
                                 }
 
                                 // Thumb
                                 Rectangle {
-                                    x: parent.width * 0.72 - 6
+                                    x: Math.max(-6, parent.width * brightnessLevel / 100 - 6)
                                     y: -4
                                     width: 14; height: 14; radius: 7
                                     color: "#00D4FF"
@@ -379,10 +472,11 @@ Item {
                                 MouseArea {
                                     anchors.fill: parent
                                     onPositionChanged: function(mouse) {
-                                        var newX = Math.max(0, Math.min(mouse.x, parent.width - 14))
-                                        // Slider would update brightness via backend
-                                        parent.children[0].width = newX + 6
-                                        parent.children[1].x = newX
+                                        brightnessLevel = Math.round(
+                                            Math.max(0, Math.min(mouse.x, parent.width)) /
+                                            parent.width * 100
+                                        )
+                                        brightnessApplyTimer.restart()
                                     }
                                 }
                             }
@@ -409,13 +503,13 @@ Item {
                                 color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
 
                                 Rectangle {
-                                    width: parent.width * 0.55
+                                    width: parent.width * volumeLevel / 100
                                     height: parent.height; radius: 3
                                     color: Qt.rgba(255/255, 255/255, 255/255, 0.25)
                                 }
 
                                 Rectangle {
-                                    x: parent.width * 0.55 - 6
+                                    x: Math.max(-6, parent.width * volumeLevel / 100 - 6)
                                     y: -4
                                     width: 14; height: 14; radius: 7
                                     color: "#FFFFFF"
@@ -426,9 +520,11 @@ Item {
                                 MouseArea {
                                     anchors.fill: parent
                                     onPositionChanged: function(mouse) {
-                                        var newX = Math.max(0, Math.min(mouse.x, parent.width - 14))
-                                        parent.children[0].width = newX + 6
-                                        parent.children[1].x = newX
+                                        volumeLevel = Math.round(
+                                            Math.max(0, Math.min(mouse.x, parent.width)) /
+                                            parent.width * 100
+                                        )
+                                        volumeApplyTimer.restart()
                                     }
                                 }
                             }
@@ -707,6 +803,7 @@ Item {
         var d = new Date()
         currentTime = d.toLocaleTimeString(Qt.locale("zh_CN"), "HH:mm")
         clockTimer.running = true
+        refreshSystemState()
     }
 
     // ─── Hide function ──────────────────────────────────────────────────

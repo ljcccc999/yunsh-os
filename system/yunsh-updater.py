@@ -176,17 +176,53 @@ def install_bundle(bundle_path: str) -> dict:
                 raise ValueError("OTA manifest and payload file list differ")
 
             backup = os.path.join(BACKUP_ROOT, time.strftime("%Y%m%d-%H%M%S"))
-            for source, relative in files:
-                destination = os.path.join(INSTALL_ROOT, relative)
-                if os.path.exists(destination):
-                    backup_file = os.path.join(backup, relative)
-                    os.makedirs(os.path.dirname(backup_file), exist_ok=True)
-                    shutil.copy2(destination, backup_file)
+            staged = []
+            installed = []
+            new_destinations = set()
+            try:
+                # Stage every file before changing the running system. This
+                # prevents a missing directory or copy failure from leaving a
+                # partially installed release.
+                for source, relative in files:
+                    destination = os.path.join(INSTALL_ROOT, relative)
+                    os.makedirs(os.path.dirname(destination), exist_ok=True)
+                    temporary = destination + ".yunsh-new"
+                    shutil.copy2(source, temporary)
+                    if relative.startswith("usr/bin/"):
+                        os.chmod(temporary, 0o755)
+                    elif relative.startswith("etc/systemd/system/"):
+                        os.chmod(temporary, 0o644)
+                    staged.append((temporary, destination, relative))
 
-                os.makedirs(os.path.dirname(destination), exist_ok=True)
-                temporary = destination + ".yunsh-new"
-                shutil.copy2(source, temporary)
-                os.replace(temporary, destination)
+                for _temporary, destination, relative in staged:
+                    if os.path.exists(destination):
+                        backup_file = os.path.join(backup, relative)
+                        os.makedirs(os.path.dirname(backup_file), exist_ok=True)
+                        shutil.copy2(destination, backup_file)
+                    else:
+                        new_destinations.add(destination)
+
+                for temporary, destination, relative in staged:
+                    os.replace(temporary, destination)
+                    installed.append((destination, relative))
+            except Exception:
+                # Roll back any destination already replaced. Files which did
+                # not exist before this update are removed.
+                for destination, relative in reversed(installed):
+                    backup_file = os.path.join(backup, relative)
+                    if os.path.exists(backup_file):
+                        shutil.copy2(backup_file, destination)
+                    elif destination in new_destinations:
+                        try:
+                            os.remove(destination)
+                        except OSError:
+                            pass
+                for temporary, _destination, _relative in staged:
+                    try:
+                        os.remove(temporary)
+                    except OSError:
+                        pass
+                raise
 
             try:
                 subprocess.run(["systemctl", "daemon-reload"], check=False)

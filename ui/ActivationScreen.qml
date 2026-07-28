@@ -31,6 +31,9 @@ Rectangle {
     property string accountError: ""
     property bool activationConfigReady: false
     property string activationConfigError: ""
+    property bool wifiConnecting: false
+    property bool wifiConnected: false
+    property string wifiStatusText: ""
 
     function applyActivationConfiguration() {
         activationConfigReady = false
@@ -166,7 +169,7 @@ Rectangle {
                 // Version
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "v1.0.2"
+                    text: "v1.0.3"
                     color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
                     font.pixelSize: 11
                 }
@@ -810,7 +813,7 @@ Rectangle {
                 // Status text
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: statusMessages[Math.min(_timerCount / 20, statusMessages.length - 1)]
+                    text: statusMessages[Math.min(Math.floor(_timerCount / 20), statusMessages.length - 1)]
                     color: Qt.rgba(255/255, 255/255, 255/255, 0.2)
                     font.pixelSize: 11
 

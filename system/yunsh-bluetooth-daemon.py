@@ -20,6 +20,7 @@ SOCKET_PATH = "/tmp/yunsh-bluetooth.sock"
 STATUS_PATH = "/tmp/yunsh-bluetooth-status.json"
 LOG_PATH = "/var/log/yunsh-bluetooth.log"
 GLASSES_CONF_PATH = "/etc/yunsh/glasses.conf"
+MAC_PATTERN = re.compile(r"^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$")
 
 # Setup logging
 logging.basicConfig(
@@ -71,6 +72,12 @@ def btctl_stdin(commands, timeout=20):
         return False, "bluetoothctl not found - BlueZ not installed"
 
 
+def normalize_mac(value):
+    """Return a canonical Bluetooth address or an empty string."""
+    mac = str(value or "").strip().upper()
+    return mac if MAC_PATTERN.fullmatch(mac) else ""
+
+
 # ──────────────────────────────────────────────
 # Bluetooth operations
 # ──────────────────────────────────────────────
@@ -105,9 +112,11 @@ def get_controller_info():
 
 def list_paired_devices():
     """List all paired Bluetooth devices with details"""
-    success, output = btctl(["paired-devices"])
+    # BlueZ 5.65+ documents ``devices Paired``. Keep the legacy command only
+    # as a compatibility fallback for older Raspberry Pi OS images.
+    success, output = btctl(["devices", "Paired"])
     if not success:
-        success, output = btctl(["devices", "Paired"])
+        success, output = btctl(["paired-devices"])
     devices = []
     if success:
         for line in output.splitlines():
@@ -237,6 +246,10 @@ def scan_devices(timeout=12):
 
 def pair_device(mac):
     """Pair with a device by MAC address"""
+    mac = normalize_mac(mac)
+    if not mac:
+        return {"success": False, "paired": False, "trusted": False,
+                "message": "A valid Bluetooth address is required"}
     success, output = btctl_stdin([
         "agent NoInputNoOutput",
         "default-agent",
@@ -272,6 +285,10 @@ def pair_device(mac):
 
 def connect_device(mac):
     """Connect to a paired device by MAC address"""
+    mac = normalize_mac(mac)
+    if not mac:
+        return {"success": False, "connected": False,
+                "message": "A valid Bluetooth address is required"}
     btctl_stdin([
         "connect " + mac,
     ])
@@ -285,6 +302,9 @@ def connect_device(mac):
 
 def disconnect_device(mac):
     """Disconnect a device by MAC address"""
+    mac = normalize_mac(mac)
+    if not mac:
+        return {"success": False, "message": "A valid Bluetooth address is required"}
     btctl(["disconnect", mac])
     disconnected = not bool(get_device_info(mac).get("connected"))
     return {
@@ -295,6 +315,9 @@ def disconnect_device(mac):
 
 def unpair_device(mac):
     """Remove/unpair a device by MAC address"""
+    mac = normalize_mac(mac)
+    if not mac:
+        return {"success": False, "message": "A valid Bluetooth address is required"}
     # First disconnect if connected
     disconnect_device(mac)
     btctl(["remove", mac])
@@ -350,8 +373,12 @@ def save_status():
     """Write current status to status JSON file"""
     try:
         status = get_full_status()
-        with open(STATUS_PATH, "w") as f:
+        temporary = STATUS_PATH + ".tmp"
+        with open(temporary, "w") as f:
             json.dump(status, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary, STATUS_PATH)
         return status
     except Exception as e:
         log.error(f"Failed to save status: {e}")

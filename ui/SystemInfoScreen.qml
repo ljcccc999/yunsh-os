@@ -9,10 +9,10 @@ Rectangle {
     id: systemInfoScreen
     anchors.fill: parent
     color: "transparent"
-    visible: false
+    visible: true
     z: 60
 
-    property string osVersion: "YUNSH OS v1.0.2-fixed"
+    property string osVersion: "YUNSH OS v1.0.3"
     property string buildNumber: ""
     property string deviceModel: ""
     property string cpuInfo: ""

@@ -1,74 +1,38 @@
 #!/bin/bash
-# YUNSH OS Boot Splash — Apple-style two-phase display
-# Phase 1: atom logo only (1.5s)
-# Phase 2: atom logo + "YUNSH OS" text
-# Pure bash + cat, no external dependencies
+# YUNSH OS two-stage boot branding for framebuffer and DRM-only boots.
 
 FB_DEV="/dev/fb0"
+BOOT_DIR="/boot/firmware"
+[ -d "${BOOT_DIR}" ] || BOOT_DIR="/boot"
 
-# Wait for framebuffer
-for i in $(seq 1 30); do
-    [ -c "$FB_DEV" ] && break
+tty_brand() {
+    [ -w /dev/tty1 ] || return 0
+    {
+        printf '\033[2J\033[H\033[?25l'
+        printf '\n\n\n\n\n\n\n\n\n\n'
+        printf '\033[1;37m%*s\033[0m\n' 102 "YUNSH OS"
+        printf '\033[38;2;0;212;255m%*s\033[0m\n' 104 "Starting spatial system"
+    } > /dev/tty1 2>/dev/null
+}
+
+render_raw() {
+    local source="$1"
+    [ -c "${FB_DEV}" ] && [ -s "${source}" ] || return 1
+    cat "${source}" > "${FB_DEV}" 2>/dev/null
+}
+
+# DRM/KMS commonly exposes fb0 after a short delay. If it does not, brand tty1
+# instead of leaving the stock boot messages as the only visible feedback.
+for _attempt in $(seq 1 30); do
+    [ -c "${FB_DEV}" ] && break
     sleep 0.1
 done
-[ -c "$FB_DEV" ] || exit 0
 
-# Try boot firmware mount points (boot partition location)
-BOOT_DIR="/boot/firmware"
-if [ ! -d "$BOOT_DIR" ]; then
-    BOOT_DIR="/boot"
+if ! render_raw "${BOOT_DIR}/yunsh-splash-logo.raw"; then
+    tty_brand
+    exit 0
 fi
 
-# Phase 1: Atom logo only (Apple style — just the mark)
-if [ -f "${BOOT_DIR}/yunsh-splash-logo.raw" ]; then
-    cat "${BOOT_DIR}/yunsh-splash-logo.raw" > "$FB_DEV" 2>/dev/null
-elif [ -f "${BOOT_DIR}/yunsh-splash-logo.bmp" ]; then
-    command -v python3 >/dev/null 2>&1 && python3 -c "
-import sys, struct
-p = '${BOOT_DIR}/yunsh-splash-logo.bmp'
-with open(p,'rb') as f: d=f.read()
-off=struct.unpack('<I',d[10:14])[0]
-w=struct.unpack('<i',d[18:22])[0]
-h=abs(struct.unpack('<i',d[22:26])[0])
-bpp=struct.unpack('<H',d[28:30])[0]
-row=((bpp*w+31)//32)*4
-out=bytearray(w*h*4)
-for y in range(h):
-    sy=h-1-y
-    for x in range(w):
-        po=off+sy*row+x*(bpp//8)
-        r,g,b=d[po+2],d[po+1],d[po]
-        pi=(y*w+x)*4
-        out[pi:pi+4]=bytes([b,g,r,0])
-sys.stdout.buffer.write(out)
-" > "$FB_DEV" 2>/dev/null
-fi
-
-# Phase 2: After 1.5s, show logo + "YUNSH OS" text
 sleep 1.5
-
-if [ -f "${BOOT_DIR}/yunsh-splash-full.raw" ]; then
-    cat "${BOOT_DIR}/yunsh-splash-full.raw" > "$FB_DEV" 2>/dev/null
-elif [ -f "${BOOT_DIR}/yunsh-splash-full.bmp" ]; then
-    command -v python3 >/dev/null 2>&1 && python3 -c "
-import sys, struct
-p = '${BOOT_DIR}/yunsh-splash-full.bmp'
-with open(p,'rb') as f: d=f.read()
-off=struct.unpack('<I',d[10:14])[0]
-w=struct.unpack('<i',d[18:22])[0]
-h=abs(struct.unpack('<i',d[22:26])[0])
-bpp=struct.unpack('<H',d[28:30])[0]
-row=((bpp*w+31)//32)*4
-out=bytearray(w*h*4)
-for y in range(h):
-    sy=h-1-y
-    for x in range(w):
-        po=off+sy*row+x*(bpp//8)
-        r,g,b=d[po+2],d[po+1],d[po]
-        pi=(y*w+x)*4
-        out[pi:pi+4]=bytes([b,g,r,0])
-sys.stdout.buffer.write(out)
-" > "$FB_DEV" 2>/dev/null
-fi
-
+render_raw "${BOOT_DIR}/yunsh-splash-full.raw" || tty_brand
 exit 0

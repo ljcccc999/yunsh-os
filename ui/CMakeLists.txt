@@ -23,21 +23,34 @@ qt_add_resources(yunsh_ui_resources "yunsh_ui"
         AboutScreen.qml
         AppDock.qml
         AppIcon.qml
+        EditMenu.qml
+        EditableField.qml
+        EditableInput.qml
+        GlassBackground.qml
+        GlassButton.qml
+        GlassIcon.qml
         GlassPanel.qml
         GlassCard.qml
         GlassEffect.qml
+        GlassWindow.qml
         DropShadowEffect.qml
+        HomeIndicator.qml
+        MacWindow.qml
         StatusBar.qml
         ControlCenter.qml
         NetworkScreen.qml
         BluetoothScreen.qml
+        PhotosScreen.qml
         UpdateScreen.qml
         UpdateHistoryScreen.qml
         YunshBrowser.qml
         YunshMetaverse.qml
         ScreenshotOverlay.qml
         ActivationScreen.qml
+        AndroidAppsScreen.qml
         SystemInfoScreen.qml
+        TaskSwitcher.qml
+        TerminalScreen.qml
         VirtualKeyboard.qml
         Screensaver.qml
 )
@@ -55,11 +68,14 @@ install(TARGETS yunsh-ui RUNTIME DESTINATION /usr/bin)
 
 install(FILES
     main.qml HomeScreen.qml SettingsScreen.qml AboutScreen.qml
-    AppDock.qml AppIcon.qml GlassPanel.qml GlassCard.qml
-    GlassEffect.qml DropShadowEffect.qml StatusBar.qml
-    ControlCenter.qml NetworkScreen.qml BluetoothScreen.qml
+    AppDock.qml AppIcon.qml EditMenu.qml EditableField.qml EditableInput.qml
+    GlassBackground.qml GlassButton.qml GlassIcon.qml GlassPanel.qml GlassCard.qml
+    GlassEffect.qml GlassWindow.qml DropShadowEffect.qml HomeIndicator.qml
+    MacWindow.qml StatusBar.qml
+    ControlCenter.qml NetworkScreen.qml BluetoothScreen.qml PhotosScreen.qml
     UpdateScreen.qml UpdateHistoryScreen.qml
     YunshBrowser.qml YunshMetaverse.qml ScreenshotOverlay.qml
-    ActivationScreen.qml SystemInfoScreen.qml VirtualKeyboard.qml Screensaver.qml
+    ActivationScreen.qml AndroidAppsScreen.qml SystemInfoScreen.qml
+    TaskSwitcher.qml TerminalScreen.qml VirtualKeyboard.qml Screensaver.qml
     DESTINATION /usr/share/yunsh/ui
 )

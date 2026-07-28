@@ -11,7 +11,7 @@ Rectangle {
     id: terminalScreen
     anchors.fill: parent
     color: "transparent"
-    visible: false
+    visible: true
     z: 60
 
     property string terminalHost: "http://127.0.0.1:8593"
@@ -492,8 +492,9 @@ Rectangle {
         xhr.open("GET", terminalHost + "/status", true)
         xhr.onreadystatechange = function() {
             if (xhr.readyState === XMLHttpRequest.DONE) {
-                terminalScreen.terminalReady = true
-                pollOutput()
+                terminalScreen.terminalReady = xhr.status === 200
+                if (terminalScreen.terminalReady)
+                    pollOutput()
             }
         }
         xhr.send()

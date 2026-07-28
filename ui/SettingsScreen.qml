@@ -8,7 +8,7 @@ import QtQuick.Layouts 1.15
 Rectangle {
     id: settingsScreen
     anchors.fill: parent
-    visible: false
+    visible: true
     color: "transparent"
     z: 50
     
@@ -19,7 +19,8 @@ Rectangle {
     signal openBluetoothSettings()
     signal openSystemInfo()
 
-    property string osVersionName: "YUNSH OS v1.0.2-fixed"
+    property string osVersionName: "YUNSH OS v1.0.3"
+    property string selectedLanguageDisplay: "简体中文 · 拼音"
 
     function loadVersionConfig() {
         var xhr = new XMLHttpRequest()
@@ -41,11 +42,38 @@ Rectangle {
         xhr.send()
     }
 
-    Component.onCompleted: loadVersionConfig()
+    function loadLanguageConfig() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", "file:///etc/yunsh/language.conf", true)
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE ||
+                    (xhr.status !== 0 && xhr.status !== 200))
+                return
+            var language = "简体中文"
+            var keyboard = "拼音"
+            var lines = xhr.responseText.split('\n')
+            for (var i = 0; i < lines.length; i++) {
+                var separator = lines[i].indexOf('=')
+                if (separator < 0)
+                    continue
+                var key = lines[i].substring(0, separator).trim()
+                var value = lines[i].substring(separator + 1).trim()
+                if (key === "language" && value.length > 0)
+                    language = value
+                else if (key === "keyboard" && value.length > 0)
+                    keyboard = value
+            }
+            selectedLanguageDisplay = language + " · " + keyboard
+        }
+        xhr.send()
+    }
+
+    Component.onCompleted: {
+        loadVersionConfig()
+        loadLanguageConfig()
+    }
     signal openDisplaySettings()
     signal openSoundSettings()
-    signal openLanguageSettings()
-    signal openDateTimeSettings()
     
     // ── Helper: send command to update daemon ──
     function sendDaemonCmd(cmd) {
@@ -183,9 +211,8 @@ Rectangle {
                 iconSource: "/usr/share/yunsh/icons/settings.svg"
                 iconSize: 18
                 title: "语言与输入"
-                subtitle: selectedLanguageDisplay
-                showArrow: true
-                onClicked: settingsScreen.openLanguageSettings()
+                subtitle: selectedLanguageDisplay + " · 在激活流程中设置"
+                showArrow: false
             }
             
             GlassCard {
@@ -193,9 +220,8 @@ Rectangle {
                 iconSource: "/usr/share/yunsh/icons/settings.svg"
                 iconSize: 18
                 title: "日期与时间"
-                subtitle: "24 小时制, Asia/Shanghai"
-                showArrow: true
-                onClicked: settingsScreen.openDateTimeSettings()
+                subtitle: "由网络自动同步 · Asia/Shanghai"
+                showArrow: false
             }
             
             GlassCard {
@@ -296,8 +322,9 @@ Rectangle {
                 iconSource: "/usr/share/yunsh/icons/files.svg"
                 iconSize: 18
                 title: "存储"
-                subtitle: "4.5 GB / 32 GB 已使用"
+                subtitle: "查看实时容量与使用情况"
                 showArrow: true
+                onClicked: settingsScreen.openSystemInfo()
             }
             
             GlassCard {
@@ -315,9 +342,6 @@ Rectangle {
         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
     }
 
-    // ── Language display (placeholder) ──
-    readonly property string selectedLanguageDisplay: "简体中文 · 拼音"
-    
     // ════════════════════════════════════════════════════
     // Factory Reset Dialog
     // ════════════════════════════════════════════════════

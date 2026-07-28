@@ -360,6 +360,7 @@ Item {
 
     // === Empty state ===
     Item {
+        id: emptyState
         anchors.centerIn: parent
         visible: openApps.length === 0
         opacity: 0
@@ -390,6 +391,7 @@ Item {
 
     // === Home indicator (always visible in switcher) ===
     Rectangle {
+        id: switcherHomeIndicator
         anchors.bottom: parent.bottom; anchors.bottomMargin: 10
         anchors.horizontalCenter: parent.horizontalCenter
         width: 124; height: 5; radius: 2.5
@@ -408,6 +410,8 @@ Item {
         cardsFlick.opacity = 1.0
         switcherHeader.opacity = 1.0
         closeHint.opacity = 1.0
+        emptyState.opacity = 1.0
+        switcherHomeIndicator.opacity = 1.0
     }
 
     function hide() {
@@ -415,6 +419,8 @@ Item {
         cardsFlick.opacity = 0.0
         switcherHeader.opacity = 0.0
         closeHint.opacity = 0.0
+        emptyState.opacity = 0.0
+        switcherHomeIndicator.opacity = 0.0
 
         animateOut.start()
     }
@@ -436,6 +442,8 @@ Item {
             cardsFlick.opacity = 0
             switcherHeader.opacity = 0
             closeHint.opacity = 0
+            emptyState.opacity = 0
+            switcherHomeIndicator.opacity = 0
         }
     }
 }

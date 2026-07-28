@@ -1,22 +1,180 @@
 #!/bin/bash
 # YUNSH OS Android runtime controller.
+#
+# Android image installation is intentionally asynchronous: an unavailable
+# repository or OTA server must not block activation or the YUNSH desktop.
 set -u
 
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/yunsh-runtime}"
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
+export XDG_SESSION_TYPE=wayland
+
 STORE_DIR="${YUNSH_ANDROID_STORE_DIR:-/usr/share/yunsh/apps}"
 STATE_DIR="${YUNSH_ANDROID_STATE_DIR:-/var/lib/yunsh}"
 WAYDROID_DATA_DIR="${YUNSH_WAYDROID_DATA_DIR:-/var/lib/waydroid}"
+STATE_FILE="${STATE_DIR}/android-setup.json"
+READY_FILE="${STATE_DIR}/.android_ready"
 FDROID_APK="$STORE_DIR/fdroid.apk"
 TENCENT_APK="$STORE_DIR/appstore.apk"
 
 mkdir -p "$XDG_RUNTIME_DIR" "$STORE_DIR" "$STATE_DIR"
 chmod 0700 "$XDG_RUNTIME_DIR"
 
+write_state() {
+    local state="$1" progress="$2" message="$3" error="${4:-}"
+    python3 - "$STATE_FILE" "$state" "$progress" "$message" "$error" <<'PY'
+import json
+import os
+import sys
+import time
+
+path, state, progress, message, error = sys.argv[1:]
+data = {
+    "state": state,
+    "progress": int(progress),
+    "message": message,
+    "error": error or None,
+    "updated": int(time.time()),
+}
+temp = path + ".tmp"
+with open(temp, "w", encoding="utf-8") as handle:
+    json.dump(data, handle, ensure_ascii=False)
+    handle.flush()
+    os.fsync(handle.fileno())
+os.replace(temp, path)
+PY
+}
+
+os_codename() {
+    (
+        . /etc/os-release 2>/dev/null || . /usr/lib/os-release 2>/dev/null || true
+        printf '%s' "${VERSION_CODENAME:-${DEBIAN_CODENAME:-}}"
+    )
+}
+
 valid_apk() {
     [ -f "$1" ] &&
         [ "$(stat -c%s "$1" 2>/dev/null || echo 0)" -gt 1000000 ] &&
         unzip -p "$1" AndroidManifest.xml >/dev/null 2>&1
+}
+
+install_waydroid_package() {
+    command -v waydroid >/dev/null 2>&1 && return 0
+
+    local codename
+    codename="$(os_codename)"
+    case "$codename" in
+        mantic|focal|jammy|kinetic|lunar|noble|plucky|questing|bookworm|bullseye|trixie|sid) ;;
+        *)
+            write_state "error" 10 "Android package is unavailable" \
+                "Unsupported distribution suite: ${codename:-unknown}"
+            return 1
+            ;;
+    esac
+
+    write_state "installing" 10 "Adding the official Waydroid repository"
+    if ! curl --proto '=https' --tlsv1.2 -fsSL \
+        --connect-timeout 15 --max-time 60 \
+        https://repo.waydro.id/waydroid.gpg \
+        -o /usr/share/keyrings/waydroid.gpg; then
+        write_state "error" 10 "Android package download failed" \
+            "Could not download the official Waydroid repository key"
+        return 1
+    fi
+
+    printf 'deb [signed-by=/usr/share/keyrings/waydroid.gpg] https://repo.waydro.id/ %s main\n' \
+        "$codename" > /etc/apt/sources.list.d/waydroid.list
+
+    write_state "installing" 20 "Installing the Waydroid runtime"
+    if ! apt-get update -qq ||
+       ! apt-get install -yqq --no-install-recommends waydroid; then
+        write_state "error" 20 "Android package installation failed" \
+            "Check the network connection, then retry from Android Apps"
+        return 1
+    fi
+    command -v waydroid >/dev/null 2>&1
+}
+
+check_binder_support() {
+    modprobe binder_linux 2>/dev/null || true
+    [ -e /dev/binder ] ||
+        [ -e /dev/binderfs/binder-control ] ||
+        grep -qw binder /proc/filesystems 2>/dev/null
+}
+
+setup_runtime() {
+    if [ -f "$WAYDROID_DATA_DIR/waydroid.cfg" ]; then
+        touch "$READY_FILE"
+        write_state "ready" 100 "Android runtime is ready"
+        systemctl enable waydroid-container.service >/dev/null 2>&1 || true
+        return 0
+    fi
+
+    rm -f "$READY_FILE"
+    install_waydroid_package || return 1
+
+    if ! check_binder_support; then
+        write_state "error" 30 "Android kernel support is unavailable" \
+            "The binder driver is not available"
+        return 1
+    fi
+
+    # FOSS is an officially supported Waydroid system type. Only one bounded
+    # initialization attempt is made per service run; systemd handles retries.
+    write_state "initializing" 35 "Downloading the Android system image"
+    if ! timeout 1800 waydroid init -s FOSS </dev/null; then
+        write_state "error" 35 "Android image setup did not complete" \
+            "The image server may be unavailable; retry from Android Apps"
+        return 1
+    fi
+
+    [ -f "$WAYDROID_DATA_DIR/waydroid.cfg" ] || {
+        write_state "error" 35 "Android image setup did not complete" \
+            "Waydroid did not create its runtime configuration"
+        return 1
+    }
+
+    systemctl enable waydroid-container.service >/dev/null 2>&1 || true
+    touch "$READY_FILE"
+    write_state "ready" 100 "Android runtime is ready"
+}
+
+trigger_setup_retry() {
+    write_state "pending" 0 "Android setup retry requested"
+    systemctl reset-failed yunsh-android-setup.service >/dev/null 2>&1 || true
+    systemctl restart --no-block yunsh-android-setup.service >/dev/null 2>&1
+}
+
+status_json() {
+    python3 - "$STATE_FILE" "$READY_FILE" "$WAYDROID_DATA_DIR/waydroid.cfg" <<'PY'
+import json
+import os
+import sys
+
+state_path, ready_path, config_path = sys.argv[1:]
+try:
+    with open(state_path, encoding="utf-8") as handle:
+        data = json.load(handle)
+except (OSError, ValueError):
+    data = {
+        "state": "pending",
+        "progress": 0,
+        "message": "Android setup has not started",
+        "error": None,
+    }
+initialized = os.path.isfile(config_path)
+ready = initialized and os.path.isfile(ready_path)
+if initialized:
+    data.update({
+        "state": "ready",
+        "progress": 100,
+        "message": "Android runtime is ready",
+        "error": None,
+    })
+data["ready"] = ready or initialized
+data["initialized"] = initialized
+print(json.dumps(data, ensure_ascii=False))
+PY
 }
 
 wait_ready() {
@@ -31,15 +189,17 @@ wait_ready() {
 
 ensure_runtime() {
     command -v waydroid >/dev/null 2>&1 || {
-        echo "Android runtime is not installed" >&2
-        return 1
-    }
-    [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] || {
-        echo "Wayland display is not ready" >&2
+        trigger_setup_retry || true
+        echo "Android runtime is still being installed" >&2
         return 1
     }
     [ -f "$WAYDROID_DATA_DIR/waydroid.cfg" ] || {
-        echo "Android runtime is not initialized" >&2
+        trigger_setup_retry || true
+        echo "Android system image is still being prepared" >&2
+        return 1
+    }
+    [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] || {
+        echo "YUNSH Wayland display is not ready" >&2
         return 1
     }
     systemctl start waydroid-container.service >/dev/null 2>&1 || true
@@ -76,10 +236,20 @@ launch_store() {
     exec waydroid app launch org.fdroid.fdroid
 }
 
+launch_files() {
+    ensure_runtime || return 1
+    waydroid app launch com.android.documentsui ||
+        exec waydroid show-full-ui
+}
+
 case "${1:-status}" in
+    setup) setup_runtime ;;
+    retry) trigger_setup_retry ;;
+    status-json) status_json ;;
     ensure) ensure_runtime ;;
     install-store) install_store ;;
     launch-store) launch_store ;;
+    launch-files) launch_files ;;
     install-apk)
         [ -n "${2:-}" ] && valid_apk "$2" || {
             echo "A valid APK path is required" >&2
@@ -92,5 +262,8 @@ case "${1:-status}" in
             waydroid app list 2>/dev/null |
             grep -Eq 'com\.tencent\.android\.qqdownloader|org\.fdroid\.fdroid'
         ;;
-    *) echo "Usage: yunsh-android {ensure|install-store|launch-store|install-apk PATH|status}" >&2; exit 2 ;;
+    *)
+        echo "Usage: yunsh-android {setup|retry|status-json|ensure|install-store|launch-store|launch-files|install-apk PATH|status}" >&2
+        exit 2
+        ;;
 esac

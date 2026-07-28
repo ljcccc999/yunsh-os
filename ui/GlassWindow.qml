@@ -77,7 +77,7 @@ Rectangle {
     }
 
     // Public alias so we can parent content into it
-    alias contentParent: contentArea
+    property alias contentParent: contentArea
 
     // Window drag handle (visionOS-style grabber at top)
     Rectangle {

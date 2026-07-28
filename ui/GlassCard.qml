@@ -78,7 +78,8 @@ Rectangle {
     
     // Text content
     Column {
-        anchors.left: iconSource.length > 0 ? parent.left + 56 : parent.left + 18
+        anchors.left: parent.left
+        anchors.leftMargin: iconSource.length > 0 ? 56 : 18
         anchors.verticalCenter: parent.verticalCenter
         spacing: 2
         

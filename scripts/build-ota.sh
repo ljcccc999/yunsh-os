@@ -24,20 +24,60 @@ cp "${YUNSH_DIR}"/ui/icons/* "${STAGING}/payload/usr/share/yunsh/icons/"
 cp "${YUNSH_DIR}"/logo/*.png "${STAGING}/payload/usr/share/yunsh/logo/"
 cp "${VERSION_CONF}" "${STAGING}/payload/etc/yunsh/version.conf"
 
-for source in \
-    "${YUNSH_DIR}"/system/yunsh-* \
-    "${YUNSH_DIR}"/boot/yunsh-firstboot.sh \
-    "${YUNSH_DIR}"/boot/yunsh-iptables.sh; do
-    [ -f "${source}" ] || continue
-    case "${source}" in
-        *.conf) continue ;;
-    esac
-    cp "${source}" "${STAGING}/payload/usr/bin/$(basename "${source}")"
+# Keep OTA paths identical to the paths used by the full image builder.  Source
+# filenames such as yunsh-appd.py are intentionally installed without their
+# development suffix, because systemd invokes /usr/bin/yunsh-appd.
+install_runtime() {
+    local source="$1"
+    local destination="$2"
+    [ -f "${source}" ] || {
+        echo "ERROR: required OTA source missing: ${source}" >&2
+        exit 1
+    }
+    cp "${source}" "${STAGING}/payload/usr/bin/${destination}"
+    chmod 0755 "${STAGING}/payload/usr/bin/${destination}"
+}
+
+install_runtime "${YUNSH_DIR}/system/yunsh-update-daemon.py" "yunsh-update-daemon"
+install_runtime "${YUNSH_DIR}/system/yunsh-updater.py" "yunsh-updater"
+install_runtime "${YUNSH_DIR}/system/yunsh-network-daemon.py" "yunsh-network-daemon"
+install_runtime "${YUNSH_DIR}/system/yunsh-bluetooth-daemon.py" "yunsh-bluetooth-daemon"
+install_runtime "${YUNSH_DIR}/system/yunsh-link-ble.py" "yunsh-link-ble"
+install_runtime "${YUNSH_DIR}/system/yunsh-glasses-bridge.py" "yunsh-glasses-bridge"
+install_runtime "${YUNSH_DIR}/system/yunsh-headtracking" "yunsh-headtracking"
+install_runtime "${YUNSH_DIR}/system/yunsh-bno085-reader" "yunsh-bno085-reader"
+install_runtime "${YUNSH_DIR}/system/yunsh-headtracking-sim" "yunsh-headtracking-sim"
+install_runtime "${YUNSH_DIR}/system/yunsh-screenshotd" "yunsh-screenshotd"
+install_runtime "${YUNSH_DIR}/system/yunsh-factory-reset" "yunsh-factory-reset"
+install_runtime "${YUNSH_DIR}/system/yunsh-install-progress.sh" "yunsh-install-progress.sh"
+install_runtime "${YUNSH_DIR}/system/yunsh-inputd" "yunsh-inputd"
+install_runtime "${YUNSH_DIR}/system/yunsh-powerd" "yunsh-powerd"
+install_runtime "${YUNSH_DIR}/system/yunsh-activation-helper" "yunsh-activation-helper"
+install_runtime "${YUNSH_DIR}/system/yunsh-appd.py" "yunsh-appd"
+install_runtime "${YUNSH_DIR}/system/yunsh-android" "yunsh-android"
+install_runtime "${YUNSH_DIR}/system/yunsh-terminal.py" "yunsh-terminal"
+install_runtime "${YUNSH_DIR}/system/yunsh-disk-helper" "yunsh-disk-helper"
+install_runtime "${YUNSH_DIR}/system/yunsh-splash" "yunsh-splash"
+install_runtime "${YUNSH_DIR}/boot/yunsh-firstboot.sh" "yunsh-firstboot.sh"
+install_runtime "${YUNSH_DIR}/boot/yunsh-iptables.sh" "yunsh-iptables.sh"
+
+required_services=(
+    yunsh-os yunsh-firstboot yunsh-local-api yunsh-network yunsh-bluetooth
+    yunsh-update yunsh-link-ble yunsh-glasses-bridge yunsh-appd
+    yunsh-android-setup yunsh-terminal yunsh-headtracking yunsh-powerd yunsh-splash
+)
+for service_name in "${required_services[@]}"; do
+    service="${BUILD_DIR}/${service_name}.service"
+    [ -f "${service}" ] || {
+        echo "ERROR: build service is missing: ${service}; run scripts/build-no-hdiutil.sh first" >&2
+        exit 1
+    }
 done
 
 for service in "${BUILD_DIR}"/yunsh-*.service; do
     [ -f "${service}" ] || continue
     cp "${service}" "${STAGING}/payload/etc/systemd/system/"
+    chmod 0644 "${STAGING}/payload/etc/systemd/system/$(basename "${service}")"
 done
 
 python3 - "${STAGING}" "${VERSION}" <<'PY'

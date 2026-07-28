@@ -9,6 +9,13 @@ export DEBCONF_NONINTERACTIVE_SEEN=true
 # Redirect ALL output to tty1 so Tim can see progress on HDMI
 exec > /dev/tty1 2>&1
 
+# The image base may move between Debian releases. Never mix a hard-coded
+# distribution suite into APT/network checks.
+OS_CODENAME="$(
+    . /etc/os-release 2>/dev/null || . /usr/lib/os-release 2>/dev/null || true
+    printf '%s' "${VERSION_CODENAME:-${DEBIAN_CODENAME:-stable}}"
+)"
+
 touch /etc/yunsh/.firstboot_partial
 sync
 
@@ -31,9 +38,11 @@ WAIT=0
 TIMEOUT=24
 network_ready() {
     curl -fsI --connect-timeout 2 --max-time 4 \
-        https://deb.debian.org/debian/dists/bookworm/InRelease &>/dev/null ||
+        "https://deb.debian.org/debian/dists/${OS_CODENAME}/InRelease" &>/dev/null ||
     curl -fsI --connect-timeout 2 --max-time 4 \
-        https://mirrors.tuna.tsinghua.edu.cn/debian/dists/bookworm/InRelease &>/dev/null
+        https://deb.debian.org/debian/README &>/dev/null ||
+    curl -fsI --connect-timeout 2 --max-time 4 \
+        "https://mirrors.tuna.tsinghua.edu.cn/debian/dists/${OS_CODENAME}/InRelease" &>/dev/null
 }
 while ! network_ready; do
     WAIT=$((WAIT+1))
@@ -145,8 +154,7 @@ apt-get update -qq 2>/dev/null || { sleep 10; apt-get update -qq 2>/dev/null || 
 
 # Install packages
 install_apt 8 "Qt6 framework" qt6-base-dev qt6-declarative-dev libqt6svg6 libqt6opengl6 qt6-base-dev-tools qt6-qmltooling-plugins qml-qt6 qmlscene-qt6 qml6-module-qtqml qml6-module-qtqml-workerscript qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-window qml6-module-qtquick-virtualkeyboard qml6-module-qt-labs-qmlmodels qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtquick-templates
-install_apt 14 "Python environment" python3-pip python3-smbus
-pip3 install smbus2 2>/dev/null || true
+install_apt 14 "Python environment" python3-pip python3-smbus2
 install_apt 20 "WebEngine" qt6-webengine-dev libqt6webenginequick6 qml6-module-qtwebengine
 install_apt 24 "Android display and container runtime" lxc python3-dbus python3-gi weston libwayland-client0 qml6-module-qtwayland-compositor qt6-wayland
 install_apt 32 "Network & BT" network-manager wpasupplicant bluez
@@ -155,32 +163,16 @@ install_apt 44 "Chinese fonts" fonts-noto-cjk
 install_apt 50 "Audio" pulseaudio alsa-utils
 install_apt 56 "OpenGL" mesa-utils libgl1-mesa-dri
 
-# Waydroid and a working Android image are core YUNSH OS components.
-pct 58 "Preparing Android runtime..."
-if ! command -v waydroid >/dev/null 2>&1; then
-    curl -fsSL --connect-timeout 10 --max-time 30 \
-        https://repo.waydro.id/waydroid.gpg \
-        -o /usr/share/keyrings/waydroid.gpg 2>/dev/null &&
-    echo "deb [signed-by=/usr/share/keyrings/waydroid.gpg] https://repo.waydro.id/ bookworm main" \
-        > /etc/apt/sources.list.d/waydroid.list &&
-    apt-get update -qq 2>/dev/null &&
-    apt-get install -yqq --no-install-recommends waydroid 2>/dev/null || true
-fi
-command -v waydroid >/dev/null 2>&1 || {
-    echo "  [ERROR] Android runtime installation failed."
-    rm -f /etc/yunsh/.firstboot_partial
-    exit 1
-}
+# Waydroid remains a core component, but its repository and Android image are
+# external network dependencies. They must never block activation or desktop
+# startup. yunsh-android-setup.service prepares it in the background and
+# retries safely after this first-boot transaction has completed.
+pct 58 "Scheduling Android runtime setup..."
+mkdir -p /var/lib/yunsh
+printf '{"state":"pending","progress":0,"message":"Android setup is queued"}\n' \
+    > /var/lib/yunsh/android-setup.json
 
-pct 62 "Configuring Waydroid..."
-if [ ! -f /var/lib/waydroid/waydroid.cfg ]; then
-    timeout 1800 waydroid init -s FOSS </dev/null ||
-    timeout 1800 waydroid init </dev/null || {
-        echo "  [ERROR] Android system image initialization failed."
-        rm -f /etc/yunsh/.firstboot_partial
-        exit 1
-    }
-fi
+pct 62 "Checking desktop runtime..."
 
 pct 68 "Starting core services..."
 systemctl enable NetworkManager bluetooth ssh 2>/dev/null || true
@@ -196,7 +188,7 @@ setup_firewall
 
 pct 84 "Enabling YUNSH services..."
 systemctl enable yunsh-os yunsh-local-api yunsh-network yunsh-bluetooth yunsh-update yunsh-link-ble yunsh-glasses-bridge \
-    yunsh-appd yunsh-terminal yunsh-headtracking yunsh-bno085-reader yunsh-powerd \
+    yunsh-appd yunsh-android-setup yunsh-terminal yunsh-headtracking yunsh-powerd \
     fstrim.timer 2>/dev/null || true
 
 pct 86 "Creating default user..."
@@ -222,7 +214,7 @@ pct 98 "Cleaning up..."
 rm -f /etc/yunsh/.firstboot_partial 2>/dev/null || true
 
 pct 100 "Setup complete! Rebooting..."
-CORE_PACKAGES="qml-qt6 libqt6opengl6 qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-shapes qml6-module-qtwebengine qt6-wayland weston waydroid unzip"
+CORE_PACKAGES="qml-qt6 libqt6opengl6 qml6-module-qtqml qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtwebengine qt6-wayland weston network-manager bluez python3-pil python3-dbus python3-gi unzip"
 CORE_MISSING=""
 for package in $CORE_PACKAGES; do
     dpkg-query -W -f='${Status}' "$package" 2>/dev/null |

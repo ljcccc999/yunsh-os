@@ -98,6 +98,7 @@ Item {
                 }
                 
                 MouseArea {
+                    id: dockMouse
                     anchors.fill: parent
                     hoverEnabled: true
                     onEntered: {
@@ -126,7 +127,7 @@ Item {
                     height: 22
                     radius: 11
                     color: Qt.rgba(0/255, 0/255, 0/255, 0.6)
-                    visible: parent.containsMouse
+                    visible: dockMouse.containsMouse
                     
                     Text {
                         id: tooltipText

@@ -9,7 +9,7 @@ Rectangle {
     id: networkScreen
     anchors.fill: parent
     color: "transparent"  // Transparent in AR
-    visible: false
+    visible: true
     z: 60
     
     property bool scanning: false

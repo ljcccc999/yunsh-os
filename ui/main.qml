@@ -1,4 +1,4 @@
-// YUNSH OS v1.0.1 - Main QML Entry Point (visionOS Ultimate)
+// YUNSH OS v1.0.3 - Main QML Entry Point
 // Apple-style glass system + Task Switcher + Home Indicator
 
 import QtQuick 2.15
@@ -24,6 +24,7 @@ ApplicationWindow {
     property real headRoll: 0.0
     property real pixelsPerDegree: 21.3  // 1920px ÷ ~90° FOV
     property bool headTrackingEnabled: false
+    property string androidTarget: "appstore"
 
     property var openApps: []
     property var appInfo: ({
@@ -48,17 +49,21 @@ ApplicationWindow {
         }
         var info = appInfo[appId]
         if (info) {
-            openApps.push({ appId: appId, name: info.name, icon: info.icon, color: info.color })
+            var updated = openApps.slice()
+            updated.push({ appId: appId, name: info.name, icon: info.icon, color: info.color })
+            openApps = updated
         }
     }
 
     function closeAppFromSwitcher(appId) {
+        var updated = openApps.slice()
         for (var i = 0; i < openApps.length; i++) {
             if (openApps[i].appId === appId) {
-                openApps.splice(i, 1)
+                updated.splice(i, 1)
                 break
             }
         }
+        openApps = updated
         closeWindowById(appId)
         if (openApps.length === 0) homeScreen.visible = true
     }
@@ -134,7 +139,7 @@ ApplicationWindow {
             onOpenPhotos: switchTo(photosWindow, "photos")
             onShowControlCenter: controlCenter.show()
             onTakeScreenshot: takeScreenshot()
-            onOpenAppLibrary: {}
+            onOpenAppLibrary: showTaskSwitcher()
         }
 
         // ===== CONTROL CENTER =====
@@ -146,6 +151,8 @@ ApplicationWindow {
             onDismissPanel: controlCenter.hide()
             onOpenNetwork: { controlCenter.hide(); switchTo(networkWindow, "network") }
             onOpenBluetooth: { controlCenter.hide(); switchTo(bluetoothWindow, "bluetooth") }
+            onToggleWifi: controlCenter.applyWifiPower()
+            onToggleBluetooth: controlCenter.applyBluetoothPower()
             onToggleKeyboard: { controlCenter.hide(); virtualKeyboard.visible ? virtualKeyboard.hide() : virtualKeyboard.show() }
             onTakeScreenshot: takeScreenshot()
         }
@@ -168,10 +175,8 @@ ApplicationWindow {
                 onOpenNetworkSettings: switchTo(networkWindow, "network")
                 onOpenBluetoothSettings: switchTo(bluetoothWindow, "bluetooth")
                 onOpenSystemInfo: switchTo(systemInfoWindow, "systeminfo")
-                onOpenDisplaySettings: {}
-                onOpenSoundSettings: {}
-                onOpenLanguageSettings: {}
-                onOpenDateTimeSettings: {}
+                onOpenDisplaySettings: { settingsWindow.visible = false; controlCenter.show() }
+                onOpenSoundSettings: { settingsWindow.visible = false; controlCenter.show() }
             }
         }
 
@@ -348,6 +353,10 @@ ApplicationWindow {
             visible: false
             onCloseClicked: { yunshOS.closeAppFromSwitcher("appstore"); yunshOS.closeAppFromSwitcher("files") }
             onMinimizeClicked: { androidWindow.visible = false; androidWindow.isMinimized = true; homeScreen.visible = true }
+            AndroidAppsScreen {
+                anchors.fill: parent
+                targetApp: yunshOS.androidTarget
+            }
         }
 
         // ===== SCREENSHOT OVERLAY =====
@@ -427,7 +436,7 @@ ApplicationWindow {
     }
 
     // ===== FLOATING WINDOW FUNCTIONS =====
-    var windowCount = 0
+    property int windowCount: 0
 
     function switchTo(window, appId) {
         if (!window.visible) homeScreen.visible = true
@@ -445,6 +454,8 @@ ApplicationWindow {
             var w = getWindowById(ids[i])
             if (w) { w.visible = false; w.isMinimized = false }
         }
+        androidWindow.visible = false
+        androidWindow.isMinimized = false
         homeScreen.visible = true
     }
 
@@ -498,7 +509,10 @@ ApplicationWindow {
     // ===== KEYBOARD SHORTCUTS =====
     Shortcut { sequence: "Print"; onActivated: takeScreenshot() }
     Shortcut { sequence: "Ctrl+Shift+S"; onActivated: screenshotOverlay.visible = true }
-    Shortcut { sequence: "Ctrl+Shift+C"; onActivated: controlCenter.toggle() }
+    Shortcut {
+        sequence: "Ctrl+Shift+C"
+        onActivated: controlCenter.visible ? controlCenter.hide() : controlCenter.show()
+    }
     Shortcut { sequence: "Ctrl+Up"; onActivated: showTaskSwitcher() }
 
     Shortcut {
@@ -524,6 +538,14 @@ ApplicationWindow {
         if (!info) return
 
         // Show Android window
+        var otherAndroidId = appId === "appstore" ? "files" : "appstore"
+        var filteredApps = []
+        for (var i = 0; i < openApps.length; i++) {
+            if (openApps[i].appId !== otherAndroidId)
+                filteredApps.push(openApps[i])
+        }
+        openApps = filteredApps
+        yunshOS.androidTarget = appId
         androidWindow.appTitle = info.name
         var w = androidWindow
         w.x = 80 + (windowCount % 3) * 40
@@ -552,10 +574,8 @@ ApplicationWindow {
 
     // ─── Head Tracking Polling ────────────────────────
     // Polls yunsh-headtracking daemon.
-    // Uses a two-phase approach:
-    //   1. Initial probe: try once, if no response → don't poll
-    //   2. If daemon detected: poll every 100ms while active
-    // This avoids 20 req/s forever on systems without IMU.
+    // Uses a slow discovery probe and switches to a 100 ms stream after the
+    // daemon is available. This also survives service startup races.
     property bool htDaemonDetected: false
     property int htPollInterval: 100
 
@@ -573,7 +593,7 @@ ApplicationWindow {
                 } else {
                     yunshOS.htDaemonDetected = false
                     headTrackingTimer.running = false
-                    console.log("YUNSH: No head tracking daemon found — IMU polling disabled")
+                    headTrackingProbeTimer.restart()
                 }
             }
         }
@@ -612,6 +632,14 @@ ApplicationWindow {
         }
     }
 
+    Timer {
+        id: headTrackingProbeTimer
+        interval: 5000
+        running: false
+        repeat: false
+        onTriggered: yunshOS.probeHeadTracking()
+    }
+
     // ─── Mouse movement resets idle timer ──────────
     MouseArea {
         anchors.fill: parent
@@ -627,7 +655,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        console.log("YUNSH OS UI v1.0.2-fixed")
+        console.log("YUNSH OS UI v1.0.3")
         checkFirstBoot()
         showFullScreen()
         // Probe head tracking daemon once (won't poll if not found)

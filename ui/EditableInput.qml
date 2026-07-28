@@ -7,10 +7,26 @@ import QtQuick.Controls 2.15
 TextInput {
     id: input
 
+    // Qt Quick TextInput does not provide the placeholder properties exposed
+    // by TextField.  Declare and render them here because this lightweight
+    // component is used inside custom glass input surfaces.
+    property string placeholderText: ""
+    property color placeholderTextColor: Qt.rgba(1, 1, 1, 0.35)
     property var _menuItems: [
         {label: "粘贴", action: "paste"},
         {label: "全选", action: "selectAll"}
     ]
+
+    Text {
+        anchors.fill: parent
+        text: input.placeholderText
+        color: input.placeholderTextColor
+        font: input.font
+        horizontalAlignment: input.horizontalAlignment
+        verticalAlignment: input.verticalAlignment
+        elide: Text.ElideRight
+        visible: input.text.length === 0 && input.placeholderText.length > 0
+    }
 
     Popup {
         id: popup

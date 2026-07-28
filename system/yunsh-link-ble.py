@@ -83,14 +83,16 @@ def compact_status(result: dict) -> dict:
     """Use compact wire keys so notifications fit a normal iPhone ATT MTU."""
     glasses = read_json(GLASSES_STATUS_PATH)
     power = read_json(POWER_STATUS_PATH)
+    detail = result.get("error") or result.get("result") or "Ready"
     return {
         "cv": result.get("current_version", "—"),
         "lv": result.get("latest_version", "—"),
         "ua": bool(result.get("update_available", False)),
         "s": result.get("state", "error" if result.get("error") else "ready"),
-        "d": result.get("error", result.get("result", "Ready"))[:24],
+        "d": str(detail)[:24],
         "gc": bool(glasses.get("connected", False)),
         "gb": glasses.get("battery"),
+        "gv": glasses.get("battery_mv"),
         "gl": glasses.get("brightness"),
         "hb": power.get("battery") if power.get("available") else None,
     }
@@ -292,6 +294,14 @@ def main():
     advertising = dbus.Interface(bus.get_object(BLUEZ, adapter), AD_MANAGER_IFACE)
     gatt.RegisterApplication(app.get_path(), {}, reply_handler=lambda: None, error_handler=lambda err: sys.exit(f"GATT registration failed: {err}"))
     advertising.RegisterAdvertisement(advertisement.get_path(), {}, reply_handler=lambda: None, error_handler=lambda err: sys.exit(f"Advertisement failed: {err}"))
+
+    def refresh_status():
+        # Keep subscribed phones updated when battery/brightness changes even
+        # if the phone is not actively issuing commands.
+        status.refresh()
+        return True
+
+    GLib.timeout_add_seconds(2, refresh_status)
     GLib.MainLoop().run()
 
 

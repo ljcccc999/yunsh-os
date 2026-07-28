@@ -16,8 +16,18 @@ if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.]+)?$ ]]; then
     exit 1
 fi
 OUTPUT_FILE="${OUTPUT_DIR}/YUNSH-OS-${VERSION}.img"
-E2FSPROGS="/opt/homebrew/Cellar/e2fsprogs/1.47.4"
+# Homebrew upgrades e2fsprogs independently. Resolve its stable prefix instead
+# of baking a Cellar version into the image builder.
+E2FSPROGS="${YUNSH_E2FSPROGS_PREFIX:-}"
+if [ -z "${E2FSPROGS}" ] && command -v brew >/dev/null 2>&1; then
+    E2FSPROGS="$(brew --prefix e2fsprogs 2>/dev/null || true)"
+fi
+if [ ! -x "${E2FSPROGS}/sbin/debugfs" ] || [ ! -x "${E2FSPROGS}/sbin/e2fsck" ]; then
+    echo "ERROR: e2fsprogs (debugfs and e2fsck) is required; install it with: brew install e2fsprogs"
+    exit 1
+fi
 DEBUGFS="${E2FSPROGS}/sbin/debugfs"
+E2FSCK="${E2FSPROGS}/sbin/e2fsck"
 
 echo "============================================"
 echo "  YUNSH OS ${VERSION} - Image Builder (no hdiutil)"
@@ -64,27 +74,7 @@ echo "  ✓ ${OUTPUT_FILE}"
 # ─── Step 4: Generate splash screens ──────────────
 echo ""
 echo "=== Generating boot splash screen ==="
-python3 "${YUNSH_DIR}/scripts/generate-splash.py" 2>&1 || {
-    python3 -c "
-print('Generating splash placeholders...')
-import struct, os
-splash_dir = '${BUILD_DIR}/splash'
-os.makedirs(splash_dir, exist_ok=True)
-for name in ['yunsh-splash-logo.raw', 'yunsh-splash-full.raw']:
-    # 1920x1080x32bpp = 8294400 bytes
-    path = os.path.join(splash_dir, name)
-    if not os.path.exists(path):
-        with open(path, 'wb') as f:
-            f.write(b'\0' * 8294400)
-            print(f'  placeholder: {name}')
-for name in ['yunsh-splash-logo.bmp', 'yunsh-splash-full.bmp', 'yunsh-splash-full-720p.bmp']:
-    path = os.path.join(splash_dir, name)
-    if not os.path.exists(path):
-        with open(path, 'wb') as f:
-            f.write(b'\0' * 100)
-            print(f'  placeholder: {name}')
-"
-}
+python3 "${YUNSH_DIR}/scripts/generate-splash.py"
 
 # ─── Step 5: Download a verified Android app store ──
 echo ""
@@ -200,6 +190,13 @@ echo ""
 echo "→ Writing boot back to output image..."
 dd if="${BOOT_IMG}" of="${OUTPUT_FILE}" bs=512 seek=$BOOT_START count=$BOOT_SIZE conv=notrunc 2>/dev/null
 sync
+# Read the FAT image back before deleting it. These are boot-critical settings:
+# a failed mtools write must stop the build rather than becoming an unbootable
+# image published under an otherwise valid checksum.
+mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtoverlay=vc4-kms-v3d'
+mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtparam=i2c_arm=on'
+mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'psi=1'
+mtype -i "${BOOT_IMG}" ::/YUNSH-FIRSTBOOT.SH >/dev/null
 rm -f "${BOOT_IMG}" "${BUILD_DIR}/yunsh-config-new.txt" "${BUILD_DIR}/yunsh-cmdline-new.txt"
 echo "  ✓ Boot partition written back"
 
@@ -360,6 +357,11 @@ ConditionPathExists=!/etc/yunsh/.packages_installed
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/yunsh-firstboot.sh
+TimeoutStartSec=0
+# A transient Wi-Fi/DNS failure must retry setup automatically; requiring a
+# manual reboot here was one of the ways a fresh image appeared stuck.
+Restart=on-failure
+RestartSec=30
 StandardInput=tty
 StandardOutput=tty
 StandardError=tty
@@ -376,6 +378,7 @@ cat > "${BUILD_DIR}/yunsh-local-api.service" << 'APISVC'
 [Unit]
 Description=YUNSH OS Local QML API Bridge
 After=yunsh-network.service yunsh-bluetooth.service yunsh-update.service
+ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-activation-helper
@@ -393,6 +396,7 @@ cat > "${BUILD_DIR}/yunsh-network.service" << 'NSVC'
 Description=YUNSH OS Network Manager
 After=NetworkManager.service
 BindsTo=NetworkManager.service
+ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-network-daemon
@@ -407,6 +411,7 @@ cat > "${BUILD_DIR}/yunsh-bluetooth.service" << 'BSVC'
 [Unit]
 Description=YUNSH OS Bluetooth Manager
 After=bluetooth.service
+ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-bluetooth-daemon
@@ -423,6 +428,7 @@ cat > "${BUILD_DIR}/yunsh-link-ble.service" << 'LINKSVC'
 Description=YUNSH Link Bluetooth Companion
 After=bluetooth.service yunsh-update.service
 Wants=bluetooth.service
+ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-link-ble
@@ -439,6 +445,7 @@ cat > "${BUILD_DIR}/yunsh-glasses-bridge.service" << 'GLASSESSVC'
 Description=YUNSH V1 Glasses Bluetooth Bridge
 After=bluetooth.service yunsh-bluetooth.service yunsh-headtracking.service
 Wants=bluetooth.service yunsh-headtracking.service
+ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-glasses-bridge
@@ -455,6 +462,7 @@ cat > "${BUILD_DIR}/yunsh-update.service" << 'USVC'
 [Unit]
 Description=YUNSH OS OTA Update Daemon
 After=network-online.target
+ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-update-daemon --foreground
@@ -470,6 +478,7 @@ cat > "${BUILD_DIR}/yunsh-appd.service" << 'APPSVC'
 [Unit]
 Description=YUNSH OS App Launcher Daemon
 After=network.target
+ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-appd
@@ -478,6 +487,27 @@ Restart=always
 WantedBy=multi-user.target
 APPSVC
 add_file "${BUILD_DIR}/yunsh-appd.service" "/etc/systemd/system/yunsh-appd.service"
+
+# Android runtime setup is deliberately independent of yunsh-os.service.
+# A slow/unavailable Android image server must never prevent the desktop from
+# reaching activation. This service retries in the background after firstboot.
+cat > "${BUILD_DIR}/yunsh-android-setup.service" << 'ANDROIDSVC'
+[Unit]
+Description=YUNSH OS Android Runtime Setup
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/yunsh/.packages_installed
+ConditionPathExists=!/var/lib/yunsh/.android_ready
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/yunsh-android setup
+TimeoutStartSec=1900
+Restart=on-failure
+RestartSec=120
+[Install]
+WantedBy=multi-user.target
+ANDROIDSVC
+add_file "${BUILD_DIR}/yunsh-android-setup.service" "/etc/systemd/system/yunsh-android-setup.service"
 
 # Splash service
 cat > "${BUILD_DIR}/yunsh-splash.service" << 'SSVC'
@@ -515,6 +545,7 @@ cat > "${BUILD_DIR}/yunsh-headtracking.service" << 'HTSVC'
 [Unit]
 Description=YUNSH OS Head Tracking
 After=local-fs.target
+ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-headtracking
@@ -529,10 +560,12 @@ cat > "${BUILD_DIR}/yunsh-bno085-reader.service" << 'BNOSVC'
 [Unit]
 Description=YUNSH OS BNO085 IMU Reader
 After=local-fs.target
+ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-bno085-reader
 Restart=always
+RestartSec=5
 [Install]
 WantedBy=multi-user.target
 BNOSVC
@@ -556,6 +589,7 @@ cat > "${BUILD_DIR}/yunsh-terminal.service" << 'TERMSVC'
 [Unit]
 Description=YUNSH OS Terminal Daemon (PTY bash)
 After=network.target yunsh-os.service
+ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-terminal
@@ -569,8 +603,8 @@ add_file "${BUILD_DIR}/yunsh-terminal.service" "/etc/systemd/system/yunsh-termin
 
 # Enable services
 for service in yunsh-os yunsh-firstboot yunsh-local-api yunsh-network yunsh-bluetooth \
-               yunsh-update yunsh-link-ble yunsh-glasses-bridge yunsh-appd yunsh-terminal yunsh-headtracking \
-               yunsh-bno085-reader yunsh-powerd yunsh-splash; do
+               yunsh-update yunsh-link-ble yunsh-glasses-bridge yunsh-appd yunsh-android-setup yunsh-terminal yunsh-headtracking \
+               yunsh-powerd yunsh-splash; do
     echo "symlink /etc/systemd/system/multi-user.target.wants/${service}.service ../${service}.service" >> "${DEBUGFS_SCRIPT}"
 done
 # Network: disable dhcpcd, enable NetworkManager + fstrim
@@ -630,7 +664,7 @@ echo "debugfs injection ✓"
 echo ""
 echo "=== Running e2fsck ==="
 set +e
-"${E2FSPROGS}/sbin/e2fsck" -fy "${ROOT_PARTITION_IMG}" 2>&1
+"${E2FSCK}" -fy "${ROOT_PARTITION_IMG}" 2>&1
 FSCK_RESULT=$?
 set -e
 if [ "${FSCK_RESULT}" -gt 1 ]; then
@@ -671,14 +705,17 @@ REQUIRED_ROOT_FILES="
 /usr/bin/yunsh-link-ble
 /usr/bin/yunsh-glasses-bridge
 /usr/bin/yunsh-headtracking
+/usr/bin/yunsh-android
 /usr/share/yunsh/ui/main.qml
 /usr/share/yunsh/ui/HomeScreen.qml
 /usr/share/yunsh/logo/logo-256.png
 /etc/yunsh/version.conf
 /etc/systemd/system/yunsh-os.service
 /etc/systemd/system/yunsh-firstboot.service
+/etc/systemd/system/yunsh-android-setup.service
 /etc/systemd/system/multi-user.target.wants/yunsh-os.service
 /etc/systemd/system/multi-user.target.wants/yunsh-firstboot.service
+/etc/systemd/system/multi-user.target.wants/yunsh-android-setup.service
 "
 for required in ${REQUIRED_ROOT_FILES}; do
     if ! "${E2FSPROGS}/sbin/debugfs" -R "stat ${required}" "${ROOT_TEST_IMG}" 2>&1 |
@@ -688,7 +725,7 @@ for required in ${REQUIRED_ROOT_FILES}; do
     fi
 done
 set +e
-"${E2FSPROGS}/sbin/e2fsck" -fn "${ROOT_TEST_IMG}" >/dev/null 2>&1
+"${E2FSCK}" -fn "${ROOT_TEST_IMG}" >/dev/null 2>&1
 FSCK_VERIFY=$?
 set -e
 if [ "${FSCK_VERIFY}" -gt 1 ]; then

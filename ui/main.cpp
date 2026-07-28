@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
     // Create application with platform-appropriate settings
     QGuiApplication app(argc, argv);
     app.setApplicationName("YUNSH OS");
-    app.setApplicationVersion("1.0.1");
+    app.setApplicationVersion("1.0.3");
     app.setOrganizationName("YUNSH");
     app.setOrganizationDomain("yunsh.tech");
 

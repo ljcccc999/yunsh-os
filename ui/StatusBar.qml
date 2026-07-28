@@ -9,13 +9,74 @@ Item {
     height: 48
     
     property string currentTime: "00:00"
-    property string batteryLevel: "100%"
+    property string batteryLevel: "—"
     property bool wifiOn: false
     property bool bluetoothOn: false
+    property real tintOpacity: 1.0
     property bool showControlCenterHint: false  // subtle drag hint
     
     signal screenshotTriggered()
     signal openControlCenter()
+
+    function refreshStatus() {
+        var networkRequest = new XMLHttpRequest()
+        networkRequest.open("GET", "http://127.0.0.1:8591/api/network-status", true)
+        networkRequest.onreadystatechange = function() {
+            if (networkRequest.readyState === XMLHttpRequest.DONE && networkRequest.status === 200) {
+                try {
+                    var network = JSON.parse(networkRequest.responseText)
+                    wifiOn = network.enabled === true
+                } catch (error) {}
+            }
+        }
+        networkRequest.send()
+
+        var bluetoothRequest = new XMLHttpRequest()
+        bluetoothRequest.open("GET", "http://127.0.0.1:8591/api/bluetooth-status", true)
+        bluetoothRequest.onreadystatechange = function() {
+            if (bluetoothRequest.readyState === XMLHttpRequest.DONE && bluetoothRequest.status === 200) {
+                try {
+                    bluetoothOn = JSON.parse(bluetoothRequest.responseText).powered === true
+                } catch (error) {}
+            }
+        }
+        bluetoothRequest.send()
+
+        var glassesRequest = new XMLHttpRequest()
+        glassesRequest.open("GET", "http://127.0.0.1:8591/api/glasses-status", true)
+        glassesRequest.onreadystatechange = function() {
+            if (glassesRequest.readyState === XMLHttpRequest.DONE && glassesRequest.status === 200) {
+                try {
+                    var glasses = JSON.parse(glassesRequest.responseText)
+                    if (glasses.connected && typeof glasses.battery === "number") {
+                        batteryLevel = "眼镜 " + glasses.battery + "%"
+                    } else {
+                        refreshHostPower()
+                    }
+                } catch (error) {
+                    refreshHostPower()
+                }
+            }
+        }
+        glassesRequest.send()
+    }
+
+    function refreshHostPower() {
+        var powerRequest = new XMLHttpRequest()
+        powerRequest.open("GET", "http://127.0.0.1:8591/api/power-status", true)
+        powerRequest.onreadystatechange = function() {
+            if (powerRequest.readyState === XMLHttpRequest.DONE && powerRequest.status === 200) {
+                try {
+                    var power = JSON.parse(powerRequest.responseText)
+                    batteryLevel = power.available && typeof power.battery === "number"
+                        ? "主机 " + power.battery + "%" : "外接电源"
+                } catch (error) {
+                    batteryLevel = "—"
+                }
+            }
+        }
+        powerRequest.send()
+    }
     
     Timer {
         interval: 1000
@@ -26,6 +87,15 @@ Item {
             currentTime = d.toLocaleTimeString(Qt.locale("zh_CN"), "HH:mm")
         }
     }
+
+    Timer {
+        interval: 5000
+        running: statusBar.visible
+        repeat: true
+        onTriggered: statusBar.refreshStatus()
+    }
+
+    Component.onCompleted: refreshStatus()
     
     // Glass background (visionOS style - slight frosted bar, not edge-to-edge)
     Rectangle {

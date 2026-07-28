@@ -9,7 +9,7 @@ Rectangle {
     id: bluetoothScreen
     anchors.fill: parent
     color: "transparent"  // Transparent in AR
-    visible: false
+    visible: true
     z: 60
 
     // ── Properties ─────────────────────────────────────
@@ -57,7 +57,6 @@ Rectangle {
                     var data = JSON.parse(xhr.responseText)
                     bluetoothOn = data.powered || false
                     pairedDevices = data.paired_devices || []
-                    availableDevices = []  // Cleared after scan
                 } catch(e) {}
             }
         }

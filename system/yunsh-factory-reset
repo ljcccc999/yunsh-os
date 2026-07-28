@@ -58,7 +58,10 @@ echo "✓ 用户偏好已重置（保留系统配置）"
 if command -v waydroid &>/dev/null; then
     waydroid session stop 2>/dev/null || true
 fi
+systemctl stop waydroid-container.service 2>/dev/null || true
 rm -rf /var/lib/waydroid/data/* 2>/dev/null || true
+rm -f /var/lib/yunsh/.tencent-appstore-installed 2>/dev/null || true
+rm -f /var/lib/yunsh/.fdroid-installed 2>/dev/null || true
 # Preserve Android system images/rootfs so no reinstall or redownload is needed.
 echo "✓ Waydroid 用户数据已清除（系统镜像保留）"
 

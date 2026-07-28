@@ -25,6 +25,7 @@ import socket
 import stat
 import subprocess
 import sys
+import threading
 import time
 import traceback
 import urllib.request
@@ -233,17 +234,61 @@ def _fetch_json(url: str):
 
 def _compare_versions(v1: str, v2: str) -> int:
     def _parts(v):
-        try:
-            return [int(p) for p in v.split(".")]
-        except ValueError:
-            return [0]
-    p1, p2 = _parts(v1), _parts(v2)
+        match = re.fullmatch(
+            r"v?(?P<numbers>\d+(?:\.\d+)*)(?:[-.]?(?P<suffix>[A-Za-z][A-Za-z0-9.-]*))?",
+            v.strip(),
+        )
+        if not match:
+            return ([0], "invalid")
+        return (
+            [int(part) for part in match.group("numbers").split(".")],
+            (match.group("suffix") or "").lower(),
+        )
+    (p1, suffix1), (p2, suffix2) = _parts(v1), _parts(v2)
     for i in range(max(len(p1), len(p2))):
         a = p1[i] if i < len(p1) else 0
         b = p2[i] if i < len(p2) else 0
-        if a < b: return -1
-        if a > b: return 1
+        if a < b:
+            return -1
+        if a > b:
+            return 1
+    # A final release sorts after a prerelease with the same numeric version.
+    if suffix1 == suffix2:
+        return 0
+    if not suffix1:
+        return 1
+    if not suffix2:
+        return -1
+    if suffix1 < suffix2:
+        return -1
+    if suffix1 > suffix2:
+        return 1
     return 0
+
+
+def wifi_connected() -> bool:
+    """Return True only when NetworkManager reports an active Wi-Fi link."""
+    try:
+        environment = dict(os.environ)
+        environment["LC_ALL"] = "C"
+        result = subprocess.run(
+            [
+                "nmcli", "-t", "-f", "TYPE,STATE",
+                "connection", "show", "--active",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=environment,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if result.returncode != 0:
+        return False
+    return any(
+        line.strip() in {"802-11-wireless:activated", "wifi:activated"}
+        for line in result.stdout.splitlines()
+    )
 
 
 def is_major_update(current: str, latest: str) -> bool:
@@ -359,6 +404,7 @@ class UpdateDaemon:
         self._config = load_config()
         self._state = "idle"  # idle | checking | downloading | applying | error
         self._updater_process = None
+        self._check_lock = threading.Lock()
 
         # Create required directories
         for d in ("/etc/yunsh", "/var/log", "/var/run"):
@@ -375,7 +421,7 @@ class UpdateDaemon:
 
     def _sig_recheck(self, signum, frame):
         logger.info("Received SIGHUP — triggering immediate update check")
-        self.check_for_updates()
+        self._schedule_check()
 
     # ------------------------------------------------------------------
     # Dispatch
@@ -398,8 +444,11 @@ class UpdateDaemon:
         return handler()
 
     def _cmd_check(self) -> dict:
-        self.check_for_updates()
-        return {"status": "ok", "result": "check_completed"}
+        started = self._schedule_check()
+        return {
+            "status": "ok",
+            "result": "check_started" if started else "check_already_running",
+        }
 
     def _cmd_get_status(self) -> dict:
         status = {
@@ -486,6 +535,28 @@ class UpdateDaemon:
     # ------------------------------------------------------------------
     # Core logic
     # ------------------------------------------------------------------
+    def _schedule_check(self) -> bool:
+        """Run the network-bound release check without blocking local APIs."""
+        if not self._check_lock.acquire(blocking=False):
+            return False
+
+        def worker():
+            try:
+                self.check_for_updates()
+            except Exception as exc:
+                logger.error("Update check failed: %s", exc)
+                self._state = "error"
+                write_status(state="error", error=str(exc))
+            finally:
+                self._check_lock.release()
+
+        threading.Thread(
+            target=worker,
+            name="yunsh-update-check",
+            daemon=True,
+        ).start()
+        return True
+
     def check_for_updates(self):
         """Query GitHub and update local state."""
         self._state = "checking"
@@ -518,7 +589,7 @@ class UpdateDaemon:
 
         # Persist update-info.json
         info = {
-            "current_version": cur or "1.0.1",
+            "current_version": cur or "1.0.3",
             "latest_version": latest,
             "update_available": available,
             "last_check_ts": self._last_check_ts,
@@ -539,7 +610,7 @@ class UpdateDaemon:
         self._state = "idle"
         write_status(
             state="idle" if not available else "update_available",
-            current_version=cur or "1.0.1",
+            current_version=cur or "1.0.3",
             latest_version=latest,
             update_available=available,
             major_update=release.get("major_update", False),
@@ -560,6 +631,11 @@ class UpdateDaemon:
 
     def _perform_download(self) -> dict:
         """Start the verified OTA installer without blocking the local API."""
+        if self._config.get("wifi_only", True) and not wifi_connected():
+            self._state = "error"
+            message = "Wi-Fi-only updates require an active Wi-Fi connection"
+            write_status(state="error", error=message)
+            return {"error": message}
         self._state = "downloading"
         release = self._latest_release
         if not release:
@@ -617,9 +693,6 @@ class UpdateDaemon:
         with open(PID_PATH, "w") as f:
             f.write(str(os.getpid()))
 
-        # Initial check
-        self.check_for_updates()
-
         # Set up Unix socket
         try:
             os.unlink(SOCKET_PATH)
@@ -638,13 +711,15 @@ class UpdateDaemon:
         logger.info("Listening on %s", SOCKET_PATH)
         write_status(
             state="idle",
-            current_version=current_version() or "1.0.1",
+            current_version=current_version() or "1.0.3",
             auto_update=self._config.get("auto_update", False),
             wifi_only=self._config.get("wifi_only", True),
             update_channel=self._config.get("update_channel", "stable"),
         )
 
-        next_check = time.time() + CHECK_INTERVAL_SEC
+        # Bind the local API first so the UI never waits behind the initial
+        # GitHub request. The first check begins shortly after startup.
+        next_check = time.time() + 10
 
         while not self._stop:
             now = time.time()
@@ -666,7 +741,7 @@ class UpdateDaemon:
 
             # Periodic check
             if time.time() >= next_check:
-                self.check_for_updates()
+                self._schedule_check()
                 next_check = time.time() + CHECK_INTERVAL_SEC
 
         # Cleanup
