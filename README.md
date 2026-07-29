@@ -12,6 +12,8 @@
   <a href="https://github.com/ljcccc999/yunsh-os/releases">Download the latest release</a>
   ·
   <a href="docs/YUNSH-OS-操作指南.md">User guide</a>
+  ·
+  <a href="docs/ECOSYSTEM-ROADMAP.md">Ecosystem roadmap</a>
 </p>
 
 YUNSH OS is the connection layer of the YUNSH ecosystem. It combines an optical-display-ready desktop, floating applications, connected-device services, and Bluetooth-connected motion tracking in a single Raspberry Pi 5 environment.
