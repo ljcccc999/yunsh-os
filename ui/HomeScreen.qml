@@ -10,7 +10,7 @@ Item {
     
     property bool showDock: true
     property bool showStatusBar: true
-    property bool stereoEnabled: true
+    property bool stereoEnabled: false
     property bool headTrackingConnected: false
     
     signal openSettings()
@@ -18,7 +18,7 @@ Item {
     signal openAppStore()
     signal openFileManager()
     signal openBrowser()
-    signal openMetaverse()
+    signal openWorld()
     signal openSystemUpdateUI()
     signal openNetwork()
     signal openBluetooth()
@@ -34,15 +34,14 @@ Item {
     // ─── App Model (dynamic, auto-paginates) ────────────
     property var appList: [
         { name: "设置", icon: "settings.svg",        color: "#00D4FF",   action: "settings" },
-        { name: "Browser", icon: "settings.svg",      color: "#4CAF50",   action: "browser" },
-        { name: "Metaverse", icon: "metaverse.svg",   color: "#9C27B0",   action: "metaverse" },
+        { name: "Browser", icon: "browser.svg",        color: "#4CAF50",   action: "browser" },
         { name: "Android Apps", icon: "appstore.svg", color: "#FF9800",   action: "appstore" },
         { name: "文件", icon: "files.svg",             color: "#2196F3",   action: "files" },
         { name: "终端", icon: "terminal.svg",          color: "#00D4FF",   action: "terminal" },
         { name: "相册", icon: "photos.svg",            color: "#FFC107",   action: "photos" },
-        { name: "空间显示", icon: "settings.svg",      color: "#00D4FF",   action: "display" },
-        { name: "空间胶囊", icon: "files.svg",          color: "#00D4FF",   action: "spacecapsule" },
-        { name: "iPhone 投屏", icon: "photos.svg",       color: "#00D4FF",   action: "screenrelay" }
+        { name: "空间显示", icon: "display.svg",       color: "#00D4FF",   action: "display" },
+        { name: "空间胶囊", icon: "capsule.svg",        color: "#00D4FF",   action: "spacecapsule" },
+        { name: "iPhone 投屏", icon: "screen-relay.svg", color: "#00D4FF", action: "screenrelay" }
     ]
 
     readonly property int columns: 4
@@ -56,7 +55,6 @@ Item {
         switch(action) {
             case "settings":    homeScreen.openSettings(); break
             case "browser":     homeScreen.openBrowser(); break
-            case "metaverse":   homeScreen.openMetaverse(); break
             case "appstore":    homeScreen.openAppStore(); break
             case "files":       homeScreen.openFileManager(); break
             case "terminal":    homeScreen.openTerminal(); break
@@ -200,10 +198,63 @@ Item {
                 }
             }
 
+            Rectangle {
+                id: worldEntry
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: Math.min(parent.width - 120, 760)
+                height: 82
+                radius: 28
+                color: worldEntryMouse.pressed ? "#E6FAFF" : Qt.rgba(1, 1, 1, 0.92)
+                border.width: 1
+                border.color: "#D6F5FF"
+                scale: worldEntryMouse.pressed ? 0.985 : 1
+
+                Row {
+                    anchors.centerIn: parent
+                    spacing: 18
+                    Image {
+                        source: "/usr/share/yunsh/logo/logo-64.png"
+                        width: 48; height: 48
+                        fillMode: Image.PreserveAspectFit
+                    }
+                    Column {
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 1
+                        Text {
+                            text: "YUNSH META Universe"
+                            color: "#111820"
+                            font.pixelSize: 20
+                            font.weight: Font.DemiBold
+                            font.letterSpacing: -0.4
+                        }
+                        Text {
+                            text: "THE SYSTEM WORLD · ENTER"
+                            color: "#00A9CC"
+                            font.pixelSize: 9
+                            font.weight: Font.Bold
+                            font.letterSpacing: 1.8
+                        }
+                    }
+                    Text {
+                        text: "›"
+                        color: "#00A9CC"
+                        font.pixelSize: 30
+                        font.weight: Font.Light
+                    }
+                }
+
+                MouseArea {
+                    id: worldEntryMouse
+                    anchors.fill: parent
+                    onClicked: homeScreen.openWorld()
+                }
+                Behavior on scale { NumberAnimation { duration: 100 } }
+            }
+
             // ── Dynamic App Pages ──
             Item {
                 width: parent.width
-                height: parent.height - 64
+                height: parent.height - 162
 
                 SwipeView {
                     id: swipeView
@@ -247,7 +298,7 @@ Item {
                                 anchors.bottom: parent.bottom
                                 anchors.bottomMargin: 16
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: "YUNSH OS v2.0.0"
+                                text: "YUNSH OS v2.0.1"
                                 color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
                                 font.pixelSize: 11
                                 visible: pageIndex === 0

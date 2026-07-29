@@ -1,5 +1,5 @@
 // YUNSH OS v1.0 - App Icon Component (visionOS Style)
-// Perfect circle + glassmorphism + hover glow
+// Apple-style rounded-square glass icon with immediate press feedback.
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
@@ -22,13 +22,13 @@ Item {
         anchors.centerIn: parent
         spacing: 8
 
-        // Glass circle icon
+        // Rounded-square system icon
         Item {
             width: 72
             height: 72
             anchors.horizontalCenter: parent.horizontalCenter
 
-            // Outer glow ring
+            // Soft material halo
             Rectangle {
                 anchors.centerIn: parent
                 width: 72; height: 72; radius: 36
@@ -37,47 +37,47 @@ Item {
                 border.width: 1
             }
 
-            // Perfect circle with glassmorphism
+            // Consistent squircle-like application tile.
             Rectangle {
                 id: iconCircle
                 anchors.centerIn: parent
-                width: 60
-                height: 60
-                radius: 30  // perfect circle
-                color: Qt.rgba(18/255, 18/255, 32/255, 0.55)
-                border.color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
+                width: 64
+                height: 64
+                radius: 17
+                color: appIcon.iconColor
+                border.color: Qt.rgba(255/255, 255/255, 255/255, 0.72)
                 border.width: 1
 
-                // Frost layer
+                // White liquid-glass material that stays visible optically.
                 Rectangle {
-                    anchors.fill: parent; radius: 30
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.03)
+                    anchors.fill: parent; radius: 17
+                    color: Qt.rgba(255/255, 255/255, 255/255, 0.70)
                 }
 
                 // Top highlight (visionOS edge light)
                 Rectangle {
                     anchors.top: parent.top; anchors.topMargin: 2
-                    anchors.left: parent.left; anchors.leftMargin: 6
-                    anchors.right: parent.right; anchors.rightMargin: 6
-                    height: 1; radius: 1
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
+                    anchors.left: parent.left; anchors.leftMargin: 8
+                    anchors.right: parent.right; anchors.rightMargin: 8
+                    height: 2; radius: 1
+                    color: Qt.rgba(255/255, 255/255, 255/255, 0.92)
                 }
 
                 // Shadow at bottom
                 Rectangle {
                     anchors.bottom: parent.bottom
-                    anchors.left: parent.left; anchors.leftMargin: 4
-                    anchors.right: parent.right; anchors.rightMargin: 4
+                    anchors.left: parent.left; anchors.leftMargin: 8
+                    anchors.right: parent.right; anchors.rightMargin: 8
                     height: 2; radius: 1
-                    color: Qt.rgba(0/255, 0/255, 0/255, 0.15)
+                    color: Qt.rgba(0/255, 98/255, 128/255, 0.10)
                 }
 
                 // Icon image
                 Image {
                     id: iconImg
                     source: appIcon
-                    width: 28
-                    height: 28
+                    width: 36
+                    height: 36
                     anchors.centerIn: parent
                     sourceSize.width: 64
                     sourceSize.height: 64
@@ -87,7 +87,7 @@ Item {
                 // Glow on hover
                 Rectangle {
                     id: glowEffect
-                    anchors.fill: parent; radius: 30
+                    anchors.fill: parent; radius: 17
                     color: Qt.rgba(0/255, 212/255, 255/255, 0.0)
                     visible: false
                 }
@@ -123,17 +123,18 @@ Item {
     MouseArea {
         anchors.fill: parent
         onClicked: appIcon.clicked()
+        onPressed: iconCircle.scale = 0.96
+        onReleased: iconCircle.scale = containsMouse ? 1.06 : 1.0
+        onCanceled: iconCircle.scale = 1.0
         hoverEnabled: true
 
         onEntered: {
-            iconCircle.scale = 1.1
-            iconCircle.color = Qt.rgba(25/255, 25/255, 45/255, 0.65)
+            iconCircle.scale = 1.06
             glowEffect.visible = true
             glowEffect.color = Qt.rgba(0/255, 212/255, 255/255, 0.1)
         }
         onExited: {
             iconCircle.scale = 1.0
-            iconCircle.color = Qt.rgba(18/255, 18/255, 32/255, 0.55)
             glowEffect.color = Qt.rgba(0/255, 212/255, 255/255, 0.0)
             glowEffect.visible = false
         }

@@ -12,7 +12,7 @@ Rectangle {
     visible: true
     z: 60
 
-    property string osVersion: "YUNSH OS v2.0.0"
+    property string osVersion: "YUNSH OS v2.0.1"
     property string buildNumber: ""
     property string deviceModel: ""
     property string cpuInfo: ""

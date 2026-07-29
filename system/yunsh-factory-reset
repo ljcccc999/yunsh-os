@@ -40,6 +40,8 @@ rm -f /etc/yunsh/region.conf 2>/dev/null || true
 rm -f /etc/yunsh/glasses.conf 2>/dev/null || true
 rm -f /etc/yunsh/spatial-display.json 2>/dev/null || true
 rm -f /etc/yunsh/comfort-dna.json 2>/dev/null || true
+rm -rf /etc/yunsh/orbit 2>/dev/null || true
+rm -rf /var/lib/yunsh/orbit/memory 2>/dev/null || true
 rm -f /etc/yunsh/link-trust.json /etc/yunsh/space-transfer.crt /etc/yunsh/space-transfer.key 2>/dev/null || true
 rm -rf /var/lib/yunsh/space-inbox 2>/dev/null || true
 rm -f /run/yunsh/link-pairing.json 2>/dev/null || true

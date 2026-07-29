@@ -20,7 +20,7 @@ Rectangle {
     signal openSystemInfo()
     signal openComfortDna()
 
-    property string osVersionName: "YUNSH OS v2.0.0"
+    property string osVersionName: "YUNSH OS v2.0.1"
     property string selectedLanguageDisplay: "简体中文 · 拼音"
 
     function loadVersionConfig() {
@@ -191,7 +191,7 @@ Rectangle {
                 iconSource: "/usr/share/yunsh/icons/settings.svg"
                 iconSize: 18
                 title: "空间显示"
-                subtitle: "双目 SBS、瞳距、融合、3DoF 与舒适度"
+                subtitle: "当前双屏镜像、高级 SBS、3DoF 与舒适度"
                 showArrow: true
                 onClicked: settingsScreen.openDisplaySettings()
             }

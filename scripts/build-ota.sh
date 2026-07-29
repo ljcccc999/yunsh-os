@@ -62,6 +62,8 @@ install_runtime "${YUNSH_DIR}/system/yunsh-android" "yunsh-android"
 install_runtime "${YUNSH_DIR}/system/yunsh-terminal.py" "yunsh-terminal"
 install_runtime "${YUNSH_DIR}/system/yunsh-disk-helper" "yunsh-disk-helper"
 install_runtime "${YUNSH_DIR}/system/yunsh-splash" "yunsh-splash"
+install_runtime "${YUNSH_DIR}/system/orbitd.py" "orbitd"
+install_runtime "${YUNSH_DIR}/system/orbit-voice-setup" "orbit-voice-setup"
 install_runtime "${YUNSH_DIR}/boot/yunsh-firstboot.sh" "yunsh-firstboot.sh"
 install_runtime "${YUNSH_DIR}/boot/yunsh-iptables.sh" "yunsh-iptables.sh"
 
@@ -69,6 +71,7 @@ required_services=(
     yunsh-os yunsh-firstboot yunsh-local-api yunsh-spaced yunsh-screen-relay yunsh-network yunsh-bluetooth
     yunsh-update yunsh-link-ble yunsh-glasses-bridge yunsh-appd
     yunsh-android-setup yunsh-terminal yunsh-headtracking yunsh-powerd yunsh-splash
+    orbit orbit-voice-setup
 )
 for service_name in "${required_services[@]}"; do
     service="${BUILD_DIR}/${service_name}.service"
@@ -79,6 +82,11 @@ for service_name in "${required_services[@]}"; do
 done
 
 for service in "${BUILD_DIR}"/yunsh-*.service; do
+    [ -f "${service}" ] || continue
+    cp "${service}" "${STAGING}/payload/etc/systemd/system/"
+    chmod 0644 "${STAGING}/payload/etc/systemd/system/$(basename "${service}")"
+done
+for service in "${BUILD_DIR}"/orbit*.service; do
     [ -f "${service}" ] || continue
     cp "${service}" "${STAGING}/payload/etc/systemd/system/"
     chmod 0644 "${STAGING}/payload/etc/systemd/system/$(basename "${service}")"

@@ -20,6 +20,12 @@ Item {
     /* ---- Data model ---- */
     property var updateHistory: [
         {
+            version: "2.0.1",
+            date: "2026-07-29",
+            changelog: "系统世界与 Orbit 更新。\n• YUNSH META Universe 升级为系统级持续世界层，不再作为普通 App\n• Orbit 系统级 Agent 每次开机自动启动，可选 DeepSeek、Kimi 或兼容提供商与模型\n• 用户 API Key 设备级加密保存，系统权限默认开启且可随时关闭\n• 激活时可配置或跳过 Orbit，默认甜美女声并提供男声选项\n• USB/蓝牙麦克风语音识别与自然语音组件在桌面后后台准备\n• 全局 YUNSH / METAVERSE / Orbit 菜单栏与液态玻璃系统图标\n• 当前眼镜默认输出单个完整画面，由显示驱动同步到左右屏；高级 SBS 仅为未来驱动保留",
+            build: "build 2026.0729"
+        },
+        {
             version: "2.0.0",
             date: "2026-07-29",
             changelog: "YUNSH 空间工作版本。\n• YUNSH Drop 附近加密传输、接收确认与 YUNSH Link 分享转发\n• 用户授权的 iPhone Screen Relay 空间投屏窗口\n• 多语言 Hello 激活、可跳过的眼镜/手机配对与进度\n• 不区分大小写的一次性手机配对密钥，无需二维码\n• 可转发和恢复的 SpaceCapsule 与可选 Comfort DNA\n• Side-by-Side 双目、EDID、显示校准与白色液态玻璃\n• 虚拟按钮和 iPhone 一键回正\n• 3DoF 四种空间位置、专注模式与辅助功能",

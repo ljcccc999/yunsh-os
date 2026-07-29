@@ -17,7 +17,7 @@ Item {
     property int brightnessLevel: 72
     property int volumeLevel: 55
     property bool focusMode: false
-    property bool stereoEnabled: true
+    property bool stereoEnabled: false
     property bool headTrackingConnected: false
     property bool reduceMotion: false
 

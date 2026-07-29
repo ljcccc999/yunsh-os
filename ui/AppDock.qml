@@ -10,8 +10,7 @@ Item {
     
     property var dockApps: [
         { name: "设置", icon: "/usr/share/yunsh/icons/settings.svg", appId: "settings", color: Qt.rgba(0/255, 212/255, 255/255, 0.5) },
-        { name: "Browser", icon: "/usr/share/yunsh/icons/settings.svg", appId: "browser", color: Qt.rgba(76/255, 175/255, 80/255, 0.5) },
-        { name: "Metaverse", icon: "/usr/share/yunsh/icons/metaverse.svg", appId: "metaverse", color: Qt.rgba(156/255, 39/255, 176/255, 0.5) },
+        { name: "Browser", icon: "/usr/share/yunsh/icons/browser.svg", appId: "browser", color: Qt.rgba(76/255, 175/255, 80/255, 0.5) },
         { name: "Android Apps", icon: "/usr/share/yunsh/icons/appstore.svg", appId: "appstore", color: Qt.rgba(255/255, 152/255, 0/255, 0.5) },
         { name: "更新", icon: "/usr/share/yunsh/icons/update.svg", appId: "update", color: Qt.rgba(0/255, 200/255, 83/255, 0.5) },
         { name: "关于", icon: "/usr/share/yunsh/icons/about.svg", appId: "about", color: Qt.rgba(96/255, 125/255, 139/255, 0.5) }

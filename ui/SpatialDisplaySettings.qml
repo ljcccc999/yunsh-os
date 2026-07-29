@@ -7,7 +7,7 @@ Rectangle {
     id: root
     color: "transparent"
 
-    property bool stereoEnabled: true
+    property bool stereoEnabled: false
     property real ipdMm: 63
     property real eyeShiftPx: 0
     property real fieldOfView: 50
@@ -91,7 +91,7 @@ Rectangle {
             spacing: 10
 
             Text {
-                text: "双目输出"
+                text: "眼镜输出"
                 color: "#8E8EA8"
                 font.pixelSize: 13
                 font.weight: Font.DemiBold
@@ -101,11 +101,11 @@ Rectangle {
             GlassCard {
                 width: parent.width
                 height: 66
-                title: "双目 Side-by-Side"
+                title: "高级 Side-by-Side"
                 subtitle: stereoEnabled
-                    ? "左右眼同步输出 · 每眼 "
+                    ? "未来独立左右眼驱动 · 每眼 "
                       + Math.round(outputWidth / 2) + " × " + outputHeight
-                    : "单画面开发模式"
+                    : "当前硬件 · 单画面同步到左右屏"
                 isToggle: true
                 toggleState: root.stereoEnabled
                 onToggled: function(state) {

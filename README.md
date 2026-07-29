@@ -16,15 +16,19 @@
   <a href="docs/ECOSYSTEM-ROADMAP.md">Ecosystem roadmap</a>
 </p>
 
-YUNSH OS is the connection layer of the YUNSH ecosystem. It combines an optical-display-ready desktop, floating applications, connected-device services, and Bluetooth-connected motion tracking in a single Raspberry Pi 5 environment.
+YUNSH OS is the system engine of the YUNSH ecosystem. It combines a persistent
+system world, an optical-display-ready desktop, the system-level Orbit agent,
+connected-device services, and Bluetooth-connected motion tracking in one
+portable Raspberry Pi 5 environment.
 
 ## Experience
 
 ### Spatial workspace
 
-- Binocular side-by-side compositor with frame-locked left and right views.
-- EDID-driven output for a dual-eye display controller or a conventional monitor.
-- On-device calibration for IPD, horizontal fusion, field of view, crop, and eye order.
+- One complete desktop frame by default, synchronized to both eye displays by
+  the current glasses controller; the same output works on a conventional monitor.
+- Optional advanced side-by-side compatibility mode for a future independent-eye controller.
+- On-device calibration foundation for future IPD, horizontal fusion, field of view, crop, and eye order controls.
 - Floating application windows with move, resize, minimize, close, and full-screen controls.
 - Direct spatial window layouts for 3DoF viewing: front, left angle, right angle, and distance presets.
 - Window pin and follow modes for view-relative display behavior.
@@ -38,6 +42,35 @@ YUNSH OS is the connection layer of the YUNSH ecosystem. It combines an optical-
 - Black background designed for transparent optical displays; white glass surfaces preserve legibility.
 
 The shell uses one comfortable shared focal plane for both eyes. True stereo application content requires a future per-eye rendering path and is not claimed by the current shell compositor. Spatial layouts are view-relative: head rotation preserves the desktop arrangement as the user looks around. Real-world room anchoring requires future 6DoF visual tracking hardware and is not represented as a current feature.
+
+### Persistent system world
+
+YUNSH META Universe is a shell-owned world layer, not an application window.
+The permanent center entry in the global menu bar opens the world foundation
+directly, while applications remain tools inside the wider persistent-world
+experience. The current release establishes the system entry, identity,
+space, and continuity surfaces; it does not claim that the complete online
+metaverse platform or 6DoF room anchoring is finished.
+
+### Orbit
+
+Orbit is the system-level agent runtime and starts automatically on every boot
+without becoming a desktop-start dependency. Users select an API provider,
+then a model, then enter their own API key. DeepSeek, Kimi, and a custom
+OpenAI-compatible endpoint are supported. The credential is encrypted using a
+device-local key and is never returned in full by the local API.
+
+Orbit's application, file, shell, settings, network, screen, memory, and world
+permissions are enabled by default for the full system-agent experience and
+can be disabled individually. The runtime can open system surfaces, enter the
+world layer, recenter the view, inspect status, work with files, and execute
+commands. Its API listens on device loopback only.
+
+Orbit supports a default sweet female voice and an optional male voice. Voice
+components prepare in the background after the desktop is available. Speech
+recognition activates only when a USB or Bluetooth microphone is detected;
+the current glasses hardware is not described as having an integrated
+microphone.
 
 ### Built-in applications
 
@@ -56,6 +89,7 @@ The shell uses one comfortable shared focal plane for both eyes. True stereo app
 - Separate, skippable glasses and iPhone pairing pages with visible progress.
 - Case-insensitive one-time phone pairing keys; no QR code or camera is required.
 - Optional, skippable Comfort DNA setup.
+- Optional, skippable Orbit setup with provider, model, API key, and voice selection.
 - Wi-Fi and Bluetooth management.
 - OTA update service and factory-reset workflow.
 - Power, input, splash-screen, and screenshot services.
@@ -77,10 +111,12 @@ Screen Relay uses Apple's public ReplayKit broadcast UI and always requires an e
 ## Architecture
 
 ```text
-Binocular AR Display
-    │ HDMI · side-by-side frame
+Binocular AR Display Controller
+    │ HDMI · one full frame mirrored to both eye displays
 Raspberry Pi 5
-    ├── YUNSH OS shell · Qt Quick workspace · binocular compositor
+    ├── YUNSH OS shell · persistent YUNSH META Universe world layer
+    ├── Orbit system agent · provider/model configuration · local tools
+    ├── Qt Quick workspace · optional future SBS compositor
     ├── Shared focal-plane application windows
     ├── System services · network · Bluetooth · updates · power
     ├── DRM/KMS + V3D Mesa graphics · Wayland-composited applications
@@ -95,7 +131,7 @@ The user interface reads the head-tracking service locally. Compatible orientati
 | Component | Requirement |
 | --- | --- |
 | Computer | Raspberry Pi 5 |
-| Display | HDMI binocular AR display controller with an EDID-advertised SBS mode, or a conventional monitor for mono development |
+| Display | Current HDMI controller that mirrors one full frame to both eye displays, or a conventional monitor |
 | Storage | 16 GB or larger A2 microSD card recommended |
 | Input | Touch/gaze-compatible pointer, YUNSH Link, or a mouse; no physical keyboard is required for activation or recentering |
 | Power | Stable USB-C power supply suitable for Raspberry Pi 5 |
@@ -118,7 +154,7 @@ Compare the result with the matching `.sha256` asset published with the release.
 
 ## First boot
 
-The initial setup downloads the required desktop packages, including the Raspberry Pi 5 DRM/KMS, EGL, OpenGL, and Vulkan runtime, and then reboots once into the activation flow. Connect Ethernet before the first power-on and keep the device online until setup finishes. A temporary network failure retries automatically without marking the setup complete. Activation starts with an animated multilingual Hello screen, then guides language, Wi-Fi, optional glasses pairing, optional YUNSH Link phone pairing, account setup, and optional Comfort DNA. Both device-pairing pages show progress and can be skipped. Completing or skipping activation creates a persistent activation marker, so later boots open the desktop directly.
+The initial setup downloads the required desktop packages, including the Raspberry Pi 5 DRM/KMS, EGL, OpenGL, and Vulkan runtime, and then reboots once into the activation flow. Connect Ethernet before the first power-on and keep the device online until setup finishes. A temporary network failure retries automatically without marking the setup complete. Activation starts with an animated multilingual Hello screen, then guides language, Wi-Fi, optional glasses pairing, optional YUNSH Link phone pairing, account setup, optional Orbit provider/model/key/voice configuration, and optional Comfort DNA. Device pairing, Orbit, and Comfort DNA can be skipped. Completing or skipping activation creates a persistent activation marker, so later boots open the desktop directly.
 
 Factory reset clears user data, saved Wi-Fi networks, Bluetooth pairings, and the activation marker. It preserves YUNSH OS, installed desktop dependencies, and the current system version, then returns to activation on the next boot.
 
@@ -151,7 +187,10 @@ scripts/build-no-hdiutil.sh
 
 Review the script and its input image requirements before building. Generated images and large build artifacts are intentionally excluded from version control.
 
-The primary image build leaves display timing to DRM/KMS and the connected controller's EDID. It does not force a legacy 1920×1080 kernel mode, allowing a binocular controller to expose its native side-by-side resolution.
+The primary image build leaves display timing to DRM/KMS and the connected
+controller's EDID. It does not force a legacy 1920×1080 kernel mode. YUNSH OS
+outputs one complete frame by default; the current glasses controller is
+responsible for showing that same frame on both displays.
 
 ## Project status
 

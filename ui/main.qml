@@ -1,4 +1,4 @@
-// YUNSH OS v2.0.0 - Main QML Entry Point
+// YUNSH OS v2.0.1 - Main QML Entry Point
 // Apple-style glass system + Task Switcher + Home Indicator
 
 import QtQuick 2.15
@@ -34,8 +34,9 @@ ApplicationWindow {
     property bool headTrackingEnabled: false
     property real trackingSmoothing: 0.35
 
-    // ─── Binocular display and comfort ─────────────────
-    property bool stereoEnabled: true
+    // Current glasses controller mirrors one complete frame to both displays.
+    // SBS is retained only for future controllers with independent eye inputs.
+    property bool stereoEnabled: false
     property real ipdMm: 63.0
     property real eyeShiftPx: 0.0
     property real fieldOfView: 50.0
@@ -52,8 +53,7 @@ ApplicationWindow {
     property var openApps: []
     property var appInfo: ({
         "settings": { name: "设置", icon: "/usr/share/yunsh/icons/settings.svg", color: "#00D4FF" },
-        "browser": { name: "Browser", icon: "/usr/share/yunsh/icons/settings.svg", color: "#4CAF50" },
-        "metaverse": { name: "Metaverse", icon: "/usr/share/yunsh/icons/metaverse.svg", color: "#9C27B0" },
+        "browser": { name: "Browser", icon: "/usr/share/yunsh/icons/browser.svg", color: "#4CAF50" },
         "terminal": { name: "终端", icon: "/usr/share/yunsh/icons/terminal.svg", color: "#00D4FF" },
         "photos": { name: "相册", icon: "/usr/share/yunsh/icons/photos.svg", color: "#FFC107" },
         "appstore": { name: "Android Apps", icon: "/usr/share/yunsh/icons/appstore.svg", color: "#FF9800" },
@@ -62,9 +62,9 @@ ApplicationWindow {
         "about": { name: "关于", icon: "/usr/share/yunsh/icons/about.svg", color: "#607D8B" },
         "network": { name: "Wi-Fi", icon: "/usr/share/yunsh/icons/wifi.svg", color: "#0096FF" },
         "bluetooth": { name: "蓝牙", icon: "/usr/share/yunsh/icons/bluetooth.svg", color: "#2196F3" },
-        "display": { name: "空间显示", icon: "/usr/share/yunsh/icons/settings.svg", color: "#00D4FF" },
-        "spacecapsule": { name: "空间胶囊", icon: "/usr/share/yunsh/icons/files.svg", color: "#00D4FF" },
-        "screenrelay": { name: "iPhone 投屏", icon: "/usr/share/yunsh/icons/photos.svg", color: "#00D4FF" },
+        "display": { name: "空间显示", icon: "/usr/share/yunsh/icons/display.svg", color: "#00D4FF" },
+        "spacecapsule": { name: "空间胶囊", icon: "/usr/share/yunsh/icons/capsule.svg", color: "#00D4FF" },
+        "screenrelay": { name: "iPhone 投屏", icon: "/usr/share/yunsh/icons/screen-relay.svg", color: "#00D4FF" },
         "comfortdna": { name: "Comfort DNA", icon: "/usr/share/yunsh/icons/settings.svg", color: "#00D4FF" },
         "systeminfo": { name: "系统信息", icon: "/usr/share/yunsh/icons/about.svg", color: "#607D8B" },
         "updatehistory": { name: "更新历史", icon: "/usr/share/yunsh/icons/update.svg", color: "#607D8B" }
@@ -111,7 +111,6 @@ ApplicationWindow {
         switch (appId) {
             case "settings": return settingsWindow
             case "browser": return browserWindow
-            case "metaverse": return metaverseWindow
             case "terminal": return terminalWindow
             case "photos": return photosWindow
             case "update": return updateWindow
@@ -130,8 +129,8 @@ ApplicationWindow {
         return null
     }
 
-    // Root container. In binocular mode the left surface is interactive and
-    // the right surface is a frame-locked GPU copy for side-by-side output.
+    // The current controller mirrors this full frame to both eye displays.
+    // Optional SBS keeps the existing future-controller compatibility path.
     StereoCompositor {
         id: rootContainer
         anchors.fill: parent
@@ -165,7 +164,7 @@ ApplicationWindow {
             anchors.fill: parent
             visible: !firstBoot || activationDone
             showDock: !yunshOS.focusMode
-            showStatusBar: !yunshOS.focusMode
+            showStatusBar: false
             stereoEnabled: yunshOS.stereoEnabled
             headTrackingConnected: yunshOS.headTrackingEnabled
             onOpenSettings: switchTo(settingsWindow, "settings")
@@ -173,7 +172,7 @@ ApplicationWindow {
             onOpenAppStore: launchApp("appstore")
             onOpenFileManager: launchApp("files")
             onOpenBrowser: switchTo(browserWindow, "browser")
-            onOpenMetaverse: switchTo(metaverseWindow, "metaverse")
+            onOpenWorld: yunshOS.openWorld()
             onOpenSystemUpdateUI: switchTo(updateWindow, "update")
             onOpenNetwork: switchTo(networkWindow, "network")
             onOpenBluetooth: switchTo(bluetoothWindow, "bluetooth")
@@ -532,22 +531,14 @@ ApplicationWindow {
             }
         }
 
-        // ===== METAVERSE =====
-        MacWindow {
-            id: metaverseWindow
-            appTitle: "Metaverse"
-            headYaw: yunshOS.headYaw
-            headPitch: yunshOS.headPitch
-            headRoll: yunshOS.headRoll
-            pixelsPerDegree: yunshOS.pixelsPerDegree
-            x: 80; y: 160; width: 950; height: 680
+        // ===== SYSTEM WORLD LAYER =====
+        // The metaverse is a shell layer and never enters the app switcher.
+        YunshMetaverse {
+            id: worldLayer
+            anchors.fill: parent
             visible: false
-            onActivated: yunshOS.activateWindow(metaverseWindow, "metaverse")
-            onCloseClicked: { yunshOS.closeAppFromSwitcher("metaverse") }
-            onMinimizeClicked: yunshOS.minimizeWindow(metaverseWindow, "metaverse")
-            YunshMetaverse { anchors.fill: parent
-                onBackToHome: switchToHome()
-            }
+            z: 430
+            onBackToHome: switchToHome()
         }
 
         // ===== TERMINAL =====
@@ -737,6 +728,30 @@ ApplicationWindow {
                 onTriggered: systemToast.opacity = 0
             }
         }
+
+        SystemMenuBar {
+            id: systemMenuBar
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            z: 7000
+            visible: (!firstBoot || activationDone)
+                && !screensaver_item.visible
+                && !calibrationMode
+            orbitConfigured: orbitPanel.configured
+            onOpenSystemMenu: controlCenter.show()
+            onOpenWorld: yunshOS.openWorld()
+            onOpenOrbit: orbitPanel.openPanel()
+        }
+
+        OrbitPanel {
+            id: orbitPanel
+            anchors.fill: parent
+            z: 7100
+            visible: (!firstBoot || activationDone) && !screensaver_item.visible
+            showTrigger: false
+            onToastRequested: function(message) { yunshOS.showToast(message) }
+        }
     }
 
     // ===== FLOATING WINDOW FUNCTIONS =====
@@ -774,7 +789,7 @@ ApplicationWindow {
     }
 
     function switchToHome() {
-        var ids = ["update","updatehistory","browser","metaverse","terminal",
+        var ids = ["update","updatehistory","browser","terminal",
                     "photos","settings","about","systeminfo","network","bluetooth",
                     "display","comfortdna","spacecapsule"]
         for (var i = 0; i < ids.length; i++) {
@@ -783,9 +798,18 @@ ApplicationWindow {
         }
         androidWindow.visible = false
         androidWindow.isMinimized = false
+        worldLayer.visible = false
         activeAppId = ""
         updateWindowFocus()
         homeScreen.visible = true
+    }
+
+    function openWorld() {
+        worldLayer.visible = true
+        homeScreen.visible = false
+        activeAppId = ""
+        taskSwitcher.hide()
+        updateWindowFocus()
     }
 
     function switchToAppById(appId) {
@@ -822,7 +846,7 @@ ApplicationWindow {
             settingsWindow, displayWindow, comfortDnaWindow, spaceCapsuleWindow, screenRelayWindow,
             systemInfoWindow, aboutWindow,
             networkWindow, bluetoothWindow, updateWindow, updateHistoryWindow,
-            browserWindow, metaverseWindow, terminalWindow, photosWindow,
+            browserWindow, terminalWindow, photosWindow,
             androidWindow
         ]
     }
@@ -856,7 +880,6 @@ ApplicationWindow {
             { appId: "update", window: updateWindow },
             { appId: "updatehistory", window: updateHistoryWindow },
             { appId: "browser", window: browserWindow },
-            { appId: "metaverse", window: metaverseWindow },
             { appId: "terminal", window: terminalWindow },
             { appId: "photos", window: photosWindow },
             { appId: androidTarget, window: androidWindow }
@@ -1003,11 +1026,19 @@ ApplicationWindow {
                 return
             try {
                 var command = JSON.parse(xhr.responseText)
-                if (command.action === "recenter"
-                        && command.id
-                        && command.id !== yunshOS.lastUiCommandId) {
-                    yunshOS.lastUiCommandId = command.id
+                if (!command.id || command.id === yunshOS.lastUiCommandId)
+                    return
+                yunshOS.lastUiCommandId = command.id
+                if (command.action === "recenter") {
                     yunshOS.recenterTracking()
+                } else if (command.action === "open_world") {
+                    yunshOS.openWorld()
+                } else if (command.action === "open_app" && command.appId) {
+                    var appId = String(command.appId)
+                    if (appId === "appstore" || appId === "files")
+                        yunshOS.launchApp(appId)
+                    else
+                        yunshOS.switchToAppById(appId)
                 }
             } catch (error) {}
         }
@@ -1302,7 +1333,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        console.log("YUNSH OS UI v2.0.0")
+        console.log("YUNSH OS UI v2.0.1")
         checkFirstBoot()
         showFullScreen()
         applyWindowPreferences()

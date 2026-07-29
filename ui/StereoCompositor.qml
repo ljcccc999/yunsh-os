@@ -10,7 +10,7 @@ Item {
 
     default property alias content: logicalScene.data
 
-    property bool stereoEnabled: true
+    property bool stereoEnabled: false
     property real eyeShiftPx: 0
     property int logicalWidth: 1920
     property int logicalHeight: 1080

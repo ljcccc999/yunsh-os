@@ -563,7 +563,7 @@ echo "" >> "${DEBUGFS_SCRIPT}"
 echo "# === Version Config ===" >> "${DEBUGFS_SCRIPT}"
 VERSION_CONF="${BUILD_DIR}/yunsh-version.conf"
 cat > "${VERSION_CONF}" << 'VERCONF'
-VERSION=v2.0.0
+VERSION=v2.0.1
 BUILD=2026.07.29
 VERCONF
 add_file "${VERSION_CONF}" "/etc/yunsh/version.conf"

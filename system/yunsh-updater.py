@@ -229,6 +229,9 @@ def install_bundle(bundle_path: str) -> dict:
 
             try:
                 subprocess.run(["systemctl", "daemon-reload"], check=False)
+                for unit in ("orbit.service", "orbit-voice-setup.service"):
+                    if os.path.exists(os.path.join("/etc/systemd/system", unit)):
+                        subprocess.run(["systemctl", "enable", unit], check=False)
             except FileNotFoundError:
                 logger.warning("systemctl is unavailable; daemon reload deferred to reboot")
             result = {

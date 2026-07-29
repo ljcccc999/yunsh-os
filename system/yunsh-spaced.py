@@ -31,7 +31,7 @@ CERT_PATH = os.path.join(CONFIG_DIR, "space-transfer.crt")
 KEY_PATH = os.path.join(CONFIG_DIR, "space-transfer.key")
 MAX_BODY = 1024 * 1024
 ALLOWED_APPS = {
-    "settings", "browser", "metaverse", "terminal", "photos", "appstore",
+    "settings", "browser", "terminal", "photos", "appstore",
     "files", "update", "about", "network", "bluetooth", "display",
     "systeminfo", "updatehistory", "spacecapsule", "comfortdna", "screenrelay",
 }
@@ -202,7 +202,7 @@ class Handler(BaseHTTPRequestHandler):
                     "success": True,
                     "name": socket.gethostname(),
                     "product": "YUNSH OS",
-                    "version": "2.0.0",
+                    "version": "2.0.1",
                     "deviceId": fingerprint[:16],
                     "fingerprint": fingerprint,
                 },
@@ -302,7 +302,7 @@ def advertise(fingerprint):
         str(PORT),
         f"id={fingerprint[:16]}",
         f"fp={fingerprint}",
-        "version=2.0.0",
+        "version=2.0.1",
         "transport=tls",
     ]
     try:

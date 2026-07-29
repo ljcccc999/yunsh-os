@@ -12,7 +12,7 @@ Item {
     property string batteryLevel: "—"
     property bool wifiOn: false
     property bool bluetoothOn: false
-    property bool stereoEnabled: true
+    property bool stereoEnabled: false
     property bool headTrackingConnected: false
     property real tintOpacity: 1.0
     property bool showControlCenterHint: false  // subtle drag hint

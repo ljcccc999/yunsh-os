@@ -1,5 +1,5 @@
 #!/bin/bash
-# YUNSH OS v2.0.0 — safe macOS SD-card flasher
+# YUNSH OS v2.0.1 — safe macOS SD-card flasher
 #
 # Double-click the Desktop copy or run this file from Terminal. The flasher:
 #   1. verifies the compressed image and its SHA-256 checksum;
@@ -11,7 +11,7 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-VERSION="${YUNSH_VERSION:-v2.0.0}"
+VERSION="${YUNSH_VERSION:-v2.0.1}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IMAGE_NAME="YUNSH-OS-${VERSION}.img.xz"
 

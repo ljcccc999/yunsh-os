@@ -1,126 +1,153 @@
-// YUNSH OS v1.0 - Metaverse (元宇宙)
+// YUNSH META Universe — persistent system world layer.
+// This is part of the shell and must never be presented as a normal app.
+
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 
 Item {
-    id: metaverseScreen
+    id: world
     anchors.fill: parent
-    visible: true
-    
     signal backToHome()
-    
-    // Transparent background (GlassBackground shows through)
-    Rectangle { anchors.fill: parent; color: "transparent" }
-    
-    // Floating glass panel - visionOS style
+
+    Rectangle {
+        anchors.fill: parent
+        color: "#000000"
+    }
+
     Rectangle {
         anchors.centerIn: parent
-        width: 400
-        height: 500
-        radius: 32
-        color: Qt.rgba(20, 20, 30, 0.35)
-        
-        // Frosted overlay
+        width: parent.width * 0.76
+        height: parent.height * 0.72
+        radius: 48
+        color: Qt.rgba(250/255, 254/255, 1, 0.96)
+        border.width: 1
+        border.color: "#FFFFFF"
+
         Rectangle {
-            anchors.fill: parent; radius: 32
-            color: Qt.rgba(255, 255, 255, 0.03)
-        }
-        
-        // Border glow
-        Rectangle {
-            anchors.fill: parent; radius: 32
+            anchors.fill: parent
+            anchors.margins: 3
+            radius: 45
             color: "transparent"
-            border.color: Qt.rgba(0, 212, 255, 0.15)
             border.width: 1
-            
-            Rectangle {
-                anchors.fill: parent; radius: 32
-                color: "transparent"
-                border.color: Qt.rgba(255, 255, 255, 0.08)
-                border.width: 1; anchors.margins: 2
-            }
+            border.color: "#D9F6FF"
         }
-        
-        // Deep shadow
-        Rectangle {
-            anchors.fill: parent; anchors.margins: -16; radius: 40
-            color: "transparent"
-            layer.enabled: true
-            layer.effect: DropShadowEffect {
-                radius: 48; samples: 97
-                color: Qt.rgba(0, 0, 0, 0.5)
-                horizontalOffset: 0; verticalOffset: 12
-            }
-        }
-        
+
         Column {
             anchors.centerIn: parent
-            spacing: 24
-            
-            // YUNSH Atomic Logo
-            Rectangle {
-                width: 100; height: 100; radius: 50
+            width: parent.width - 120
+            spacing: 22
+
+            Image {
                 anchors.horizontalCenter: parent.horizontalCenter
-                color: Qt.rgba(20, 20, 35, 0.6)
-                border.color: Qt.rgba(0, 212, 255, 0.2); border.width: 1
-                
-                Image {
-                    anchors.centerIn: parent
-                    source: "/usr/share/yunsh/logo/logo-128.png"
-                    width: 64; height: 64
-                    sourceSize.width: 128; sourceSize.height: 128
-                    fillMode: Image.PreserveAspectFit
-                }
+                source: "/usr/share/yunsh/logo/logo-128.png"
+                width: 82; height: 82
+                fillMode: Image.PreserveAspectFit
             }
-            
-            // Title
+
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "YUNSH Metaverse"
-                color: "#FFFFFF"; font.pixelSize: 28; font.weight: Font.Bold
+                text: "Get Ready for YUNSH META Universe"
+                color: "#101820"
+                font.pixelSize: 34
+                font.weight: Font.DemiBold
+                font.letterSpacing: -0.9
             }
-            
-            // Status badge
-            Rectangle {
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: 160; height: 36; radius: 18
-                color: Qt.rgba(255, 193, 7, 0.15)
-                border.color: Qt.rgba(255, 193, 7, 0.3); border.width: 1
-                
-                Text {
-                    anchors.centerIn: parent
-                    text: "🚧 正在开发中"
-                    color: "#FFC107"; font.pixelSize: 14; font.weight: Font.Medium
-                }
-            }
-            
-            // Description
+
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "YUNSH Metaverse 即将到来\n一个全新的 AR 社交体验"
-                color: "#A0A0A0"; font.pixelSize: 14
+                width: parent.width * 0.78
+                text: "A persistent world built into the operating system — identity, spaces, people, and experiences continue beyond any single window."
+                color: "#5E6C77"
+                font.pixelSize: 15
+                lineHeight: 1.35
+                wrapMode: Text.Wrap
                 horizontalAlignment: Text.AlignHCenter
-                lineHeight: 1.5
             }
-            
-            // Close button (capsule pill shape)
+
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: 14
+
+                Repeater {
+                    model: [
+                        {title: "Persistent Identity", subtitle: "Your presence follows you"},
+                        {title: "Living Spaces", subtitle: "Spaces remember and evolve"},
+                        {title: "Connected People", subtitle: "Share the same world"}
+                    ]
+                    Rectangle {
+                        width: 220
+                        height: 112
+                        radius: 24
+                        color: "#FFFFFF"
+                        border.width: 1
+                        border.color: "#DCECF1"
+                        Column {
+                            anchors.centerIn: parent
+                            width: parent.width - 30
+                            spacing: 7
+                            Text {
+                                width: parent.width
+                                text: modelData.title
+                                color: "#14202A"
+                                font.pixelSize: 15
+                                font.weight: Font.DemiBold
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+                            Text {
+                                width: parent.width
+                                text: modelData.subtitle
+                                color: "#71808B"
+                                font.pixelSize: 11
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+                        }
+                    }
+                }
+            }
+
             Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: 200; height: 44; radius: 22
-                color: Qt.rgba(0, 212, 255, 0.15)
-                border.color: Qt.rgba(0, 212, 255, 0.3); border.width: 1
-                
+                width: 260
+                height: 48
+                radius: 24
+                color: "#E7F9FE"
+                border.width: 1
+                border.color: "#BCEFFF"
+                Row {
+                    anchors.centerIn: parent
+                    spacing: 9
+                    Rectangle {
+                        width: 8; height: 8; radius: 4
+                        color: "#34C759"
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                        text: "WORLD FOUNDATION IS RUNNING"
+                        color: "#08728E"
+                        font.pixelSize: 10
+                        font.weight: Font.Bold
+                        font.letterSpacing: 1.1
+                    }
+                }
+            }
+
+            Rectangle {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: 160
+                height: 44
+                radius: 22
+                color: backMouse.pressed ? "#35DDFF" : "#00D4FF"
                 Text {
                     anchors.centerIn: parent
-                    text: "返回首页"; color: "#00D4FF"; font.pixelSize: 15; font.weight: Font.Medium
+                    text: "Return to YUNSH OS"
+                    color: "#00191F"
+                    font.pixelSize: 13
+                    font.weight: Font.DemiBold
                 }
-                
                 MouseArea {
+                    id: backMouse
                     anchors.fill: parent
-                    hoverEnabled: true
-                    onEntered: parent.color = Qt.rgba(0, 212, 255, 0.25)
-                    onExited: parent.color = Qt.rgba(0, 212, 255, 0.15)
-                    onClicked: metaverseScreen.backToHome()
+                    onClicked: world.backToHome()
                 }
             }
         }

@@ -40,6 +40,8 @@ qt_add_resources(yunsh_ui_resources "yunsh_ui"
         ComfortDnaScreen.qml
         SpaceCapsuleScreen.qml
         ScreenRelayScreen.qml
+        OrbitPanel.qml
+        SystemMenuBar.qml
         SpatialDisplaySettings.qml
         StereoCalibration.qml
         StereoCompositor.qml
@@ -79,6 +81,7 @@ install(FILES
     GlassBackground.qml GlassButton.qml GlassIcon.qml GlassPanel.qml GlassCard.qml
     GlassEffect.qml GlassWindow.qml DropShadowEffect.qml HomeIndicator.qml
     MacWindow.qml SliderRow.qml ComfortDnaScreen.qml SpaceCapsuleScreen.qml ScreenRelayScreen.qml
+    OrbitPanel.qml SystemMenuBar.qml
     SpatialDisplaySettings.qml
     StereoCalibration.qml StereoCompositor.qml StatusBar.qml
     ControlCenter.qml NetworkScreen.qml BluetoothScreen.qml PhotosScreen.qml

@@ -1,4 +1,4 @@
-// YUNSH OS v2.0.0 - touch-first activation experience.
+// YUNSH OS v2.0.1 - touch-first activation experience.
 // Physical keyboard input is never required.
 
 import QtQuick 2.15
@@ -17,8 +17,8 @@ Rectangle {
     signal skipActivation()
 
     // ─── State ───────────────────────────────────────
-    property int currentStep: 0  // welcome, language, Wi-Fi, glasses, account, comfort, finish
-    readonly property int totalSteps: 8
+    property int currentStep: 0  // welcome, language, Wi-Fi, glasses, phone, account, Orbit, comfort, finish
+    readonly property int totalSteps: 9
 
     property string selectedLanguage: "简体中文"
     property string selectedKeyboard: "拼音"
@@ -43,6 +43,12 @@ Rectangle {
     property int phonePairingProgress: 0
     property string phonePairingStatus: "在 iPhone 上打开 YUNSH Link"
     property string phonePairingCode: "••••••"
+    property string orbitProvider: "deepseek"
+    property string orbitModel: "deepseek-v4-flash"
+    property string orbitApiKey: ""
+    property string orbitVoice: "sweet_female"
+    property string orbitSetupError: ""
+    property bool orbitSaving: false
     property int helloIndex: 0
     readonly property var helloWords: ["你好", "Hello", "Bonjour", "こんにちは", "안녕하세요"]
 
@@ -158,6 +164,45 @@ Rectangle {
             language: selectedLanguage,
             keyboard: selectedKeyboard,
             password: accountPassword
+        }))
+    }
+
+    function saveOrbitConfiguration() {
+        if (!orbitApiKey.length) {
+            orbitSetupError = "请输入 API Key，或选择稍后设置"
+            return
+        }
+        orbitSaving = true
+        orbitSetupError = ""
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8597/v1/config", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 15000
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return
+            orbitSaving = false
+            try {
+                var response = JSON.parse(xhr.responseText || "{}")
+                if (xhr.status === 200 && response.success) {
+                    currentStep = 7
+                } else {
+                    orbitSetupError = response.error || "Orbit 配置保存失败"
+                }
+            } catch (error) {
+                orbitSetupError = "Orbit 运行时仍在启动，可稍后设置"
+            }
+        }
+        xhr.send(JSON.stringify({
+            provider: orbitProvider,
+            model: orbitModel,
+            apiKey: orbitApiKey,
+            voice: orbitVoice,
+            speakResponses: true,
+            permissions: {
+                apps: true, files: true, shell: true, settings: true,
+                network: true, screen: true, memory: true, world: true
+            }
         }))
     }
 
@@ -303,7 +348,7 @@ Rectangle {
                 // Version
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "v2.0.0"
+                    text: "v2.0.1"
                     color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
                     font.pixelSize: 11
                 }
@@ -1139,27 +1184,175 @@ Rectangle {
     }
 
     // ════════════════════════════════════════════════════
-    // STEP 6: Optional Comfort DNA
+    // STEP 6: Optional Orbit setup
     // ════════════════════════════════════════════════════
     Item {
         anchors.fill: parent
         visible: currentStep === 6
 
-        ComfortDnaScreen {
-            id: activationComfortDna
-            anchors.fill: parent
-            onboarding: true
-            onProfileApplied: currentStep = 7
-            onSetupSkipped: currentStep = 7
+        Rectangle {
+            anchors.centerIn: parent
+            width: 610; height: 690; radius: 36
+            color: Qt.rgba(249/255, 253/255, 1, 0.95)
+            border.width: 1
+            border.color: "#FFFFFF"
+
+            Column {
+                anchors.fill: parent
+                anchors.margins: 28
+                spacing: 8
+
+                Image {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    source: "/usr/share/yunsh/icons/orbit.png"
+                    width: 54; height: 54
+                    fillMode: Image.PreserveAspectFit
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "设置 Orbit"
+                    color: "#101820"
+                    font.pixelSize: 27
+                    font.weight: Font.DemiBold
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: parent.width
+                    text: "Orbit 是系统级 Agent，会在每次开机自动运行。依次选择 API 提供商、模型版本，再输入你自己的 API Key。"
+                    color: "#5F6D78"
+                    font.pixelSize: 13
+                    wrapMode: Text.Wrap
+                    horizontalAlignment: Text.AlignHCenter
+                    lineHeight: 1.3
+                }
+
+                Text { text: "API 提供商"; color: "#26333D"; font.pixelSize: 12; font.weight: Font.DemiBold }
+                ComboBox {
+                    id: activationOrbitProvider
+                    width: parent.width
+                    model: ["DeepSeek", "Kimi"]
+                    onActivated: {
+                        orbitProvider = currentIndex === 1 ? "kimi" : "deepseek"
+                        activationOrbitModel.model = currentIndex === 1
+                            ? ["kimi-k3", "kimi-k2.6"]
+                            : ["deepseek-v4-flash", "deepseek-v4-pro"]
+                        activationOrbitModel.currentIndex = 0
+                        orbitModel = String(activationOrbitModel.currentText)
+                    }
+                }
+
+                Text { text: "模型版本"; color: "#26333D"; font.pixelSize: 12; font.weight: Font.DemiBold }
+                ComboBox {
+                    id: activationOrbitModel
+                    width: parent.width
+                    model: ["deepseek-v4-flash", "deepseek-v4-pro"]
+                    onActivated: orbitModel = String(currentText)
+                }
+
+                Text { text: "API Key"; color: "#26333D"; font.pixelSize: 12; font.weight: Font.DemiBold }
+                TextField {
+                    width: parent.width
+                    placeholderText: "输入该提供商的 API Key"
+                    echoMode: TextInput.Password
+                    selectByMouse: true
+                    onTextChanged: orbitApiKey = text
+                }
+
+                Text { text: "声音"; color: "#26333D"; font.pixelSize: 12; font.weight: Font.DemiBold }
+                ComboBox {
+                    width: parent.width
+                    model: ["甜美女声（默认）", "年轻男声"]
+                    onActivated: orbitVoice = currentIndex === 1 ? "young_male" : "sweet_female"
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: 68
+                    radius: 20
+                    color: "#FFFFFF"
+                    border.width: 1
+                    border.color: "#DCECF1"
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: 4
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: "系统权限默认全部开启"
+                            color: "#17222C"
+                            font.pixelSize: 14
+                            font.weight: Font.DemiBold
+                        }
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: "应用 · 文件 · Shell · 设置 · 网络 · 屏幕 · 记忆 · 世界层"
+                            color: "#657580"
+                            font.pixelSize: 10
+                        }
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    text: orbitSetupError
+                    color: "#C43D4A"
+                    font.pixelSize: 11
+                    horizontalAlignment: Text.AlignHCenter
+                    visible: orbitSetupError.length > 0
+                }
+
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 12
+                    Rectangle {
+                        width: 210; height: 46; radius: 23
+                        color: "#00D4FF"
+                        Text { anchors.centerIn: parent; text: "稍后设置"; color: "#00151B"; font.pixelSize: 14; font.weight: Font.Medium }
+                        MouseArea { anchors.fill: parent; onClicked: currentStep = 7 }
+                    }
+                    Rectangle {
+                        width: 210; height: 46; radius: 23
+                        color: "#00D4FF"
+                        opacity: orbitSaving ? 0.5 : 1
+                        Text {
+                            anchors.centerIn: parent
+                            text: orbitSaving ? "正在连接…" : "保存并继续"
+                            color: "#00151B"
+                            font.pixelSize: 14
+                            font.weight: Font.Medium
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            enabled: !orbitSaving
+                            onClicked: saveOrbitConfiguration()
+                        }
+                    }
+                }
+            }
         }
     }
 
     // ════════════════════════════════════════════════════
-    // STEP 7: Initializing...
+    // STEP 7: Optional Comfort DNA
     // ════════════════════════════════════════════════════
     Item {
         anchors.fill: parent
         visible: currentStep === 7
+
+        ComfortDnaScreen {
+            id: activationComfortDna
+            anchors.fill: parent
+            onboarding: true
+            onProfileApplied: currentStep = 8
+            onSetupSkipped: currentStep = 8
+        }
+    }
+
+    // ════════════════════════════════════════════════════
+    // STEP 8: Initializing...
+    // ════════════════════════════════════════════════════
+    Item {
+        anchors.fill: parent
+        visible: currentStep === 8
 
         property int progressValue: 0
         property int _timerCount: 0
@@ -1173,7 +1366,7 @@ Rectangle {
 
         Timer {
             interval: 80
-            running: currentStep === 7 && activationConfigReady && progressValue < 100
+            running: currentStep === 8 && activationConfigReady && progressValue < 100
             repeat: true
             onTriggered: {
                 _timerCount++
@@ -1196,7 +1389,7 @@ Rectangle {
 
         Timer {
             interval: 2000
-            running: currentStep === 7 && !activationConfigReady && activationConfigError.length > 0
+            running: currentStep === 8 && !activationConfigReady && activationConfigError.length > 0
             repeat: false
             onTriggered: applyActivationConfiguration()
         }
@@ -1287,7 +1480,8 @@ Rectangle {
         onActivated: {
             if (currentStep < 5) currentStep++
             else if (currentStep === 5) currentStep = 6
-            else if (currentStep === 6) activationComfortDna.skipSetup()
+            else if (currentStep === 6) currentStep = 7
+            else if (currentStep === 7) activationComfortDna.skipSetup()
             else skipActivation()
         }
     }

@@ -1,0 +1,38 @@
+#!/bin/bash
+# Optional Orbit voice preparation. This runs only after the desktop-capable
+# package marker exists and is never part of the YUNSH OS startup dependency.
+
+set -euo pipefail
+
+STATE_DIR=/var/lib/yunsh/orbit/voice
+MODEL_NAME=vosk-model-small-cn-0.22
+MODEL_DIR="${STATE_DIR}/${MODEL_NAME}"
+MODEL_URL="https://alphacephei.com/vosk/models/${MODEL_NAME}.zip"
+MARKER="${STATE_DIR}/.ready"
+
+[ -f /etc/yunsh/.packages_installed ] || exit 0
+[ -f "${MARKER}" ] && exit 0
+
+install -d -m 0700 "${STATE_DIR}"
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y --no-install-recommends \
+    alsa-utils ca-certificates curl espeak-ng mpv python3-cryptography \
+    python3-pip unzip
+
+python3 -m pip install --break-system-packages --disable-pip-version-check \
+    edge-tts vosk
+
+if [ ! -d "${MODEL_DIR}" ]; then
+    archive="$(mktemp "${STATE_DIR}/model.XXXXXX.zip")"
+    trap 'rm -f "${archive}"' EXIT
+    curl --fail --location --retry 4 --retry-delay 4 \
+        --connect-timeout 20 --max-time 900 \
+        "${MODEL_URL}" --output "${archive}"
+    unzip -q "${archive}" -d "${STATE_DIR}"
+    test -f "${MODEL_DIR}/conf/model.conf"
+fi
+
+touch "${MARKER}"
+chmod 0600 "${MARKER}"

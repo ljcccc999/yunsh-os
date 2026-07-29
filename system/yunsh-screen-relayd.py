@@ -157,7 +157,7 @@ def advertise():
                 socket.gethostname(),
                 "_yunsh-screen._tcp",
                 str(PORT),
-                "version=2.0.0",
+                "version=2.0.1",
                 "transport=tls-jpeg",
             ],
             stdout=subprocess.DEVNULL,

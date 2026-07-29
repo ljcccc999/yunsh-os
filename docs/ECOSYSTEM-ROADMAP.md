@@ -16,10 +16,10 @@ computer. An iPhone is a close companion and data bridge. A Mac, PC, or cloud
 service may add compute capacity when available, but normal outdoor operation
 must not depend on one.
 
-## YUNSH OS v2.0.0
+## YUNSH OS v2.0.1
 
-YUNSH OS v2.0.0 combines the binocular spatial-display foundation with the
-first transferable workspace and personal comfort-profile experiences:
+YUNSH OS v2.0.1 preserves every v2.0.0 workspace and comfort capability and
+adds the persistent system-world foundation and Orbit system agent:
 
 - exportable and restorable `.yunshspace` SpaceCapsule files;
 - encrypted nearby YUNSH Drop between YUNSH OS devices, with receiver approval;
@@ -32,7 +32,9 @@ first transferable workspace and personal comfort-profile experiences:
 - steady, balanced, and responsive local comfort profiles;
 - AR-visible white liquid-glass application surfaces over an optical-black
   transparent canvas;
-- synchronized side-by-side output for left and right eye views;
+- one complete default output frame mirrored to both eye displays by the
+  current glasses controller;
+- optional advanced side-by-side compatibility for a future independent-eye controller;
 - EDID-driven display output without a forced legacy 1080p mode;
 - calibration for IPD, horizontal fusion, field of view, crop, and eye order;
 - a shared comfortable focal plane for the system shell;
@@ -42,6 +44,12 @@ first transferable workspace and personal comfort-profile experiences:
 - window pin and follow behavior;
 - focus mode, reduced motion, reduced transparency, and increased contrast;
 - validated, persistent display and comfort preferences.
+- a permanent YUNSH / METAVERSE / Orbit system menu bar;
+- YUNSH META Universe as a shell-owned world layer rather than an application;
+- Orbit auto-start, provider/model/own-key configuration, encrypted local
+  credentials, full default permissions, tool execution, and optional voice;
+- default sweet female speech, optional male speech, and honest USB/Bluetooth
+  microphone detection with background voice preparation.
 
 Release assets are published through
 <https://github.com/ljcccc999/yunsh-os/releases>. Structural image validation
@@ -49,9 +57,9 @@ does not replace physical validation. Optical comfort, display-controller
 compatibility, Raspberry Pi boot, Bluetooth motion hardware, and peripheral
 behavior still require testing on the intended prototype.
 
-The current shell duplicates a single application surface into both eye
-viewports. It does not claim per-eye stereoscopic application rendering, 6DoF
-tracking, or real-world room anchoring.
+The current display controller duplicates one complete YUNSH OS output frame
+to both physical displays. Optional SBS does not claim per-eye stereoscopic
+application rendering, 6DoF tracking, or real-world room anchoring.
 
 ## Workspace and comfort
 
@@ -134,17 +142,16 @@ applications into independent YUNSH windows. Background work, local-network
 access, screen capture, and data sharing remain subject to Apple permissions
 and review rules.
 
-## YUNSH Orbit
+## Orbit
 
-**YUNSH Orbit** is the working product name for the planned system AI agent.
-“Orbit” reflects YUNSH's atomic identity and the agent's role in coordinating
-applications, devices, content, and spatial work around the user. The technical
-runtime may be called **YUNSH Agent Runtime**. The product name requires a
-trademark and market-conflict check before commercial launch.
+**Orbit** is the product name used in YUNSH OS v2.0.1. It is a system runtime,
+not a normal application, and starts at every boot independently from the
+desktop process. Its current black-and-white open-O mark is integrated as the
+working product icon.
 
 ### Experience
 
-Orbit is intended to understand requests such as:
+Orbit accepts requests such as:
 
 - “Open my study space.”
 - “Put the browser on the left and my notes in front.”
@@ -152,42 +159,36 @@ Orbit is intended to understand requests such as:
 - “Save this workspace as a SpaceCapsule.”
 - “Reduce motion and make the windows more comfortable.”
 
-Text input through YUNSH OS and YUNSH Link is the first dependable interface.
-Voice input is conditional on a future microphone-equipped hardware
-configuration and is not assumed by the current hardware.
+Text input is always available. Optional speech uses a sweet female voice by
+default with a male alternative. Voice recognition activates only when a USB
+or Bluetooth microphone is detected; an integrated glasses microphone is not
+assumed.
 
 ### Runtime architecture
 
-Orbit should use a local orchestrator such as `yunsh-agentd`, not give a remote
-model unrestricted system access.
+The v2.0.1 runtime is `/usr/bin/orbitd`. Its HTTP API binds only to loopback.
+Users choose DeepSeek, Kimi, or a custom OpenAI-compatible endpoint, choose a
+model, and enter their own API key. The key is encrypted at rest with a
+device-local key and is never returned in full.
 
 ```text
 User
   │
-YUNSH Orbit UI
+Orbit UI
   │
-yunsh-agentd
+orbitd
   ├── local context and conversation state
-  ├── permission and confirmation broker
-  ├── allow-listed OS tools
-  └── encrypted request
-        │
-        ▼
-YUNSH AI Gateway
-  ├── YUNSH key authentication
-  ├── quota, rate, model, and device policy
-  ├── billing and abuse controls
-  ├── minimal audit and usage records
-  └── server-side model-provider credential
-        │
-        ▼
-Model provider API
+  ├── user-selectable permissions, enabled by default
+  ├── system tools and UI command bridge
+  ├── device-key-encrypted provider credential
+  └── selected model-provider API
 ```
 
-The model may propose tool calls, but the local broker owns execution. File
-access, screen content, account data, settings changes, purchases, deletion,
-and other sensitive operations require narrowly scoped permissions and, when
-appropriate, an explicit confirmation. Raw shell access is not a model tool.
+The model proposes tool calls and the local runtime owns execution. In this
+release application, file, shell, settings, network, screen, memory, and world
+permissions are enabled by default as a deliberate full-system-agent choice.
+Users can disable any category in Orbit settings. Raw shell access is therefore
+powerful and must be treated as trusted-device access.
 
 ### Commercial access and quotas
 
@@ -210,13 +211,10 @@ server-side. Client-side counters are only a display and cannot be the authority
 for billing. The gateway must use idempotency controls so retries cannot charge
 the user twice.
 
-The initial provider may be DeepSeek, but the YUNSH contract and gateway should
-remain provider-neutral. Current DeepSeek Open Platform terms allow integration
-into downstream services for end users and require the developer's API key to
-remain secret. Before launch, YUNSH must re-check the current provider terms,
-pricing, regional availability, privacy requirements, content-safety duties,
-payment rules, tax obligations, and any rules that apply to selling digital
-credits.
+The optional future YUNSH AI Gateway and quota business remain provider-neutral
+and separate from the v2.0.1 bring-your-own-key mode. If YUNSH later sells AI
+credits, upstream keys must remain server-side and the service must re-check
+current terms, pricing, privacy, safety, payment, tax, and regional rules.
 
 ### Privacy and resilience
 
@@ -231,12 +229,13 @@ credits.
 
 ## Delivery sequence
 
-1. Stabilize v2.0.0, SpaceCapsule, and Comfort DNA on the real binocular
+1. Stabilize v2.0.1, SpaceCapsule, Comfort DNA, the mirrored display path,
+   the system world, and Orbit on the real binocular
    display, Raspberry Pi, tracking controller, and YUNSH Link hardware path.
 2. Build YUNSH Flow pairing and YUNSH Drop over the local network.
-3. Build the YUNSH AI Gateway, entitlement service, metering, and a text-only
-   Orbit prototype with read-only tools.
-4. Add permissioned window, settings, Flow, and SpaceCapsule tools to Orbit.
+3. Validate Orbit provider calls, voice peripherals, and full-permission tools
+   on the Raspberry Pi hardware, then add narrower confirmations where useful.
+4. Build the optional YUNSH AI Gateway, entitlement service, and metering.
 5. Validate Comfort DNA profiles and future opt-in recommendations with
    physical-hardware testers.
 6. Add Adaptive Compute only after task migration, privacy, recovery, and

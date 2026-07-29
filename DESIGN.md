@@ -132,15 +132,16 @@ Behavior on opacity {
 
 ## 11. Binocular Comfort (双目舒适度)
 
-The system shell is rendered as a synchronized side-by-side frame on a shared
-focal plane. Comfort and predictability take priority over exaggerated depth.
+The system shell renders one complete frame on a shared focal plane. The
+current glasses controller mirrors that frame to both eye displays. Comfort
+and predictability take priority over exaggerated depth.
 
-- The left surface is the interaction source; the right surface is copied on
-  the GPU from the same frame.
+- A conventional monitor receives the same complete frame, so normal display
+  development does not require a separate UI mode.
+- Advanced side-by-side output remains disabled by default and exists only for
+  a future controller with independent left/right inputs.
 - IPD metadata, horizontal fusion offset, field of view, crop, and eye order
-  are checked with a dedicated calibration target.
-- The compositor fills each eye viewport. The display controller advertises
-  the native combined mode through EDID and performs panel-specific unpacking.
+  remain calibration foundations for that future output path.
 - Shell windows use scale, yaw, and occlusion as conservative depth cues.
   True stereo applications require a future distinct per-eye rendering path.
 - Never present a 3DoF view-relative layout as a 6DoF world anchor.
@@ -168,6 +169,11 @@ focal plane. Comfort and predictability take priority over exaggerated depth.
   code or camera.
 - Screen Relay is visible only after the user starts Apple's ReplayKit
   broadcast UI. Local-network video is encrypted and cannot start silently.
+- The persistent YUNSH world is a shell layer and must never appear in the app
+  launcher, app switcher, or normal application lifecycle.
+- Orbit is a global system surface. Provider credentials are device-key
+  encrypted, its API is loopback-only, and its background setup cannot block
+  the desktop.
 
 ## QML Implementation Notes
 
@@ -184,3 +190,5 @@ focal plane. Comfort and predictability take priority over exaggerated depth.
 | Workspace transfer | `SpaceCapsuleScreen.qml`, `main.qml` |
 | iPhone screen window | `ScreenRelayScreen.qml`, `main.qml` |
 | 3DoF interaction | `main.qml`, `MacWindow.qml`, `ControlCenter.qml` |
+| Persistent world | `YunshMetaverse.qml`, `SystemMenuBar.qml`, `main.qml` |
+| System agent | `OrbitPanel.qml`, `SystemMenuBar.qml`, `system/orbitd.py` |
