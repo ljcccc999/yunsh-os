@@ -1,4 +1,4 @@
-// YUNSH OS v1.0.4 - Main QML Entry Point
+// YUNSH OS v2.0.0 - Main QML Entry Point
 // Apple-style glass system + Task Switcher + Home Indicator
 
 import QtQuick 2.15
@@ -62,6 +62,8 @@ ApplicationWindow {
         "network": { name: "Wi-Fi", icon: "/usr/share/yunsh/icons/wifi.svg", color: "#0096FF" },
         "bluetooth": { name: "蓝牙", icon: "/usr/share/yunsh/icons/bluetooth.svg", color: "#2196F3" },
         "display": { name: "空间显示", icon: "/usr/share/yunsh/icons/settings.svg", color: "#00D4FF" },
+        "spacecapsule": { name: "空间胶囊", icon: "/usr/share/yunsh/icons/files.svg", color: "#00D4FF" },
+        "comfortdna": { name: "Comfort DNA", icon: "/usr/share/yunsh/icons/settings.svg", color: "#00D4FF" },
         "systeminfo": { name: "系统信息", icon: "/usr/share/yunsh/icons/about.svg", color: "#607D8B" },
         "updatehistory": { name: "更新历史", icon: "/usr/share/yunsh/icons/update.svg", color: "#607D8B" }
     })
@@ -116,6 +118,8 @@ ApplicationWindow {
             case "network": return networkWindow
             case "bluetooth": return bluetoothWindow
             case "display": return displayWindow
+            case "spacecapsule": return spaceCapsuleWindow
+            case "comfortdna": return comfortDnaWindow
             case "updatehistory": return updateHistoryWindow
             case "appstore":
             case "files": return androidWindow
@@ -173,6 +177,7 @@ ApplicationWindow {
             onOpenTerminal: switchTo(terminalWindow, "terminal")
             onOpenPhotos: switchTo(photosWindow, "photos")
             onOpenSpatialDisplay: switchTo(displayWindow, "display")
+            onOpenSpaceCapsule: switchTo(spaceCapsuleWindow, "spacecapsule")
             onShowControlCenter: controlCenter.show()
             onTakeScreenshot: takeScreenshot()
             onOpenAppLibrary: showTaskSwitcher()
@@ -230,6 +235,7 @@ ApplicationWindow {
                 onOpenBluetoothSettings: switchTo(bluetoothWindow, "bluetooth")
                 onOpenSystemInfo: switchTo(systemInfoWindow, "systeminfo")
                 onOpenDisplaySettings: switchTo(displayWindow, "display")
+                onOpenComfortDna: switchTo(comfortDnaWindow, "comfortdna")
                 onOpenSoundSettings: { settingsWindow.visible = false; controlCenter.show() }
             }
         }
@@ -269,6 +275,62 @@ ApplicationWindow {
                 onPreferencesChanged: yunshOS.applySpatialSettings(spatialDisplaySettings)
                 onCalibrationRequested: yunshOS.calibrationMode = true
                 onRecenterRequested: yunshOS.recenterTracking()
+            }
+        }
+
+        // ===== COMFORT DNA =====
+        MacWindow {
+            id: comfortDnaWindow
+            appTitle: "Comfort DNA"
+            headYaw: yunshOS.headYaw
+            headPitch: yunshOS.headPitch
+            headRoll: yunshOS.headRoll
+            pixelsPerDegree: yunshOS.pixelsPerDegree
+            x: 190; y: 70; width: 760; height: 700
+            visible: false
+            onActivated: yunshOS.activateWindow(comfortDnaWindow, "comfortdna")
+            onCloseClicked: { yunshOS.closeAppFromSwitcher("comfortdna") }
+            onMinimizeClicked: yunshOS.minimizeWindow(comfortDnaWindow, "comfortdna")
+            ComfortDnaScreen {
+                anchors.fill: parent
+                onboarding: false
+                reduceMotion: yunshOS.reduceMotion
+                onBackRequested: {
+                    comfortDnaWindow.visible = false
+                    switchTo(settingsWindow, "settings")
+                }
+                onProfileApplied: function(data) {
+                    yunshOS.applySpatialPreferenceObject(data)
+                    yunshOS.loadSpatialPreferences()
+                    yunshOS.showToast("Comfort DNA 已应用：" + data.label)
+                }
+            }
+        }
+
+        // ===== SPACE CAPSULE =====
+        MacWindow {
+            id: spaceCapsuleWindow
+            appTitle: "空间胶囊"
+            headYaw: yunshOS.headYaw
+            headPitch: yunshOS.headPitch
+            headRoll: yunshOS.headRoll
+            pixelsPerDegree: yunshOS.pixelsPerDegree
+            x: 130; y: 70; width: 900; height: 700
+            visible: false
+            onActivated: yunshOS.activateWindow(spaceCapsuleWindow, "spacecapsule")
+            onCloseClicked: { yunshOS.closeAppFromSwitcher("spacecapsule") }
+            onMinimizeClicked: yunshOS.minimizeWindow(spaceCapsuleWindow, "spacecapsule")
+            SpaceCapsuleScreen {
+                id: spaceCapsuleScreen
+                anchors.fill: parent
+                reduceMotion: yunshOS.reduceMotion
+                onBackToHome: switchToHome()
+                onWorkspaceExportRequested: function(name) {
+                    spaceCapsuleScreen.exportWorkspace(yunshOS.captureWorkspace(), name)
+                }
+                onRestoreRequested: function(capsule) {
+                    yunshOS.restoreWorkspace(capsule)
+                }
             }
         }
 
@@ -398,7 +460,9 @@ ApplicationWindow {
             onActivated: yunshOS.activateWindow(browserWindow, "browser")
             onCloseClicked: { yunshOS.closeAppFromSwitcher("browser") }
             onMinimizeClicked: yunshOS.minimizeWindow(browserWindow, "browser")
-            YunshBrowser { anchors.fill: parent
+            YunshBrowser {
+                id: browserScreen
+                anchors.fill: parent
                 onBackToHome: switchToHome()
             }
         }
@@ -647,7 +711,7 @@ ApplicationWindow {
     function switchToHome() {
         var ids = ["update","updatehistory","browser","metaverse","terminal",
                     "photos","settings","about","systeminfo","network","bluetooth",
-                    "display"]
+                    "display","comfortdna","spacecapsule"]
         for (var i = 0; i < ids.length; i++) {
             var w = getWindowById(ids[i])
             if (w) { w.visible = false; w.isMinimized = false }
@@ -690,7 +754,8 @@ ApplicationWindow {
 
     function allWindows() {
         return [
-            settingsWindow, displayWindow, systemInfoWindow, aboutWindow,
+            settingsWindow, displayWindow, comfortDnaWindow, spaceCapsuleWindow,
+            systemInfoWindow, aboutWindow,
             networkWindow, bluetoothWindow, updateWindow, updateHistoryWindow,
             browserWindow, metaverseWindow, terminalWindow, photosWindow,
             androidWindow
@@ -704,6 +769,115 @@ ApplicationWindow {
             windows[i].reduceTransparency = reduceTransparency
             windows[i].highContrast = highContrast
         }
+    }
+
+    function isAppTracked(appId) {
+        for (var i = 0; i < openApps.length; i++) {
+            if (openApps[i].appId === appId)
+                return true
+        }
+        return false
+    }
+
+    function workspaceWindowEntries() {
+        return [
+            { appId: "settings", window: settingsWindow },
+            { appId: "display", window: displayWindow },
+            { appId: "systeminfo", window: systemInfoWindow },
+            { appId: "about", window: aboutWindow },
+            { appId: "network", window: networkWindow },
+            { appId: "bluetooth", window: bluetoothWindow },
+            { appId: "update", window: updateWindow },
+            { appId: "updatehistory", window: updateHistoryWindow },
+            { appId: "browser", window: browserWindow },
+            { appId: "metaverse", window: metaverseWindow },
+            { appId: "terminal", window: terminalWindow },
+            { appId: "photos", window: photosWindow },
+            { appId: androidTarget, window: androidWindow }
+        ]
+    }
+
+    function captureWorkspace() {
+        var result = []
+        var entries = workspaceWindowEntries()
+        for (var i = 0; i < entries.length; i++) {
+            var appId = entries[i].appId
+            var window = entries[i].window
+            if (!window || (!window.visible && !window.isMinimized && !isAppTracked(appId)))
+                continue
+            var item = {
+                appId: appId,
+                x: window.x,
+                y: window.y,
+                width: window.width,
+                height: window.height,
+                visible: window.visible,
+                minimized: window.isMinimized,
+                spatialPlacement: window.spatialPlacement,
+                pinMode: window.pinMode,
+                order: window.z
+            }
+            if (appId === "browser")
+                item.state = {url: String(browserScreen.currentUrl)}
+            result.push(item)
+        }
+        return {
+            activeAppId: activeAppId,
+            windows: result
+        }
+    }
+
+    function restoreWorkspace(capsule) {
+        if (!capsule || !capsule.windows)
+            return
+
+        var windows = allWindows()
+        for (var i = 0; i < windows.length; i++) {
+            windows[i].visible = false
+            windows[i].isMinimized = false
+        }
+        openApps = []
+        activeAppId = ""
+
+        var restoredActiveWindow = null
+        var restoredCount = 0
+        for (var j = 0; j < capsule.windows.length; j++) {
+            var item = capsule.windows[j]
+            var window = getWindowById(item.appId)
+            if (!window || item.appId === "spacecapsule" || item.appId === "comfortdna")
+                continue
+
+            if (item.appId === "appstore" || item.appId === "files") {
+                launchApp(item.appId)
+                window = androidWindow
+            }
+            trackAppOpen(item.appId)
+            window.x = item.x
+            window.y = item.y
+            window.width = item.width
+            window.height = item.height
+            window.spatialPlacement = item.spatialPlacement
+            window.pinMode = item.pinMode
+            window.isMinimized = item.minimized
+            window.visible = item.visible && !item.minimized
+            window.z = 60 + Math.max(0, item.order)
+            windowCount = Math.max(windowCount, item.order)
+
+            if (item.appId === "browser" && item.state && item.state.url)
+                browserScreen.currentUrl = item.state.url
+            if (item.appId === capsule.activeAppId && window.visible)
+                restoredActiveWindow = window
+            restoredCount++
+        }
+
+        homeScreen.visible = true
+        if (capsule.activeAppId && restoredActiveWindow) {
+            activeAppId = capsule.activeAppId
+            activateWindow(restoredActiveWindow, capsule.activeAppId)
+        }
+        applyWindowPreferences()
+        updateWindowFocus()
+        showToast("已恢复“" + capsule.name + "” · " + restoredCount + " 个窗口")
     }
 
     function updateWindowFocus() {
@@ -1035,7 +1209,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        console.log("YUNSH OS UI v1.0.4")
+        console.log("YUNSH OS UI v2.0.0")
         checkFirstBoot()
         showFullScreen()
         applyWindowPreferences()

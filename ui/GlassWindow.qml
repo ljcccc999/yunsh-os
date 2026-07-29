@@ -25,8 +25,9 @@ Rectangle {
         // Corner radius (visionOS generous corner)
         radius: 32
 
-        // Glass background
-        color: Qt.rgba(12/255, 12/255, 28/255, 0.7)
+        // White liquid-glass background remains visible when optical black is
+        // transparent. Content keeps its high-contrast light treatment.
+        color: Qt.rgba(245/255, 249/255, 255/255, 0.20)
 
         // Frost layer
         Rectangle {
@@ -35,7 +36,7 @@ Rectangle {
         }
 
         // Border
-        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
+        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.28)
         border.width: 1
 
         // Top rim highlight (visionOS signature edge light)

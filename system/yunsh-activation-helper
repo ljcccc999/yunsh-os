@@ -4,13 +4,15 @@
 import json
 import math
 import os
+import re
 import socket
 import subprocess
 import tempfile
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HOST = "127.0.0.1"
-PORT = 8591
+PORT = int(os.environ.get("YUNSH_LOCAL_API_PORT", "8591"))
 YUNSH_CONFIG_DIR = os.environ.get("YUNSH_CONFIG_DIR", "/etc/yunsh")
 GLASSES_STATUS_PATH = os.environ.get(
     "YUNSH_GLASSES_STATUS_PATH", "/tmp/yunsh-glasses-status.json"
@@ -26,6 +28,51 @@ SOCKETS = {
 SPATIAL_PREFERENCES_PATH = os.path.join(
     YUNSH_CONFIG_DIR, "spatial-display.json"
 )
+COMFORT_DNA_PATH = os.path.join(YUNSH_CONFIG_DIR, "comfort-dna.json")
+YUNSH_HOME_DIR = os.environ.get("YUNSH_HOME_DIR", "/home/yunsh")
+SPACE_CAPSULE_DIR = os.environ.get(
+    "YUNSH_SPACE_CAPSULE_DIR", os.path.join(YUNSH_HOME_DIR, "Downloads")
+)
+SPACE_CAPSULE_EXTENSION = ".yunshspace"
+SPACE_CAPSULE_SCHEMA = 1
+CAPSULE_ALLOWED_APPS = {
+    "settings",
+    "browser",
+    "metaverse",
+    "terminal",
+    "photos",
+    "appstore",
+    "files",
+    "update",
+    "about",
+    "network",
+    "bluetooth",
+    "display",
+    "systeminfo",
+    "updatehistory",
+    "spacecapsule",
+    "comfortdna",
+}
+COMFORT_PROFILES = {
+    "balanced": {
+        "label": "平衡",
+        "trackingSmoothing": 0.35,
+        "fieldOfView": 50.0,
+        "reduceMotion": False,
+    },
+    "steady": {
+        "label": "稳定",
+        "trackingSmoothing": 0.58,
+        "fieldOfView": 46.0,
+        "reduceMotion": True,
+    },
+    "responsive": {
+        "label": "灵敏",
+        "trackingSmoothing": 0.18,
+        "fieldOfView": 54.0,
+        "reduceMotion": False,
+    },
+}
 SPATIAL_DEFAULTS = {
     "stereoEnabled": True,
     "ipdMm": 63.0,
@@ -223,6 +270,273 @@ def save_spatial_preferences(payload):
         return {"success": False, "error": str(exc)}
 
 
+def atomic_write_json(path, payload):
+    directory = os.path.dirname(path)
+    os.makedirs(directory, exist_ok=True)
+    fd, temp_path = tempfile.mkstemp(prefix=os.path.basename(path) + ".", dir=directory)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, sort_keys=True, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+    except Exception:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
+
+
+def load_comfort_dna():
+    stored = read_json(COMFORT_DNA_PATH, {})
+    profile = stored.get("profile", "balanced")
+    if profile not in COMFORT_PROFILES:
+        profile = "balanced"
+    return {
+        "success": True,
+        "configured": stored.get("configured") is True,
+        "skipped": stored.get("skipped") is True,
+        "profile": profile,
+        **COMFORT_PROFILES[profile],
+    }
+
+
+def save_comfort_dna(payload):
+    action = str(payload.get("action", "apply"))
+    if action == "skip":
+        record = {
+            "configured": False,
+            "skipped": True,
+            "profile": "balanced",
+            "updatedAt": datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            atomic_write_json(COMFORT_DNA_PATH, record)
+            return {"success": True, **record}
+        except OSError as exc:
+            return {"success": False, "error": str(exc)}
+
+    profile = str(payload.get("profile", "balanced"))
+    if profile not in COMFORT_PROFILES:
+        return {"success": False, "error": "Unsupported comfort profile"}
+
+    profile_values = COMFORT_PROFILES[profile]
+    spatial = load_spatial_preferences()
+    spatial.pop("success", None)
+    spatial.update(
+        {
+            "trackingSmoothing": profile_values["trackingSmoothing"],
+            "fieldOfView": profile_values["fieldOfView"],
+            "reduceMotion": profile_values["reduceMotion"],
+        }
+    )
+    spatial_result = save_spatial_preferences(spatial)
+    if not spatial_result.get("success"):
+        return spatial_result
+
+    record = {
+        "configured": True,
+        "skipped": False,
+        "profile": profile,
+        "updatedAt": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        atomic_write_json(COMFORT_DNA_PATH, record)
+        return {"success": True, **record, **profile_values}
+    except OSError as exc:
+        return {"success": False, "error": str(exc)}
+
+
+def clamp_number(value, minimum, maximum, default):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(number):
+        return default
+    return max(minimum, min(maximum, number))
+
+
+def sanitize_capsule_window(item):
+    if not isinstance(item, dict):
+        return None
+    app_id = str(item.get("appId", ""))
+    if app_id not in CAPSULE_ALLOWED_APPS:
+        return None
+    placement = str(item.get("spatialPlacement", "front"))
+    if placement not in {"front", "left", "right", "far"}:
+        placement = "front"
+    pin_mode = str(item.get("pinMode", "pinned"))
+    if pin_mode not in {"pinned", "following"}:
+        pin_mode = "pinned"
+    result = {
+        "appId": app_id,
+        "x": clamp_number(item.get("x"), -1920, 3840, 80),
+        "y": clamp_number(item.get("y"), -1080, 2160, 60),
+        "width": clamp_number(item.get("width"), 320, 1600, 880),
+        "height": clamp_number(item.get("height"), 240, 1000, 640),
+        "visible": item.get("visible") is True,
+        "minimized": item.get("minimized") is True,
+        "spatialPlacement": placement,
+        "pinMode": pin_mode,
+        "order": int(clamp_number(item.get("order"), 0, 1000, 0)),
+    }
+    app_state = item.get("state")
+    if app_id == "browser" and isinstance(app_state, dict):
+        url = str(app_state.get("url", ""))[:2048]
+        if url.startswith(("https://", "http://")):
+            result["state"] = {"url": url}
+    return result
+
+
+def safe_capsule_name(value):
+    name = re.sub(r"[\x00-\x1f/\\\\]+", " ", str(value or "")).strip()
+    name = re.sub(r"\s+", " ", name)
+    return name[:48] or "我的空间"
+
+
+def capsule_path_from_filename(filename):
+    candidate = os.path.basename(str(filename or ""))
+    if candidate != filename or not candidate.endswith(SPACE_CAPSULE_EXTENSION):
+        return None
+    base = os.path.realpath(SPACE_CAPSULE_DIR)
+    path = os.path.realpath(os.path.join(base, candidate))
+    if not path.startswith(base + os.sep):
+        return None
+    return path
+
+
+def export_space_capsule(payload):
+    windows = []
+    raw_windows = payload.get("windows", [])
+    if not isinstance(raw_windows, list):
+        return {"success": False, "error": "Workspace windows must be a list"}
+    for item in raw_windows[:20]:
+        sanitized = sanitize_capsule_window(item)
+        if sanitized:
+            windows.append(sanitized)
+    if not windows:
+        return {"success": False, "error": "Workspace has no restorable windows"}
+
+    name = safe_capsule_name(payload.get("name"))
+    active_app = str(payload.get("activeAppId", ""))
+    if active_app not in CAPSULE_ALLOWED_APPS:
+        active_app = ""
+    created_at = datetime.now(timezone.utc)
+    capsule = {
+        "format": "yunsh-space-capsule",
+        "schemaVersion": SPACE_CAPSULE_SCHEMA,
+        "product": "YUNSH OS",
+        "name": name,
+        "createdAt": created_at.isoformat(),
+        "activeAppId": active_app,
+        "windows": windows,
+    }
+    filename = (
+        "YUNSH-SpaceCapsule-"
+        + created_at.strftime("%Y%m%d-%H%M%S-%f")
+        + SPACE_CAPSULE_EXTENSION
+    )
+    path = os.path.join(SPACE_CAPSULE_DIR, filename)
+    try:
+        atomic_write_json(path, capsule)
+        os.chmod(path, 0o644)
+        try:
+            home_owner = os.stat(YUNSH_HOME_DIR)
+            os.chown(path, home_owner.st_uid, home_owner.st_gid)
+        except OSError:
+            pass
+        return {
+            "success": True,
+            "filename": filename,
+            "path": path,
+            "name": name,
+            "createdAt": capsule["createdAt"],
+            "windowCount": len(windows),
+        }
+    except OSError as exc:
+        return {"success": False, "error": str(exc)}
+
+
+def load_space_capsule(payload):
+    path = capsule_path_from_filename(payload.get("filename"))
+    if not path:
+        return {"success": False, "error": "Invalid capsule filename"}
+    try:
+        if os.path.getsize(path) > 1024 * 1024:
+            return {"success": False, "error": "SpaceCapsule is too large"}
+    except OSError:
+        return {"success": False, "error": "SpaceCapsule was not found"}
+    stored = read_json(path, None)
+    if not isinstance(stored, dict) or stored.get("format") != "yunsh-space-capsule":
+        return {"success": False, "error": "Invalid SpaceCapsule format"}
+    if stored.get("schemaVersion") != SPACE_CAPSULE_SCHEMA:
+        return {"success": False, "error": "Unsupported SpaceCapsule version"}
+    windows = []
+    raw_windows = stored.get("windows", [])
+    if not isinstance(raw_windows, list):
+        return {"success": False, "error": "SpaceCapsule windows are invalid"}
+    for item in raw_windows[:20]:
+        sanitized = sanitize_capsule_window(item)
+        if sanitized:
+            windows.append(sanitized)
+    if not windows:
+        return {"success": False, "error": "SpaceCapsule contains no supported windows"}
+    active_app = str(stored.get("activeAppId", ""))
+    if active_app not in CAPSULE_ALLOWED_APPS:
+        active_app = ""
+    return {
+        "success": True,
+        "capsule": {
+            "format": "yunsh-space-capsule",
+            "schemaVersion": SPACE_CAPSULE_SCHEMA,
+            "name": safe_capsule_name(stored.get("name")),
+            "createdAt": str(stored.get("createdAt", "")),
+            "activeAppId": active_app,
+            "windows": windows,
+        },
+    }
+
+
+def list_space_capsules():
+    capsules = []
+    try:
+        os.makedirs(SPACE_CAPSULE_DIR, exist_ok=True)
+        for filename in os.listdir(SPACE_CAPSULE_DIR):
+            if not filename.endswith(SPACE_CAPSULE_EXTENSION):
+                continue
+            path = capsule_path_from_filename(filename)
+            try:
+                oversized = not path or os.path.getsize(path) > 1024 * 1024
+            except OSError:
+                oversized = True
+            if oversized:
+                continue
+            stored = read_json(path, None)
+            if not isinstance(stored, dict) or stored.get("format") != "yunsh-space-capsule":
+                continue
+            capsules.append(
+                {
+                    "filename": filename,
+                    "name": safe_capsule_name(stored.get("name")),
+                    "createdAt": str(stored.get("createdAt", "")),
+                    "windowCount": min(
+                        len(stored.get("windows", []))
+                        if isinstance(stored.get("windows"), list)
+                        else 0,
+                        20,
+                    ),
+                    "path": path,
+                }
+            )
+    except OSError as exc:
+        return {"success": False, "error": str(exc), "capsules": []}
+    capsules.sort(key=lambda item: item["createdAt"], reverse=True)
+    return {"success": True, "capsules": capsules[:50]}
+
+
 def update_response(action, payload):
     command = {
         "/api/update-status": "get_status",
@@ -291,6 +605,10 @@ class Handler(BaseHTTPRequestHandler):
             self._send(read_json("/tmp/yunsh-power-status.json", {"available": False}))
         elif self.path == "/api/spatial-preferences":
             self._send(load_spatial_preferences())
+        elif self.path == "/api/comfort-dna":
+            self._send(load_comfort_dna())
+        elif self.path == "/api/space-capsules":
+            self._send(list_space_capsules())
         else:
             self._send({"success": True, "message": "YUNSH local API"})
 
@@ -325,6 +643,16 @@ class Handler(BaseHTTPRequestHandler):
                 result = {"success": False, "error": "Unsupported audio action"}
         elif self.path == "/api/spatial-preferences":
             result = save_spatial_preferences(payload)
+        elif self.path == "/api/comfort-dna":
+            result = save_comfort_dna(payload)
+        elif self.path == "/api/space-capsules":
+            action = payload.get("action")
+            if action == "export":
+                result = export_space_capsule(payload)
+            elif action == "load":
+                result = load_space_capsule(payload)
+            else:
+                result = {"success": False, "error": "Unsupported SpaceCapsule action"}
         else:
             action = payload.get("action")
             if action == "connect_wifi":

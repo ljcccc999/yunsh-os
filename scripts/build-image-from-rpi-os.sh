@@ -563,8 +563,8 @@ echo "" >> "${DEBUGFS_SCRIPT}"
 echo "# === Version Config ===" >> "${DEBUGFS_SCRIPT}"
 VERSION_CONF="${BUILD_DIR}/yunsh-version.conf"
 cat > "${VERSION_CONF}" << 'VERCONF'
-VERSION=v1.0.1
-BUILD=2026.07.12
+VERSION=v2.0.0
+BUILD=2026.07.29
 VERCONF
 add_file "${VERSION_CONF}" "/etc/yunsh/version.conf"
 
@@ -577,7 +577,7 @@ echo "# === YUNSH Systemd Services ===" >> "${DEBUGFS_SCRIPT}"
 SVC_FILE="${BUILD_DIR}/yunsh-os.service"
 cat > "${SVC_FILE}" << 'SVC'
 [Unit]
-Description=YUNSH OS v1.0 AR Glasses UI
+Description=YUNSH OS v2.0 AR Glasses UI
 After=network.target
 Wants=network.target
 

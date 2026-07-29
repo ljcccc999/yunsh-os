@@ -16,10 +16,16 @@ computer. An iPhone is a close companion and data bridge. A Mac, PC, or cloud
 service may add compute capacity when available, but normal outdoor operation
 must not depend on one.
 
-## Shipped in YUNSH OS v1.0.4
+## YUNSH OS v2.0.0
 
-YUNSH OS v1.0.4 established the binocular spatial-display foundation:
+YUNSH OS v2.0.0 combines the binocular spatial-display foundation with the
+first transferable workspace and personal comfort-profile experiences:
 
+- exportable and restorable `.yunshspace` SpaceCapsule files;
+- an optional, skippable Comfort DNA step during activation;
+- steady, balanced, and responsive local comfort profiles;
+- AR-visible white liquid-glass application surfaces over an optical-black
+  transparent canvas;
 - synchronized side-by-side output for left and right eye views;
 - EDID-driven display output without a forced legacy 1080p mode;
 - calibration for IPD, horizontal fusion, field of view, crop, and eye order;
@@ -31,42 +37,44 @@ YUNSH OS v1.0.4 established the binocular spatial-display foundation:
 - focus mode, reduced motion, reduced transparency, and increased contrast;
 - validated, persistent display and comfort preferences.
 
-The release and its downloadable image are published at
-<https://github.com/ljcccc999/yunsh-os/releases/tag/v1.0.4>. The image was
-validated structurally, including its checksum and embedded system files.
-Actual optical comfort, display-controller compatibility, Raspberry Pi boot,
-Bluetooth motion hardware, and peripheral behavior still require validation on
-the intended physical prototype.
+Release assets are published through
+<https://github.com/ljcccc999/yunsh-os/releases>. Structural image validation
+does not replace physical validation. Optical comfort, display-controller
+compatibility, Raspberry Pi boot, Bluetooth motion hardware, and peripheral
+behavior still require testing on the intended prototype.
 
 The current shell duplicates a single application surface into both eye
 viewports. It does not claim per-eye stereoscopic application rendering, 6DoF
 tracking, or real-world room anchoring.
 
-## Planned differentiators
+## Workspace and comfort
 
 ### YUNSH SpaceCapsule
 
 SpaceCapsule captures a live workspace as a portable spatial object. It is
-intended to preserve application selection, window placement, supported
-application state, linked content, and comfort settings, then restore or share
-that workspace on another YUNSH device.
+implemented in v2.0.0 and preserves supported application selection, window
+placement, size, spatial preset, pin/follow mode, and selected safe application
+state. The first supported application state is the browser URL.
 
 Examples include a study capsule, a travel capsule, or a collaborative project
 capsule. Applications that do not expose restorable state will fall back to a
 safe launch target rather than pretending to support full state restoration.
+Terminal history, credentials, and arbitrary private application data are not
+included.
 
 ### YUNSH Comfort DNA
 
-Comfort DNA is a personal comfort profile derived from calibration choices and
-motion behavior. The planned system can adapt head-tracking smoothing,
-recenter behavior, window distance, scale, motion intensity, and fusion
-defaults for the wearer.
+The v2.0.0 Comfort DNA foundation offers explicit steady, balanced, and
+responsive profiles. It adjusts local head-tracking smoothing, field of view,
+and reduced-motion behavior. The activation step is optional and can be
+skipped, and the profile remains available in Settings.
 
-It must remain transparent and user-controlled. The system should show what it
+Future opt-in versions may derive recommendations from calibration choices and
+motion behavior. They must remain transparent and user-controlled, show what
 changed, provide a reset, avoid medical claims, and keep raw motion history
 local unless the user explicitly chooses otherwise.
 
-### YUNSH Adaptive Compute
+## Planned Adaptive Compute
 
 Adaptive Compute keeps the wearable experience running on the portable YUNSH
 computer and adds optional compute resources without making them mandatory.
@@ -216,14 +224,14 @@ credits.
 
 ## Delivery sequence
 
-1. Stabilize v1.0.4 on the real binocular display, Raspberry Pi, tracking
-   controller, and YUNSH Link hardware path.
+1. Stabilize v2.0.0, SpaceCapsule, and Comfort DNA on the real binocular
+   display, Raspberry Pi, tracking controller, and YUNSH Link hardware path.
 2. Build YUNSH Flow pairing and YUNSH Drop over the local network.
 3. Build the YUNSH AI Gateway, entitlement service, metering, and a text-only
    Orbit prototype with read-only tools.
-4. Add permissioned window, settings, Flow, and SpaceCapsule tools.
-5. Prototype Comfort DNA locally and validate comfort changes with opt-in
-   testers.
+4. Add permissioned window, settings, Flow, and SpaceCapsule tools to Orbit.
+5. Validate Comfort DNA profiles and future opt-in recommendations with
+   physical-hardware testers.
 6. Add Adaptive Compute only after task migration, privacy, recovery, and
    latency behavior are measurable.
 

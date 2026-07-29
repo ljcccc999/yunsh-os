@@ -20,9 +20,9 @@ Item {
     /* ---- Data model ---- */
     property var updateHistory: [
         {
-            version: "1.0.4",
+            version: "2.0.0",
             date: "2026-07-29",
-            changelog: "双目空间显示更新。\n• Side-by-Side 双目合成与 EDID 自适应输出\n• 瞳距、融合偏移与视场角校准\n• 3DoF 平滑、滚转补偿与快速重新居中\n• 专注模式和独立辅助功能选项\n• 四种空间位置直接选择与窗口交互修复",
+            changelog: "YUNSH 空间工作版本。\n• 可转发和恢复的 SpaceCapsule 工作空间文件\n• 激活时可选择或跳过的 Comfort DNA\n• Side-by-Side 双目合成与 EDID 自适应输出\n• 瞳距、融合偏移、视场角与左右眼校准\n• 30 Hz 3DoF 平滑、滚转补偿与快速重新居中\n• 专注模式、辅助功能与四种空间位置",
             build: "build 2026.0729"
         },
         {

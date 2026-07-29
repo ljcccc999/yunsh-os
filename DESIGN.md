@@ -88,6 +88,10 @@ function rubberband(overshoot, dimension, constant = 0.55) {
 ## 9. Glass/Material Design (玻璃材质)
 
 ### Material Hierarchy
+- The global canvas remains pure black because optical black is transparent on
+  the target AR display.
+- Application surfaces use luminous white liquid glass so their boundaries
+  remain visible over the real world.
 - Bigger surfaces = thicker glass (more blur + deeper shadow)
 - Small interactive elements = lighter, more transparent material
 - Color lives on solid layers *behind* glass, never on translucent foreground
@@ -151,6 +155,10 @@ focal plane. Comfort and predictability take priority over exaggerated depth.
   reset with user preferences during factory reset.
 - Reduced motion, reduced transparency, and increased contrast are independent
   choices.
+- Comfort DNA is optional during activation, can be skipped without blocking
+  setup, and remains editable in Settings.
+- SpaceCapsule exports only allow-listed workspace state; it never treats
+  terminal history, credentials, or arbitrary application data as transferable.
 
 ## QML Implementation Notes
 
@@ -163,4 +171,6 @@ focal plane. Comfort and predictability take priority over exaggerated depth.
 | Spatial consistency | `ActivationScreen.qml`, `SettingsScreen.qml` |
 | Binocular output | `StereoCompositor.qml`, `StereoCalibration.qml` |
 | Display comfort | `SpatialDisplaySettings.qml`, `SliderRow.qml` |
+| Personal comfort | `ComfortDnaScreen.qml` |
+| Workspace transfer | `SpaceCapsuleScreen.qml`, `main.qml` |
 | 3DoF interaction | `main.qml`, `MacWindow.qml`, `ControlCenter.qml` |

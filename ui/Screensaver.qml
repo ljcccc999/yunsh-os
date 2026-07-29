@@ -86,7 +86,7 @@ Rectangle {
         }
 
         Text {
-            text: "v1.0.4"
+            text: "v2.0.0"
             color: Qt.rgba(255/255, 255/255, 255/255, 0.3)
             font.pixelSize: 10
             anchors.verticalCenter: parent.verticalCenter

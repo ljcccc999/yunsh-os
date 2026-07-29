@@ -18,8 +18,8 @@ Rectangle {
     signal skipActivation()
 
     // ─── State ───────────────────────────────────────
-    property int currentStep: 0  // 0=welcome, 1=language, 2=wifi, 3=account, 4=initializing
-    readonly property int totalSteps: 5
+    property int currentStep: 0  // 0=welcome, 1=language, 2=wifi, 3=account, 4=comfort, 5=initializing
+    readonly property int totalSteps: 6
 
     property string selectedLanguage: "简体中文"
     property string selectedKeyboard: "拼音"
@@ -169,7 +169,7 @@ Rectangle {
                 // Version
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "v1.0.4"
+                    text: "v2.0.0"
                     color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
                     font.pixelSize: 11
                 }
@@ -704,11 +704,27 @@ Rectangle {
     }
 
     // ════════════════════════════════════════════════════
-    // STEP 4: Initializing...
+    // STEP 4: Optional Comfort DNA
     // ════════════════════════════════════════════════════
     Item {
         anchors.fill: parent
         visible: currentStep === 4
+
+        ComfortDnaScreen {
+            id: activationComfortDna
+            anchors.fill: parent
+            onboarding: true
+            onProfileApplied: currentStep = 5
+            onSetupSkipped: currentStep = 5
+        }
+    }
+
+    // ════════════════════════════════════════════════════
+    // STEP 5: Initializing...
+    // ════════════════════════════════════════════════════
+    Item {
+        anchors.fill: parent
+        visible: currentStep === 5
 
         property int progressValue: 0
         property int _timerCount: 0
@@ -722,7 +738,7 @@ Rectangle {
 
         Timer {
             interval: 80
-            running: currentStep === 4 && activationConfigReady && progressValue < 100
+            running: currentStep === 5 && activationConfigReady && progressValue < 100
             repeat: true
             onTriggered: {
                 _timerCount++
@@ -745,7 +761,7 @@ Rectangle {
 
         Timer {
             interval: 2000
-            running: currentStep === 4 && !activationConfigReady && activationConfigError.length > 0
+            running: currentStep === 5 && !activationConfigReady && activationConfigError.length > 0
             repeat: false
             onTriggered: applyActivationConfiguration()
         }
@@ -835,6 +851,8 @@ Rectangle {
         sequence: "Escape"
         onActivated: {
             if (currentStep < 3) currentStep++
+            else if (currentStep === 3) currentStep = 4
+            else if (currentStep === 4) activationComfortDna.skipSetup()
             else skipActivation()
         }
     }

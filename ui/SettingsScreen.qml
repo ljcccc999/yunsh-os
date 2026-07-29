@@ -18,8 +18,9 @@ Rectangle {
     signal openNetworkSettings()
     signal openBluetoothSettings()
     signal openSystemInfo()
+    signal openComfortDna()
 
-    property string osVersionName: "YUNSH OS v1.0.4"
+    property string osVersionName: "YUNSH OS v2.0.0"
     property string selectedLanguageDisplay: "简体中文 · 拼音"
 
     function loadVersionConfig() {
@@ -183,6 +184,16 @@ Rectangle {
                 subtitle: "双目 SBS、瞳距、融合、3DoF 与舒适度"
                 showArrow: true
                 onClicked: settingsScreen.openDisplaySettings()
+            }
+
+            GlassCard {
+                width: parent.width; height: 60
+                iconSource: "/usr/share/yunsh/icons/settings.svg"
+                iconSize: 18
+                title: "Comfort DNA"
+                subtitle: "调整头追平滑、视野与动效舒适起点"
+                showArrow: true
+                onClicked: settingsScreen.openComfortDna()
             }
             
             GlassCard {

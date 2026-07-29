@@ -17,8 +17,8 @@ Rectangle {
     property real shadowOpacity: 0.6 // Shadow darkness
     property color glassTint: Qt.rgba(0.45, 0.5, 0.7, 0.08) // Slight blue tint
     property bool showBorder: true
-    property color panelColor: Qt.rgba(12/255, 12/255, 25/255, glassOpacity * 0.7)
-    property color borderColor: Qt.rgba(255/255, 255/255, 255/255, 0.05)
+    property color panelColor: Qt.rgba(245/255, 249/255, 255/255, Math.max(0.14, glassOpacity * 0.58))
+    property color borderColor: Qt.rgba(255/255, 255/255, 255/255, 0.28)
     property real borderWidth: 1
     property bool glowBorder: false
     property alias contentItem: customContent.data
@@ -26,7 +26,7 @@ Rectangle {
     // Apple-style large corner radius
     radius: cornerRadius
     
-    // Main glass background - deep translucent with blue tint
+    // Main glass background - luminous white material for transparent AR optics
     color: panelColor
 
     Item {

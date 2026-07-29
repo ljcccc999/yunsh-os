@@ -28,9 +28,12 @@ YUNSH OS is the connection layer of the YUNSH ecosystem. It combines an optical-
 - Floating application windows with move, resize, minimize, close, and full-screen controls.
 - Direct spatial window layouts for 3DoF viewing: front, left angle, right angle, and distance presets.
 - Window pin and follow modes for view-relative display behavior.
+- SpaceCapsule export and restore for transferable `.yunshspace` workspace files.
 - 30 Hz head-pose sampling with adjustable smoothing, yaw wrap handling, roll compensation, and one-action recentering.
 - Home workspace, task switcher, Control Center, and a glass virtual keyboard.
+- Optional Comfort DNA onboarding with steady, balanced, and responsive local comfort profiles.
 - Focus mode, reduced motion, reduced transparency, and increased contrast.
+- AR-visible white liquid-glass application surfaces over an optical-black transparent canvas.
 - Black background designed for transparent optical displays; white glass surfaces preserve legibility.
 
 The shell uses one comfortable shared focal plane for both eyes. True stereo application content requires a future per-eye rendering path and is not claimed by the current shell compositor. Spatial layouts are view-relative: head rotation preserves the desktop arrangement as the user looks around. Real-world room anchoring requires future 6DoF visual tracking hardware and is not represented as a current feature.
@@ -40,13 +43,14 @@ The shell uses one comfortable shared focal plane for both eyes. True stereo app
 - Web browser powered by Qt WebEngine.
 - Persistent PTY terminal.
 - Screenshot capture with in-context preview and photo library.
+- SpaceCapsule workspace manager.
 - Settings, system information, update center, network, and Bluetooth management.
 - Integrated Android application environment through Waydroid on the YUNSH Wayland session; its background preparation never blocks the desktop or activation flow.
 - Built-in Android app catalogue with a verified F-Droid fallback, plus APK side-loading through `yunsh-android install-apk`.
 
 ### Device services
 
-- Guided activation and first-run setup.
+- Guided activation and first-run setup with an optional, skippable Comfort DNA step.
 - Wi-Fi and Bluetooth management.
 - OTA update service and factory-reset workflow.
 - Power, input, splash-screen, and screenshot services.
@@ -107,7 +111,7 @@ Compare the result with the matching `.sha256` asset published with the release.
 
 ## First boot
 
-The initial setup downloads the required desktop packages, including the Raspberry Pi 5 DRM/KMS, EGL, OpenGL, and Vulkan runtime, and then reboots once into the activation flow. Connect Ethernet before the first power-on and keep the device online until setup finishes. A temporary network failure retries automatically without marking the setup complete. Completing or skipping activation creates a persistent activation marker, so later boots open the desktop directly.
+The initial setup downloads the required desktop packages, including the Raspberry Pi 5 DRM/KMS, EGL, OpenGL, and Vulkan runtime, and then reboots once into the activation flow. Connect Ethernet before the first power-on and keep the device online until setup finishes. A temporary network failure retries automatically without marking the setup complete. Comfort DNA is offered as an optional local comfort-profile step and can be skipped. Completing or skipping activation creates a persistent activation marker, so later boots open the desktop directly.
 
 Factory reset clears user data, saved Wi-Fi networks, Bluetooth pairings, and the activation marker. It preserves YUNSH OS, installed desktop dependencies, and the current system version, then returns to activation on the next boot.
 

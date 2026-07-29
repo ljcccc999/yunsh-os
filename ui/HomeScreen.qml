@@ -25,6 +25,7 @@ Item {
     signal openTerminal()
     signal openPhotos()
     signal openSpatialDisplay()
+    signal openSpaceCapsule()
     signal openAppLibrary()
     signal showControlCenter()
     signal takeScreenshot()
@@ -38,7 +39,8 @@ Item {
         { name: "文件", icon: "files.svg",             color: "#2196F3",   action: "files" },
         { name: "终端", icon: "terminal.svg",          color: "#00D4FF",   action: "terminal" },
         { name: "相册", icon: "photos.svg",            color: "#FFC107",   action: "photos" },
-        { name: "空间显示", icon: "settings.svg",      color: "#00D4FF",   action: "display" }
+        { name: "空间显示", icon: "settings.svg",      color: "#00D4FF",   action: "display" },
+        { name: "空间胶囊", icon: "files.svg",          color: "#00D4FF",   action: "spacecapsule" }
     ]
 
     readonly property int columns: 4
@@ -58,6 +60,7 @@ Item {
             case "terminal":    homeScreen.openTerminal(); break
             case "photos":      homeScreen.openPhotos(); break
             case "display":     homeScreen.openSpatialDisplay(); break
+            case "spacecapsule": homeScreen.openSpaceCapsule(); break
             default:            console.log("Unknown app:", action)
         }
     }
@@ -241,7 +244,7 @@ Item {
                                 anchors.bottom: parent.bottom
                                 anchors.bottomMargin: 16
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: "YUNSH OS v1.0.4"
+                                text: "YUNSH OS v2.0.0"
                                 color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
                                 font.pixelSize: 11
                                 visible: pageIndex === 0
