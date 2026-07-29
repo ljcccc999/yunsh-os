@@ -12,6 +12,8 @@ Item {
     property string batteryLevel: "—"
     property bool wifiOn: false
     property bool bluetoothOn: false
+    property bool stereoEnabled: true
+    property bool headTrackingConnected: false
     property real tintOpacity: 1.0
     property bool showControlCenterHint: false  // subtle drag hint
     
@@ -135,7 +137,7 @@ Item {
             font.pixelSize: 13
             font.weight: Font.Bold
             anchors.verticalCenter: parent.verticalCenter
-            letterSpacing: 1.5
+            font.letterSpacing: 1.5
         }
     }
     
@@ -144,6 +146,49 @@ Item {
         anchors.right: parent.right; anchors.rightMargin: 12
         anchors.verticalCenter: parent.verticalCenter
         spacing: 8
+
+        Rectangle {
+            width: stereoLabel.width + 14
+            height: 24
+            radius: 12
+            anchors.verticalCenter: parent.verticalCenter
+            color: stereoEnabled
+                ? Qt.rgba(0, 212/255, 1, 0.1)
+                : Qt.rgba(1, 1, 1, 0.035)
+            border.width: 1
+            border.color: stereoEnabled
+                ? Qt.rgba(0, 212/255, 1, 0.2)
+                : Qt.rgba(1, 1, 1, 0.05)
+
+            Text {
+                id: stereoLabel
+                anchors.centerIn: parent
+                text: stereoEnabled ? "SBS" : "MONO"
+                color: stereoEnabled ? "#00D4FF" : "#8E8EA8"
+                font.pixelSize: 9
+                font.weight: Font.Bold
+                font.letterSpacing: 0.8
+            }
+        }
+
+        Rectangle {
+            width: trackingLabel.width + 14
+            height: 24
+            radius: 12
+            anchors.verticalCenter: parent.verticalCenter
+            color: headTrackingConnected
+                ? Qt.rgba(0, 230/255, 118/255, 0.09)
+                : Qt.rgba(1, 1, 1, 0.035)
+
+            Text {
+                id: trackingLabel
+                anchors.centerIn: parent
+                text: headTrackingConnected ? "3DoF" : "3DoF —"
+                color: headTrackingConnected ? "#72E6A2" : "#666680"
+                font.pixelSize: 9
+                font.weight: Font.DemiBold
+            }
+        }
         
         // Control Center drag handle (visionOS pill)
         Rectangle {

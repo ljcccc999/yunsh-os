@@ -16,6 +16,7 @@ Item {
     property real cardWidth: 320
     property real cardHeight: 440
     property int currentIndex: 0
+    property bool reduceMotion: false
 
     signal switchToApp(string appId)
     signal closeApp(string appId)
@@ -29,7 +30,7 @@ Item {
         opacity: 0
 
         Behavior on opacity {
-            NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: taskSwitcher.reduceMotion ? 80 : 250; easing.type: Easing.OutCubic }
         }
 
         // Click to dismiss
@@ -48,11 +49,11 @@ Item {
         color: Qt.rgba(255/255, 255/255, 255/255, 0.15)
         font.pixelSize: 13
         font.weight: Font.Medium
-        letterSpacing: 3
+        font.letterSpacing: 3
         opacity: 0
 
         Behavior on opacity {
-            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: taskSwitcher.reduceMotion ? 80 : 300; easing.type: Easing.OutCubic }
         }
     }
 
@@ -67,7 +68,7 @@ Item {
         opacity: 0
 
         Behavior on opacity {
-            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: taskSwitcher.reduceMotion ? 80 : 300; easing.type: Easing.OutCubic }
         }
     }
 
@@ -87,7 +88,7 @@ Item {
 
         opacity: 0
         Behavior on opacity {
-            NumberAnimation { duration: 350; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: taskSwitcher.reduceMotion ? 80 : 350; easing.type: Easing.OutCubic }
         }
 
         Row {
@@ -144,11 +145,6 @@ Item {
                             height: parent.height * 0.65
 
                             radius: 32
-                            radiusTopLeft: 32
-                            radiusTopRight: 32
-                            radiusBottomLeft: 0
-                            radiusBottomRight: 0
-
                             gradient: Gradient {
                                 GradientStop {
                                     position: 0.0
@@ -292,7 +288,10 @@ Item {
                             }
 
                             Behavior on scale {
-                                NumberAnimation { duration: 100; easing.type: Easing.OutBack }
+                                NumberAnimation {
+                                    duration: taskSwitcher.reduceMotion ? 80 : 100
+                                    easing.type: taskSwitcher.reduceMotion ? Easing.OutCubic : Easing.OutBack
+                                }
                             }
                         }
 
@@ -325,15 +324,15 @@ Item {
                             ParallelAnimation {
                                 NumberAnimation {
                                     target: appCard; property: "opacity"
-                                    to: 0; duration: 200
+                                    to: 0; duration: taskSwitcher.reduceMotion ? 80 : 200
                                 }
                                 NumberAnimation {
                                     target: appCard; property: "scale"
-                                    to: 0.5; duration: 200
+                                    to: 0.5; duration: taskSwitcher.reduceMotion ? 80 : 200
                                 }
                                 NumberAnimation {
                                     target: appCard; property: "height"
-                                    to: 0; duration: 200
+                                    to: 0; duration: taskSwitcher.reduceMotion ? 80 : 200
                                 }
                             }
                             ScriptAction {
@@ -366,7 +365,7 @@ Item {
         opacity: 0
 
         Behavior on opacity {
-            NumberAnimation { duration: 300 }
+            NumberAnimation { duration: taskSwitcher.reduceMotion ? 80 : 300 }
         }
 
         Column {
@@ -399,7 +398,7 @@ Item {
         opacity: 0
 
         Behavior on opacity {
-            NumberAnimation { duration: 300 }
+            NumberAnimation { duration: taskSwitcher.reduceMotion ? 80 : 300 }
         }
     }
 
@@ -427,7 +426,7 @@ Item {
 
     SequentialAnimation {
         id: animateOut
-        PauseAnimation { duration: 250 }
+        PauseAnimation { duration: taskSwitcher.reduceMotion ? 80 : 250 }
         ScriptAction {
             script: {
                 taskSwitcher.visible = false

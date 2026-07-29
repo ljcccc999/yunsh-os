@@ -19,7 +19,7 @@ Rectangle {
     signal openBluetoothSettings()
     signal openSystemInfo()
 
-    property string osVersionName: "YUNSH OS v1.0.3"
+    property string osVersionName: "YUNSH OS v1.0.4"
     property string selectedLanguageDisplay: "简体中文 · 拼音"
 
     function loadVersionConfig() {
@@ -179,8 +179,8 @@ Rectangle {
                 width: parent.width; height: 60
                 iconSource: "/usr/share/yunsh/icons/settings.svg"
                 iconSize: 18
-                title: "显示与亮度"
-                subtitle: "亮度, 字体大小, AR 透明背景"
+                title: "空间显示"
+                subtitle: "双目 SBS、瞳距、融合、3DoF 与舒适度"
                 showArrow: true
                 onClicked: settingsScreen.openDisplaySettings()
             }

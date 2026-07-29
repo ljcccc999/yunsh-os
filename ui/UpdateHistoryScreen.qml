@@ -17,12 +17,24 @@ Item {
     /* ---- Signals ---- */
     signal backToUpdates()
 
-    /* ---- Data model (hardcoded for v1.0) ---- */
+    /* ---- Data model ---- */
     property var updateHistory: [
+        {
+            version: "1.0.4",
+            date: "2026-07-29",
+            changelog: "双目空间显示更新。\n• Side-by-Side 双目合成与 EDID 自适应输出\n• 瞳距、融合偏移与视场角校准\n• 3DoF 平滑、滚转补偿与快速重新居中\n• 专注模式和独立辅助功能选项\n• 四种空间位置直接选择与窗口交互修复",
+            build: "build 2026.0729"
+        },
+        {
+            version: "1.0.3",
+            date: "2026-07-27",
+            changelog: "空间桌面与设备连接更新。\n• 正前、左侧、右侧、远处四种 3DoF 布局\n• YUNSH Link OS Mode 遥测与 OTA 控制接口\n• 眼镜自动重连、亮度与电量通道\n• Android 后台准备不再阻塞桌面和激活",
+            build: "build 2026.0727"
+        },
         {
             version: "1.0.0",
             date: "2026-06-15",
-            changelog: "YUNSH OS 首个正式版本。\n• 基于 Linux 6.6 LTS 内核\n• visionOS 风格沉浸式 UI\n• 手势导航与空间交互\n• 多模态 AI 助手集成\n• OTA 在线更新系统\n• AR 眼镜原生支持\n• 安全启动与加密存储",
+            changelog: "YUNSH OS 首个公开版本。\n• Qt Quick 空间桌面与玻璃界面\n• 浏览器、终端、相册与系统设置\n• Wi-Fi、蓝牙和 OTA 服务\n• Raspberry Pi 映像与首次启动流程",
             build: "build 2026.0615.1000"
         }
     ]

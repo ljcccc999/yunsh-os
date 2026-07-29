@@ -36,6 +36,10 @@ qt_add_resources(yunsh_ui_resources "yunsh_ui"
         DropShadowEffect.qml
         HomeIndicator.qml
         MacWindow.qml
+        SliderRow.qml
+        SpatialDisplaySettings.qml
+        StereoCalibration.qml
+        StereoCompositor.qml
         StatusBar.qml
         ControlCenter.qml
         NetworkScreen.qml
@@ -71,7 +75,8 @@ install(FILES
     AppDock.qml AppIcon.qml EditMenu.qml EditableField.qml EditableInput.qml
     GlassBackground.qml GlassButton.qml GlassIcon.qml GlassPanel.qml GlassCard.qml
     GlassEffect.qml GlassWindow.qml DropShadowEffect.qml HomeIndicator.qml
-    MacWindow.qml StatusBar.qml
+    MacWindow.qml SliderRow.qml SpatialDisplaySettings.qml
+    StereoCalibration.qml StereoCompositor.qml StatusBar.qml
     ControlCenter.qml NetworkScreen.qml BluetoothScreen.qml PhotosScreen.qml
     UpdateScreen.qml UpdateHistoryScreen.qml
     YunshBrowser.qml YunshMetaverse.qml ScreenshotOverlay.qml

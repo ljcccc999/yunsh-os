@@ -155,7 +155,7 @@ Rectangle {
                     text: "Hello  Bonjour  こんにちは  안녕하세요"
                     color: Qt.rgba(255/255, 255/255, 255/255, 0.3)
                     font.pixelSize: 11
-                    letterSpacing: 2
+                    font.letterSpacing: 2
                 }
 
                 Text {
@@ -169,7 +169,7 @@ Rectangle {
                 // Version
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "v1.0.3"
+                    text: "v1.0.4"
                     color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
                     font.pixelSize: 11
                 }

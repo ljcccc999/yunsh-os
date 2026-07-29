@@ -215,7 +215,7 @@ def _parse_release(data: dict) -> dict:
         "changelog": body,
         "sha256": sha256,
         "published_at": published,
-        # A public release can rebuild v1.0.3 without changing its product
+        # A public release can rebuild the current version without changing its product
         # version. Keep an internal date revision for same-version OTA.
         "build": _build_key(updated),
         "prerelease": prerelease,

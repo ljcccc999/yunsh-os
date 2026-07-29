@@ -29,6 +29,7 @@ Item {
     property var targetItem: null
     property bool shiftActive: false
     property bool capsActive: false
+    property bool reduceMotion: false
 
     signal keyPressed(string key)
     signal backspacePressed()
@@ -61,8 +62,11 @@ Item {
 
     // Slide-in/out animation (disabled during drag)
     property bool animating: true
-    Behavior on y { enabled: keyboardPanel.animating; NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
-    Behavior on opacity { NumberAnimation { duration: 200 } }
+    Behavior on y {
+        enabled: keyboardPanel.animating && !keyboardPanel.reduceMotion
+        NumberAnimation { duration: 400; easing.type: Easing.OutCubic }
+    }
+    Behavior on opacity { NumberAnimation { duration: keyboardPanel.reduceMotion ? 80 : 200 } }
 
     function show() {
         visible = true

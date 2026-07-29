@@ -16,6 +16,10 @@ Item {
     property string currentTime: "00:00"
     property int brightnessLevel: 72
     property int volumeLevel: 55
+    property bool focusMode: false
+    property bool stereoEnabled: true
+    property bool headTrackingConnected: false
+    property bool reduceMotion: false
 
     function postJson(path, payload, callback) {
         var xhr = new XMLHttpRequest()
@@ -117,6 +121,9 @@ Item {
     signal toggleWifi()
     signal toggleBluetooth()
     signal toggleKeyboard()
+    signal toggleFocusMode()
+    signal openSpatialDisplay()
+    signal recenterTracking()
 
     // ─── Visibility & state ──────────────────────────────────────────────
     visible: false
@@ -142,7 +149,7 @@ Item {
         opacity: controlCenterRoot.visible ? 1.0 : 0.0
 
         Behavior on opacity {
-            NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: controlCenterRoot.reduceMotion ? 80 : 200; easing.type: Easing.OutCubic }
         }
 
         MouseArea {
@@ -172,12 +179,18 @@ Item {
             id: panelTranslate
             y: controlCenterRoot.visible ? 0 : -30
             Behavior on y {
-                NumberAnimation { duration: 250; easing.type: Easing.OutBack }
+                NumberAnimation {
+                    duration: controlCenterRoot.reduceMotion ? 80 : 250
+                    easing.type: controlCenterRoot.reduceMotion ? Easing.OutCubic : Easing.OutBack
+                }
             }
         }
 
         Behavior on opacity {
-            NumberAnimation { duration: 250; easing.type: Easing.OutBack }
+            NumberAnimation {
+                duration: controlCenterRoot.reduceMotion ? 80 : 250
+                easing.type: controlCenterRoot.reduceMotion ? Easing.OutCubic : Easing.OutBack
+            }
         }
 
         // ─── Glass Panel ─────────────────────────────────────────────
@@ -413,6 +426,144 @@ Item {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 text: "截图"
                                 color: "#CCCCDD"
+                                font.pixelSize: 10
+                                font.weight: Font.Medium
+                            }
+                        }
+
+                        // Focus mode
+                        Column {
+                            spacing: 6
+                            height: 72
+
+                            Rectangle {
+                                id: focusButton
+                                width: 48; height: 48; radius: 24
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                color: focusMode
+                                    ? Qt.rgba(0, 212/255, 1, 0.24)
+                                    : Qt.rgba(1, 1, 1, 0.06)
+                                border.width: 1
+                                border.color: focusMode
+                                    ? Qt.rgba(0, 212/255, 1, 0.42)
+                                    : Qt.rgba(1, 1, 1, 0.08)
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "◉"
+                                    color: focusMode ? "#00D4FF" : "#FFFFFF"
+                                    font.pixelSize: 22
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onPressed: parent.scale = 0.94
+                                    onReleased: parent.scale = 1.0
+                                    onCanceled: parent.scale = 1.0
+                                    onClicked: controlCenterRoot.toggleFocusMode()
+                                }
+
+                                Behavior on scale {
+                                    NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
+                                }
+                            }
+
+                            Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: "专注"
+                                color: focusMode ? "#00D4FF" : "#CCCCDD"
+                                font.pixelSize: 10
+                                font.weight: Font.Medium
+                            }
+                        }
+
+                        // Recenter 3DoF orientation
+                        Column {
+                            spacing: 6
+                            height: 72
+
+                            Rectangle {
+                                id: recenterButton
+                                width: 48; height: 48; radius: 24
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                color: Qt.rgba(1, 1, 1, 0.06)
+                                border.width: 1
+                                border.color: headTrackingConnected
+                                    ? Qt.rgba(0, 212/255, 1, 0.24)
+                                    : Qt.rgba(1, 1, 1, 0.06)
+                                opacity: headTrackingConnected ? 1.0 : 0.42
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "⌖"
+                                    color: headTrackingConnected ? "#00D4FF" : "#FFFFFF"
+                                    font.pixelSize: 22
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    enabled: headTrackingConnected
+                                    onPressed: parent.scale = 0.94
+                                    onReleased: parent.scale = 1.0
+                                    onCanceled: parent.scale = 1.0
+                                    onClicked: controlCenterRoot.recenterTracking()
+                                }
+
+                                Behavior on scale {
+                                    NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
+                                }
+                            }
+
+                            Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: "居中"
+                                color: headTrackingConnected ? "#CCCCDD" : "#666680"
+                                font.pixelSize: 10
+                                font.weight: Font.Medium
+                            }
+                        }
+
+                        // Binocular display settings
+                        Column {
+                            spacing: 6
+                            height: 72
+
+                            Rectangle {
+                                id: spatialDisplayButton
+                                width: 48; height: 48; radius: 24
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                color: stereoEnabled
+                                    ? Qt.rgba(0, 212/255, 1, 0.16)
+                                    : Qt.rgba(1, 1, 1, 0.06)
+                                border.width: 1
+                                border.color: stereoEnabled
+                                    ? Qt.rgba(0, 212/255, 1, 0.3)
+                                    : Qt.rgba(1, 1, 1, 0.08)
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "◐"
+                                    color: stereoEnabled ? "#00D4FF" : "#FFFFFF"
+                                    font.pixelSize: 22
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onPressed: parent.scale = 0.94
+                                    onReleased: parent.scale = 1.0
+                                    onCanceled: parent.scale = 1.0
+                                    onClicked: controlCenterRoot.openSpatialDisplay()
+                                }
+
+                                Behavior on scale {
+                                    NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
+                                }
+                            }
+
+                            Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: stereoEnabled ? "双目" : "显示"
+                                color: stereoEnabled ? "#00D4FF" : "#CCCCDD"
                                 font.pixelSize: 10
                                 font.weight: Font.Medium
                             }
@@ -775,14 +926,14 @@ Item {
                 target: panelContainer
                 property: "opacity"
                 to: 0.0
-                duration: 150
+                duration: controlCenterRoot.reduceMotion ? 80 : 150
                 easing.type: Easing.InCubic
             }
             NumberAnimation {
                 target: panelTranslate
                 property: "y"
                 to: -20
-                duration: 150
+                duration: controlCenterRoot.reduceMotion ? 80 : 150
                 easing.type: Easing.InCubic
             }
         }

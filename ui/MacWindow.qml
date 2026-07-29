@@ -18,6 +18,11 @@ Rectangle {
     property real windowHeight: 640
     property bool isFullscreen: false
     property bool isMinimized: false
+    property bool reduceMotion: false
+    property bool reduceTransparency: false
+    property bool highContrast: false
+    property bool focusDimmed: false
+    readonly property int motionDuration: reduceMotion ? 80 : 280
 
     // ─── Pin/Hover Mode ────────────────────────────────
     // "pinned"  = fixed in space (drag to position, stays there)
@@ -35,6 +40,7 @@ Rectangle {
                                 : spatialPlacement === "right" ? 300 : 0
     property real spatialScale: spatialPlacement === "far" ? 0.76
                                : spatialPlacement === "left" || spatialPlacement === "right" ? 0.88 : 1.0
+    property bool placementMenuVisible: false
 
     function cycleSpatialPlacement() {
         if (spatialPlacement === "front") spatialPlacement = "left"
@@ -43,10 +49,16 @@ Rectangle {
         else spatialPlacement = "front"
     }
 
+    function setSpatialPlacement(placement) {
+        spatialPlacement = placement
+        placementMenuVisible = false
+    }
+
     // ─── 3DoF Head Tracking ───────────────────────────────
     // Current head rotation (set by main.qml from IMU daemon)
     property real headYaw: 0.0
     property real headPitch: 0.0
+    property real headRoll: 0.0
     property real pixelsPerDegree: 21.3   // 1920px / ~90° FOV = 21.3 px/°
 
     // When pinned: window stays in world space using head rotation compensation
@@ -65,11 +77,27 @@ Rectangle {
     signal fullscreenClicked()
     signal mouseEntered()
     signal togglePinMode()
+    signal activated()
+
+    PointHandler {
+        acceptedButtons: Qt.LeftButton
+        onActiveChanged: {
+            if (active)
+                macWindow.activated()
+        }
+    }
 
     // ─── Materialize Animation (Apple: glass surfaces materialize, don't just fade) ──
     property bool animateEnter: true
     property bool isClosing: false
     property real entranceScale: 1.0
+
+    Behavior on opacity {
+        NumberAnimation {
+            duration: macWindow.reduceMotion ? 80 : 220
+            easing.type: Easing.OutCubic
+        }
+    }
 
     // Window open: scale 0.95 + fade in
     transform: [
@@ -79,8 +107,8 @@ Rectangle {
             origin.y: macWindow.height / 2
             xScale: macWindow.spatialScale * macWindow.entranceScale
             yScale: macWindow.spatialScale * macWindow.entranceScale
-            Behavior on xScale { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
-            Behavior on yScale { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+            Behavior on xScale { NumberAnimation { duration: macWindow.motionDuration; easing.type: Easing.OutCubic } }
+            Behavior on yScale { NumberAnimation { duration: macWindow.motionDuration; easing.type: Easing.OutCubic } }
         },
         Rotation {
             id: spatialRotation
@@ -88,7 +116,17 @@ Rectangle {
             origin.y: macWindow.height / 2
             axis { x: 0; y: 1; z: 0 }
             angle: macWindow.spatialYaw
-            Behavior on angle { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+            Behavior on angle { NumberAnimation { duration: macWindow.motionDuration; easing.type: Easing.OutCubic } }
+        },
+        Rotation {
+            origin.x: macWindow.width / 2
+            origin.y: macWindow.height / 2
+            axis { x: 0; y: 0; z: 1 }
+            angle: -(macWindow.pinMode === "pinned"
+                     ? macWindow.headRoll : macWindow.headRoll * 0.08)
+            Behavior on angle {
+                NumberAnimation { duration: macWindow.motionDuration; easing.type: Easing.OutCubic }
+            }
         },
         Translate {
             x: macWindow.computeHeadOffsetX() + macWindow.spatialOffsetX
@@ -98,13 +136,30 @@ Rectangle {
 
     // Open animation (replaces original translate transform)
     Component.onCompleted: {
-        if (animateEnter) {
+        if (animateEnter && !reduceMotion) {
             macWindow.entranceScale = 0.95
             macWindow.opacity = 0
         }
         // Animate in immediately
         macWindow.entranceScale = 1.0
         macWindow.opacity = 1.0
+    }
+
+    onVisibleChanged: {
+        if (!visible)
+            return
+        isClosing = false
+        if (animateEnter && !reduceMotion) {
+            entranceScale = 0.95
+            opacity = 0
+            Qt.callLater(function() {
+                macWindow.entranceScale = 1.0
+                macWindow.opacity = 1.0
+            })
+        } else {
+            entranceScale = 1.0
+            opacity = 1.0
+        }
     }
 
     // Animate out before destroying (call before destroying)
@@ -120,7 +175,7 @@ Rectangle {
 
     // Close animation timer
     Timer {
-        interval: 250
+        interval: macWindow.reduceMotion ? 80 : 250
         repeat: false
         running: isClosing
         onTriggered: closeAnimCallback()
@@ -152,7 +207,21 @@ Rectangle {
         id: windowGlass
         anchors.fill: parent
         radius: parent.radius
-        color: Qt.rgba(12/255, 12/255, 25/255, 0.82)  // Deep glass base
+        color: macWindow.reduceTransparency
+            ? Qt.rgba(20/255, 20/255, 30/255, 0.98)
+            : Qt.rgba(12/255, 12/255, 25/255, 0.82)
+        opacity: macWindow.focusDimmed ? 0.22 : 1.0
+        border.width: macWindow.highContrast ? 2 : 1
+        border.color: macWindow.highContrast
+            ? Qt.rgba(1, 1, 1, 0.48)
+            : Qt.rgba(1, 1, 1, 0.06)
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: macWindow.reduceMotion ? 80 : 180
+                easing.type: Easing.OutCubic
+            }
+        }
 
         // Frost overlay
         Rectangle {
@@ -209,7 +278,7 @@ Rectangle {
 
                 // Close (red)
                 Rectangle {
-                    width: 13; height: 13; radius: 6.5
+                    width: 18; height: 18; radius: 9
                     color: "#FF5F57"
                     border.color: Qt.darker("#FF5F57", 1.15)
 
@@ -224,7 +293,7 @@ Rectangle {
 
                 // Minimize (yellow)
                 Rectangle {
-                    width: 13; height: 13; radius: 6.5
+                    width: 18; height: 18; radius: 9
                     color: "#FEBC2E"
                     border.color: Qt.darker("#FEBC2E", 1.15)
 
@@ -239,7 +308,7 @@ Rectangle {
 
                 // Fullscreen (green)
                 Rectangle {
-                    width: 13; height: 13; radius: 6.5
+                    width: 18; height: 18; radius: 9
                     color: "#2BC840"
                     border.color: Qt.darker("#2BC840", 1.15)
 
@@ -279,7 +348,10 @@ Rectangle {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: macWindow.cycleSpatialPlacement()
+                    onPressed: parent.scale = 0.94
+                    onReleased: parent.scale = 1.0
+                    onCanceled: parent.scale = 1.0
+                    onClicked: macWindow.placementMenuVisible = !macWindow.placementMenuVisible
                 }
                 Text {
                     anchors.top: parent.bottom; anchors.topMargin: 6
@@ -289,7 +361,79 @@ Rectangle {
                         : macWindow.spatialPlacement === "right" ? "空间位置：右侧" : "空间位置：远处"
                     color: Qt.rgba(1, 1, 1, 0.55)
                     font.pixelSize: 10
-                    visible: spatialButtonMouse.containsMouse
+                    visible: spatialButtonMouse.containsMouse && !macWindow.placementMenuVisible
+                }
+
+                Rectangle {
+                    anchors.top: parent.bottom
+                    anchors.topMargin: 10
+                    anchors.right: parent.right
+                    width: 272
+                    height: 72
+                    radius: 18
+                    color: macWindow.reduceTransparency
+                        ? "#252532" : Qt.rgba(22/255, 22/255, 38/255, 0.94)
+                    border.width: macWindow.highContrast ? 2 : 1
+                    border.color: macWindow.highContrast
+                        ? Qt.rgba(1, 1, 1, 0.48)
+                        : Qt.rgba(1, 1, 1, 0.14)
+                    visible: macWindow.placementMenuVisible
+                    z: 100
+
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 8
+
+                        Repeater {
+                            model: [
+                                { id: "front", label: "正前", icon: "▣" },
+                                { id: "left", label: "左侧", icon: "◀" },
+                                { id: "right", label: "右侧", icon: "▶" },
+                                { id: "far", label: "远处", icon: "◌" }
+                            ]
+
+                            Rectangle {
+                                width: 58
+                                height: 52
+                                radius: 13
+                                color: macWindow.spatialPlacement === modelData.id
+                                    ? Qt.rgba(0, 212/255, 1, 0.2)
+                                    : (placementMouse.pressed
+                                       ? Qt.rgba(1, 1, 1, 0.12)
+                                       : Qt.rgba(1, 1, 1, 0.05))
+                                border.width: 1
+                                border.color: macWindow.spatialPlacement === modelData.id
+                                    ? Qt.rgba(0, 212/255, 1, 0.4)
+                                    : Qt.rgba(1, 1, 1, 0.06)
+
+                                Column {
+                                    anchors.centerIn: parent
+                                    spacing: 2
+
+                                    Text {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        text: modelData.icon
+                                        color: macWindow.spatialPlacement === modelData.id
+                                            ? "#00D4FF" : "#FFFFFF"
+                                        font.pixelSize: 15
+                                    }
+                                    Text {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        text: modelData.label
+                                        color: "#D8D8E4"
+                                        font.pixelSize: 10
+                                        font.weight: Font.Medium
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: placementMouse
+                                    anchors.fill: parent
+                                    onClicked: macWindow.setSpatialPlacement(modelData.id)
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -347,7 +491,7 @@ Rectangle {
                     color: "transparent"
                     border.width: 1
                     border.color: Qt.rgba(0/255, 212/255, 255/255, 0.15)
-                    visible: macWindow.pinMode === "following"
+                    visible: macWindow.pinMode === "following" && !macWindow.reduceMotion
 
                     NumberAnimation on opacity {
                         loops: Animation.Infinite
@@ -408,15 +552,28 @@ Rectangle {
         // ─── Drag to move (title bar area) ────────────
     MouseArea {
         id: dragArea
-        z: 1
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            height: titleBar.height + 4
+            parent: titleBar
+            anchors.fill: parent
+            z: -1
             drag.target: macWindow
             drag.axis: Drag.XAndY
             cursorShape: Qt.OpenHandCursor
-            onPressed: macWindow.z = 1000  // Bring to front
+            onPressed: {
+                macWindow.z = 1000
+                cursorShape = Qt.ClosedHandCursor
+                if (!macWindow.reduceMotion)
+                    macWindow.entranceScale = 0.992
+            }
+            onReleased: {
+                cursorShape = Qt.OpenHandCursor
+                macWindow.entranceScale = 1.0
+                macWindow.settleIntoBounds()
+            }
+            onCanceled: {
+                cursorShape = Qt.OpenHandCursor
+                macWindow.entranceScale = 1.0
+                macWindow.settleIntoBounds()
+            }
         }
 
         // ─── Content Area ────────────────────────────
@@ -547,7 +704,13 @@ Rectangle {
     states: [
         State {
             name: "fullscreen"
-            PropertyChanges { target: macWindow; x: 0; y: 0; width: parent.parent.width; height: parent.parent.height }
+            PropertyChanges {
+                target: macWindow
+                x: 0
+                y: 0
+                width: macWindow.parent ? macWindow.parent.width : 1920
+                height: macWindow.parent ? macWindow.parent.height : 1080
+            }
             PropertyChanges { target: macWindow; radius: 0 }
         },
         State {
@@ -564,6 +727,24 @@ Rectangle {
             state = "fullscreen"
             isFullscreen = true
         }
+    }
+
+    function settleIntoBounds() {
+        if (!parent || state === "fullscreen")
+            return
+        var safeMargin = 28
+        var targetX = Math.max(safeMargin - width * 0.75,
+                               Math.min(x, parent.width - safeMargin - width * 0.25))
+        var targetY = Math.max(18, Math.min(y, parent.height - 70))
+        if (reduceMotion) {
+            x = targetX
+            y = targetY
+            return
+        }
+        settleX.to = targetX
+        settleY.to = targetY
+        settleX.start()
+        settleY.start()
     }
 
     // ─── Pin mode logic ─────────────────────────────
@@ -591,11 +772,29 @@ Rectangle {
     NumberAnimation {
         id: followAnimX
         target: macWindow; property: "x"
-        duration: 600; easing.type: Easing.OutCubic
+        duration: macWindow.reduceMotion ? 80 : 400
+        easing.type: Easing.OutCubic
     }
     NumberAnimation {
         id: followAnimY
         target: macWindow; property: "y"
-        duration: 600; easing.type: Easing.OutCubic
+        duration: macWindow.reduceMotion ? 80 : 400
+        easing.type: Easing.OutCubic
+    }
+
+    NumberAnimation {
+        id: settleX
+        target: macWindow
+        property: "x"
+        duration: 320
+        easing.type: Easing.OutCubic
+    }
+
+    NumberAnimation {
+        id: settleY
+        target: macWindow
+        property: "y"
+        duration: 320
+        easing.type: Easing.OutCubic
     }
 }

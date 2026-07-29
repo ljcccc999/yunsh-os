@@ -2,6 +2,7 @@
 """HTTP bridge used by the QML UI for privileged local services."""
 
 import json
+import math
 import os
 import socket
 import subprocess
@@ -21,6 +22,26 @@ SOCKETS = {
     "network": "/tmp/yunsh-network.sock",
     "bluetooth": "/tmp/yunsh-bluetooth.sock",
     "update": "/tmp/yunsh-update.sock",
+}
+SPATIAL_PREFERENCES_PATH = os.path.join(
+    YUNSH_CONFIG_DIR, "spatial-display.json"
+)
+SPATIAL_DEFAULTS = {
+    "stereoEnabled": True,
+    "ipdMm": 63.0,
+    "eyeShiftPx": 0.0,
+    "fieldOfView": 50.0,
+    "trackingSmoothing": 0.35,
+    "reduceMotion": False,
+    "reduceTransparency": False,
+    "highContrast": False,
+    "focusMode": False,
+}
+SPATIAL_RANGES = {
+    "ipdMm": (50.0, 75.0),
+    "eyeShiftPx": (-40.0, 40.0),
+    "fieldOfView": (30.0, 80.0),
+    "trackingSmoothing": (0.0, 0.9),
 }
 
 
@@ -151,6 +172,57 @@ def read_json(path, default=None):
         return default or {}
 
 
+def sanitize_spatial_preferences(payload):
+    """Accept only known display preferences and clamp numeric calibration."""
+    result = dict(SPATIAL_DEFAULTS)
+    for key, default in SPATIAL_DEFAULTS.items():
+        value = payload.get(key, default)
+        if isinstance(default, bool):
+            if isinstance(value, bool):
+                result[key] = value
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(number):
+            continue
+        minimum, maximum = SPATIAL_RANGES[key]
+        result[key] = max(minimum, min(maximum, number))
+    return result
+
+
+def load_spatial_preferences():
+    stored = read_json(SPATIAL_PREFERENCES_PATH, {})
+    result = sanitize_spatial_preferences(stored)
+    result["success"] = True
+    return result
+
+
+def save_spatial_preferences(payload):
+    preferences = sanitize_spatial_preferences(payload)
+    try:
+        os.makedirs(YUNSH_CONFIG_DIR, exist_ok=True)
+        fd, temp_path = tempfile.mkstemp(
+            prefix="spatial-display.", dir=YUNSH_CONFIG_DIR
+        )
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(
+                preferences,
+                handle,
+                ensure_ascii=False,
+                sort_keys=True,
+                indent=2,
+            )
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, SPATIAL_PREFERENCES_PATH)
+        return {"success": True, **preferences}
+    except OSError as exc:
+        return {"success": False, "error": str(exc)}
+
+
 def update_response(action, payload):
     command = {
         "/api/update-status": "get_status",
@@ -217,6 +289,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(read_json(GLASSES_STATUS_PATH, {"connected": False}))
         elif self.path == "/api/power-status":
             self._send(read_json("/tmp/yunsh-power-status.json", {"available": False}))
+        elif self.path == "/api/spatial-preferences":
+            self._send(load_spatial_preferences())
         else:
             self._send({"success": True, "message": "YUNSH local API"})
 
@@ -249,6 +323,8 @@ class Handler(BaseHTTPRequestHandler):
                 result = set_volume(payload)
             else:
                 result = {"success": False, "error": "Unsupported audio action"}
+        elif self.path == "/api/spatial-preferences":
+            result = save_spatial_preferences(payload)
         else:
             action = payload.get("action")
             if action == "connect_wifi":

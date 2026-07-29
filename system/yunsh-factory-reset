@@ -38,6 +38,7 @@ echo "✓ 系统账号已保留"
 rm -f /etc/yunsh/language.conf 2>/dev/null || true
 rm -f /etc/yunsh/region.conf 2>/dev/null || true
 rm -f /etc/yunsh/glasses.conf 2>/dev/null || true
+rm -f /etc/yunsh/spatial-display.json 2>/dev/null || true
 if command -v nmcli >/dev/null 2>&1; then
     nmcli -t -e yes -f UUID,TYPE connection show 2>/dev/null |
     while IFS=: read -r connection_uuid connection_type; do

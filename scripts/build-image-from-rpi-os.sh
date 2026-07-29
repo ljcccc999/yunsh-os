@@ -299,12 +299,12 @@ if [ -f "$CONFIG_FILE" ]; then
 arm_64bit=1
 
 [pi5]
-# Pi 5 specific: KMS display, no legacy hdmi hacks
+# Pi 5 KMS display. EDID selects mono or binocular SBS native mode.
 dtoverlay=vc4-kms-v3d
 disable_splash=1
 dtparam=audio=off
-framebuffer_width=1920
-framebuffer_height=1080
+display_auto_detect=1
+hdmi_force_hotplug=1
 framebuffer_depth=32
 framebuffer_ignore_alpha=0
 disable_overscan=1
@@ -324,8 +324,8 @@ if [ -f "${CMDLINE_FILE}" ]; then
     CURRENT=$(cat "${CMDLINE_FILE}")
     # Remove old splash-related args if present
     CLEANED=$(echo "$CURRENT" | sed 's/ quiet//g; s/ logo.nologo//g; s/ splash//g; s/ consoleblank=[0-9]*//g' 2>/dev/null || echo "$CURRENT")
-    echo "$CLEANED quiet logo.nologo consoleblank=0 cma=256M video=HDMI-A-1:1920x1080M@60" > "${CMDLINE_FILE}"
-    echo "   cmdline.txt updated: quiet logo.nologo consoleblank=0 cma=256M video=1920x1080"
+    echo "$CLEANED quiet logo.nologo consoleblank=0 cma=256M" > "${CMDLINE_FILE}"
+    echo "   cmdline.txt updated: quiet logo.nologo consoleblank=0 cma=256M"
 fi
 
 # 5b. Copy YUNSH boot scripts + splash to boot partition

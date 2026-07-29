@@ -10,6 +10,8 @@ Item {
     
     property bool showDock: true
     property bool showStatusBar: true
+    property bool stereoEnabled: true
+    property bool headTrackingConnected: false
     
     signal openSettings()
     signal openAbout()
@@ -22,6 +24,7 @@ Item {
     signal openBluetooth()
     signal openTerminal()
     signal openPhotos()
+    signal openSpatialDisplay()
     signal openAppLibrary()
     signal showControlCenter()
     signal takeScreenshot()
@@ -34,7 +37,8 @@ Item {
         { name: "Android Apps", icon: "appstore.svg", color: "#FF9800",   action: "appstore" },
         { name: "文件", icon: "files.svg",             color: "#2196F3",   action: "files" },
         { name: "终端", icon: "terminal.svg",          color: "#00D4FF",   action: "terminal" },
-        { name: "相册", icon: "photos.svg",            color: "#FFC107",   action: "photos" }
+        { name: "相册", icon: "photos.svg",            color: "#FFC107",   action: "photos" },
+        { name: "空间显示", icon: "settings.svg",      color: "#00D4FF",   action: "display" }
     ]
 
     readonly property int columns: 4
@@ -53,6 +57,7 @@ Item {
             case "files":       homeScreen.openFileManager(); break
             case "terminal":    homeScreen.openTerminal(); break
             case "photos":      homeScreen.openPhotos(); break
+            case "display":     homeScreen.openSpatialDisplay(); break
             default:            console.log("Unknown app:", action)
         }
     }
@@ -80,6 +85,8 @@ Item {
         anchors.right: parent.right
         visible: showStatusBar
         z: 100
+        stereoEnabled: homeScreen.stereoEnabled
+        headTrackingConnected: homeScreen.headTrackingConnected
         onScreenshotTriggered: homeScreen.takeScreenshot()
         onOpenControlCenter: homeScreen.showControlCenter()
     }
@@ -234,7 +241,7 @@ Item {
                                 anchors.bottom: parent.bottom
                                 anchors.bottomMargin: 16
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: "YUNSH OS v1.0.3"
+                                text: "YUNSH OS v1.0.4"
                                 color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
                                 font.pixelSize: 11
                                 visible: pageIndex === 0
@@ -280,6 +287,7 @@ Item {
         anchors.right: parent.right; anchors.rightMargin: 24
         anchors.bottom: dockArea.top; anchors.bottomMargin: 16
         width: 48; height: 48; radius: 24; z: 50
+        visible: homeScreen.showDock
         color: mouseArea.containsMouse ? Qt.rgba(0/255, 212/255, 255/255, 0.18) : Qt.rgba(0/255, 212/255, 255/255, 0.08)
         border.color: mouseArea.containsMouse ? Qt.rgba(0/255, 212/255, 255/255, 0.2) : Qt.rgba(0/255, 212/255, 255/255, 0.06)
         border.width: 1

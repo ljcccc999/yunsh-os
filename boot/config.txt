@@ -1,22 +1,18 @@
 # YUNSH OS v1.0 - Raspberry Pi Boot Config
-# 1080p output for AR glasses, black=transparent
+# EDID-driven output for mono monitors and binocular SBS display controllers.
+# Black remains transparent on the target optical display.
 
 # GPU memory
 gpu_mem=256
 
-# Force 1080p output
-hdmi_group=2
-hdmi_mode=82
-hdmi_pixel_freq_limit=400000000
+# Let KMS select the display controller's native mode. A binocular controller
+# can expose 3840x1080 (two 1920x1080 eyes); a normal monitor stays supported.
+display_auto_detect=1
 hdmi_drive=2
 hdmi_force_hotplug=1
-hdmi_ignore_edid=0xa5000080
-hdmi_timings=1920 0 44 8 200 1080 0 4 4 6 0 0 1 60 0 165000000
 
 # Display settings
 disable_overscan=1
-framebuffer_width=1920
-framebuffer_height=1080
 framebuffer_depth=32
 framebuffer_ignore_alpha=0
 

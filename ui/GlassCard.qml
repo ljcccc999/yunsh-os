@@ -147,7 +147,14 @@ Rectangle {
         hoverEnabled: true
         onEntered: parent.color = Qt.rgba(0/255, 212/255, 255/255, 0.06)
         onExited: parent.color = Qt.rgba(255/255, 255/255, 255/255, 0.04)
-        onClicked: glassCard.clicked()
+        onClicked: {
+            if (glassCard.isToggle) {
+                glassCard.toggleState = !glassCard.toggleState
+                glassCard.toggled(glassCard.toggleState)
+            } else {
+                glassCard.clicked()
+            }
+        }
         onPressed: parent.color = Qt.rgba(0/255, 212/255, 255/255, 0.1)
         onReleased: parent.color = Qt.rgba(0/255, 212/255, 255/255, 0.06)
     }

@@ -20,13 +20,18 @@ YUNSH OS is the connection layer of the YUNSH ecosystem. It combines an optical-
 
 ### Spatial workspace
 
+- Binocular side-by-side compositor with frame-locked left and right views.
+- EDID-driven output for a dual-eye display controller or a conventional monitor.
+- On-device calibration for IPD, horizontal fusion, field of view, crop, and eye order.
 - Floating application windows with move, resize, minimize, close, and full-screen controls.
-- Spatial window layouts for 3DoF viewing: front, left angle, right angle, and distance presets.
+- Direct spatial window layouts for 3DoF viewing: front, left angle, right angle, and distance presets.
 - Window pin and follow modes for view-relative display behavior.
+- 30 Hz head-pose sampling with adjustable smoothing, yaw wrap handling, roll compensation, and one-action recentering.
 - Home workspace, task switcher, Control Center, and a glass virtual keyboard.
+- Focus mode, reduced motion, reduced transparency, and increased contrast.
 - Black background designed for transparent optical displays; white glass surfaces preserve legibility.
 
-Spatial layouts are view-relative: head rotation preserves the desktop arrangement as the user looks around. Real-world room anchoring requires future 6DoF visual tracking hardware and is not represented as a current feature.
+The shell uses one comfortable shared focal plane for both eyes. True stereo application content requires a future per-eye rendering path and is not claimed by the current shell compositor. Spatial layouts are view-relative: head rotation preserves the desktop arrangement as the user looks around. Real-world room anchoring requires future 6DoF visual tracking hardware and is not represented as a current feature.
 
 ### Built-in applications
 
@@ -59,10 +64,11 @@ Only one mode is active at a time. In YUNSH OS Mode, the iPhone does not also co
 ## Architecture
 
 ```text
-AR Display
-    │ HDMI
+Binocular AR Display
+    │ HDMI · side-by-side frame
 Raspberry Pi 5
-    ├── YUNSH OS shell · Qt Quick workspace · application windows
+    ├── YUNSH OS shell · Qt Quick workspace · binocular compositor
+    ├── Shared focal-plane application windows
     ├── System services · network · Bluetooth · updates · power
     ├── DRM/KMS + V3D Mesa graphics · Wayland-composited applications
     ├── Wayland-composited Waydroid application environment
@@ -76,7 +82,7 @@ The user interface reads the head-tracking service locally. Compatible orientati
 | Component | Requirement |
 | --- | --- |
 | Computer | Raspberry Pi 5 |
-| Display | 1080p HDMI AR display or monitor |
+| Display | HDMI binocular AR display controller with an EDID-advertised SBS mode, or a conventional monitor for mono development |
 | Storage | 16 GB or larger A2 microSD card recommended |
 | Input | USB keyboard and mouse for setup and desktop control |
 | Power | Stable USB-C power supply suitable for Raspberry Pi 5 |
@@ -105,7 +111,7 @@ Factory reset clears user data, saved Wi-Fi networks, Bluetooth pairings, and th
 
 ## Motion tracking
 
-YUNSH OS supports optional Bluetooth-connected motion tracking for spatial interaction. The head-tracking bridge provides a consistent interface for compatible motion sources and for the built-in development simulator. After tracking is available, each floating window can be placed in a front, left-angle, right-angle, or distance layout from its title bar.
+YUNSH OS supports optional Bluetooth-connected motion tracking for spatial interaction. The head-tracking bridge provides a consistent interface for compatible motion sources and for the built-in development simulator. After tracking is available, each floating window can be placed directly in a front, left-angle, right-angle, or distance layout from its title bar. The current direction can be recentered from Control Center or with `Ctrl+Shift+R`.
 
 ```text
 Bluetooth motion controller → head-tracking bridge → YUNSH OS workspace
@@ -131,6 +137,8 @@ scripts/build-no-hdiutil.sh
 ```
 
 Review the script and its input image requirements before building. Generated images and large build artifacts are intentionally excluded from version control.
+
+The primary image build leaves display timing to DRM/KMS and the connected controller's EDID. It does not force a legacy 1920×1080 kernel mode, allowing a binocular controller to expose its native side-by-side resolution.
 
 ## Project status
 

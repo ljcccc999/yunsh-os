@@ -1,4 +1,4 @@
-// YUNSH OS v1.0.3 - Main QML Entry Point
+// YUNSH OS v1.0.4 - Main QML Entry Point
 // Apple-style glass system + Task Switcher + Home Indicator
 
 import QtQuick 2.15
@@ -22,8 +22,30 @@ ApplicationWindow {
     property real headYaw: 0.0
     property real headPitch: 0.0
     property real headRoll: 0.0
-    property real pixelsPerDegree: 21.3  // 1920px ÷ ~90° FOV
+    property real rawHeadYaw: 0.0
+    property real rawHeadPitch: 0.0
+    property real rawHeadRoll: 0.0
+    property real filteredHeadYaw: 0.0
+    property real filteredHeadPitch: 0.0
+    property real filteredHeadRoll: 0.0
+    property real headCenterYaw: 0.0
+    property real headCenterPitch: 0.0
+    property real headCenterRoll: 0.0
     property bool headTrackingEnabled: false
+    property real trackingSmoothing: 0.35
+
+    // ─── Binocular display and comfort ─────────────────
+    property bool stereoEnabled: true
+    property real ipdMm: 63.0
+    property real eyeShiftPx: 0.0
+    property real fieldOfView: 50.0
+    readonly property real pixelsPerDegree: 1920 / Math.max(30, fieldOfView)
+    property bool calibrationMode: false
+    property bool reduceMotion: false
+    property bool reduceTransparency: false
+    property bool highContrast: false
+    property bool focusMode: false
+    property string activeAppId: ""
     property string androidTarget: "appstore"
 
     property var openApps: []
@@ -39,6 +61,7 @@ ApplicationWindow {
         "about": { name: "关于", icon: "/usr/share/yunsh/icons/about.svg", color: "#607D8B" },
         "network": { name: "Wi-Fi", icon: "/usr/share/yunsh/icons/wifi.svg", color: "#0096FF" },
         "bluetooth": { name: "蓝牙", icon: "/usr/share/yunsh/icons/bluetooth.svg", color: "#2196F3" },
+        "display": { name: "空间显示", icon: "/usr/share/yunsh/icons/settings.svg", color: "#00D4FF" },
         "systeminfo": { name: "系统信息", icon: "/usr/share/yunsh/icons/about.svg", color: "#607D8B" },
         "updatehistory": { name: "更新历史", icon: "/usr/share/yunsh/icons/update.svg", color: "#607D8B" }
     })
@@ -65,6 +88,9 @@ ApplicationWindow {
         }
         openApps = updated
         closeWindowById(appId)
+        if (activeAppId === appId)
+            activeAppId = ""
+        updateWindowFocus()
         if (openApps.length === 0) homeScreen.visible = true
     }
 
@@ -89,6 +115,7 @@ ApplicationWindow {
             case "systeminfo": return systemInfoWindow
             case "network": return networkWindow
             case "bluetooth": return bluetoothWindow
+            case "display": return displayWindow
             case "updatehistory": return updateHistoryWindow
             case "appstore":
             case "files": return androidWindow
@@ -96,10 +123,14 @@ ApplicationWindow {
         return null
     }
 
-    // Root container
-    Item {
+    // Root container. In binocular mode the left surface is interactive and
+    // the right surface is a frame-locked GPU copy for side-by-side output.
+    StereoCompositor {
         id: rootContainer
         anchors.fill: parent
+        stereoEnabled: yunshOS.stereoEnabled
+        eyeShiftPx: yunshOS.eyeShiftPx
+        calibrationVisible: yunshOS.calibrationMode
 
         // ===== ACTIVATION SCREEN (first boot) =========
         ActivationScreen {
@@ -126,6 +157,10 @@ ApplicationWindow {
             id: homeScreen
             anchors.fill: parent
             visible: !firstBoot || activationDone
+            showDock: !yunshOS.focusMode
+            showStatusBar: !yunshOS.focusMode
+            stereoEnabled: yunshOS.stereoEnabled
+            headTrackingConnected: yunshOS.headTrackingEnabled
             onOpenSettings: switchTo(settingsWindow, "settings")
             onOpenAbout: switchTo(systemInfoWindow, "systeminfo")
             onOpenAppStore: launchApp("appstore")
@@ -137,6 +172,7 @@ ApplicationWindow {
             onOpenBluetooth: switchTo(bluetoothWindow, "bluetooth")
             onOpenTerminal: switchTo(terminalWindow, "terminal")
             onOpenPhotos: switchTo(photosWindow, "photos")
+            onOpenSpatialDisplay: switchTo(displayWindow, "display")
             onShowControlCenter: controlCenter.show()
             onTakeScreenshot: takeScreenshot()
             onOpenAppLibrary: showTaskSwitcher()
@@ -148,6 +184,10 @@ ApplicationWindow {
             anchors.fill: parent
             visible: false
             z: 300
+            focusMode: yunshOS.focusMode
+            stereoEnabled: yunshOS.stereoEnabled
+            headTrackingConnected: yunshOS.headTrackingEnabled
+            reduceMotion: yunshOS.reduceMotion
             onDismissPanel: controlCenter.hide()
             onOpenNetwork: { controlCenter.hide(); switchTo(networkWindow, "network") }
             onOpenBluetooth: { controlCenter.hide(); switchTo(bluetoothWindow, "bluetooth") }
@@ -155,6 +195,18 @@ ApplicationWindow {
             onToggleBluetooth: controlCenter.applyBluetoothPower()
             onToggleKeyboard: { controlCenter.hide(); virtualKeyboard.visible ? virtualKeyboard.hide() : virtualKeyboard.show() }
             onTakeScreenshot: takeScreenshot()
+            onToggleFocusMode: {
+                yunshOS.focusMode = !yunshOS.focusMode
+                saveSpatialPreferences()
+            }
+            onOpenSpatialDisplay: {
+                controlCenter.hide()
+                switchTo(displayWindow, "display")
+            }
+            onRecenterTracking: {
+                controlCenter.hide()
+                yunshOS.recenterTracking()
+            }
         }
 
         // ===== SETTINGS =====
@@ -163,11 +215,13 @@ ApplicationWindow {
             appTitle: "设置"
             headYaw: yunshOS.headYaw
             headPitch: yunshOS.headPitch
+            headRoll: yunshOS.headRoll
             pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 80; y: 60; width: 900; height: 650
             visible: false
+            onActivated: yunshOS.activateWindow(settingsWindow, "settings")
             onCloseClicked: { yunshOS.closeAppFromSwitcher("settings") }
-            onMinimizeClicked: { settingsWindow.visible = false; settingsWindow.isMinimized = true; homeScreen.visible = true }
+            onMinimizeClicked: yunshOS.minimizeWindow(settingsWindow, "settings")
             SettingsScreen { anchors.fill: parent
                 onBackToHome: switchToHome()
                 onOpenUpdatePage: switchTo(updateWindow, "update")
@@ -175,8 +229,46 @@ ApplicationWindow {
                 onOpenNetworkSettings: switchTo(networkWindow, "network")
                 onOpenBluetoothSettings: switchTo(bluetoothWindow, "bluetooth")
                 onOpenSystemInfo: switchTo(systemInfoWindow, "systeminfo")
-                onOpenDisplaySettings: { settingsWindow.visible = false; controlCenter.show() }
+                onOpenDisplaySettings: switchTo(displayWindow, "display")
                 onOpenSoundSettings: { settingsWindow.visible = false; controlCenter.show() }
+            }
+        }
+
+        // ===== SPATIAL DISPLAY =====
+        MacWindow {
+            id: displayWindow
+            appTitle: "空间显示"
+            headYaw: yunshOS.headYaw
+            headPitch: yunshOS.headPitch
+            headRoll: yunshOS.headRoll
+            pixelsPerDegree: yunshOS.pixelsPerDegree
+            x: 210; y: 70; width: 860; height: 720
+            visible: false
+            onActivated: yunshOS.activateWindow(displayWindow, "display")
+            onCloseClicked: { yunshOS.closeAppFromSwitcher("display") }
+            onMinimizeClicked: yunshOS.minimizeWindow(displayWindow, "display")
+            SpatialDisplaySettings {
+                id: spatialDisplaySettings
+                anchors.fill: parent
+                stereoEnabled: yunshOS.stereoEnabled
+                ipdMm: yunshOS.ipdMm
+                eyeShiftPx: yunshOS.eyeShiftPx
+                fieldOfView: yunshOS.fieldOfView
+                trackingSmoothing: yunshOS.trackingSmoothing
+                reduceMotion: yunshOS.reduceMotion
+                reduceTransparency: yunshOS.reduceTransparency
+                highContrast: yunshOS.highContrast
+                focusMode: yunshOS.focusMode
+                headTrackingConnected: yunshOS.headTrackingEnabled
+                outputWidth: yunshOS.width
+                outputHeight: yunshOS.height
+                onBackToSettings: {
+                    displayWindow.visible = false
+                    switchTo(settingsWindow, "settings")
+                }
+                onPreferencesChanged: yunshOS.applySpatialSettings(spatialDisplaySettings)
+                onCalibrationRequested: yunshOS.calibrationMode = true
+                onRecenterRequested: yunshOS.recenterTracking()
             }
         }
 
@@ -186,12 +278,17 @@ ApplicationWindow {
             appTitle: "系统信息"
             headYaw: yunshOS.headYaw
             headPitch: yunshOS.headPitch
+            headRoll: yunshOS.headRoll
             pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 140; y: 100; width: 800; height: 600
             visible: false
+            onActivated: yunshOS.activateWindow(systemInfoWindow, "systeminfo")
             onCloseClicked: { yunshOS.closeAppFromSwitcher("systeminfo") }
-            onMinimizeClicked: { systemInfoWindow.visible = false; systemInfoWindow.isMinimized = true; homeScreen.visible = true }
-            SystemInfoScreen { anchors.fill: parent
+            onMinimizeClicked: yunshOS.minimizeWindow(systemInfoWindow, "systeminfo")
+            SystemInfoScreen {
+                anchors.fill: parent
+                displayRes: Math.round(yunshOS.width) + " × " + Math.round(yunshOS.height)
+                            + (yunshOS.stereoEnabled ? "（SBS 双目）" : "（单目）")
                 onBackToSettings: switchTo(settingsWindow, "settings")
             }
         }
@@ -202,11 +299,13 @@ ApplicationWindow {
             appTitle: "关于"
             headYaw: yunshOS.headYaw
             headPitch: yunshOS.headPitch
+            headRoll: yunshOS.headRoll
             pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 120; y: 160; width: 800; height: 550
             visible: false
+            onActivated: yunshOS.activateWindow(aboutWindow, "about")
             onCloseClicked: { yunshOS.closeAppFromSwitcher("about") }
-            onMinimizeClicked: { aboutWindow.visible = false; aboutWindow.isMinimized = true; homeScreen.visible = true }
+            onMinimizeClicked: yunshOS.minimizeWindow(aboutWindow, "about")
             AboutScreen { anchors.fill: parent
                 onBackToHome: switchToHome()
             }
@@ -218,11 +317,13 @@ ApplicationWindow {
             appTitle: "Wi-Fi"
             headYaw: yunshOS.headYaw
             headPitch: yunshOS.headPitch
+            headRoll: yunshOS.headRoll
             pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 100; y: 120; width: 800; height: 550
             visible: false
+            onActivated: yunshOS.activateWindow(networkWindow, "network")
             onCloseClicked: { yunshOS.closeAppFromSwitcher("network") }
-            onMinimizeClicked: { networkWindow.visible = false; networkWindow.isMinimized = true; homeScreen.visible = true }
+            onMinimizeClicked: yunshOS.minimizeWindow(networkWindow, "network")
             NetworkScreen { anchors.fill: parent
                 onBackToSettings: switchTo(settingsWindow, "settings")
                 onBackToHome: switchToHome()
@@ -235,11 +336,13 @@ ApplicationWindow {
             appTitle: "蓝牙"
             headYaw: yunshOS.headYaw
             headPitch: yunshOS.headPitch
+            headRoll: yunshOS.headRoll
             pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 180; y: 80; width: 800; height: 550
             visible: false
+            onActivated: yunshOS.activateWindow(bluetoothWindow, "bluetooth")
             onCloseClicked: { yunshOS.closeAppFromSwitcher("bluetooth") }
-            onMinimizeClicked: { bluetoothWindow.visible = false; bluetoothWindow.isMinimized = true; homeScreen.visible = true }
+            onMinimizeClicked: yunshOS.minimizeWindow(bluetoothWindow, "bluetooth")
             BluetoothScreen { anchors.fill: parent
                 onBackToSettings: switchTo(settingsWindow, "settings")
                 onBackToHome: switchToHome()
@@ -252,11 +355,13 @@ ApplicationWindow {
             appTitle: "系统更新"
             headYaw: yunshOS.headYaw
             headPitch: yunshOS.headPitch
+            headRoll: yunshOS.headRoll
             pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 80; y: 100; width: 850; height: 600
             visible: false
+            onActivated: yunshOS.activateWindow(updateWindow, "update")
             onCloseClicked: { yunshOS.closeAppFromSwitcher("update") }
-            onMinimizeClicked: { updateWindow.visible = false; updateWindow.isMinimized = true; homeScreen.visible = true }
+            onMinimizeClicked: yunshOS.minimizeWindow(updateWindow, "update")
             UpdateScreen { anchors.fill: parent
                 onBackToHome: switchToHome()
             }
@@ -268,11 +373,13 @@ ApplicationWindow {
             appTitle: "更新历史"
             headYaw: yunshOS.headYaw
             headPitch: yunshOS.headPitch
+            headRoll: yunshOS.headRoll
             pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 160; y: 140; width: 800; height: 550
             visible: false
+            onActivated: yunshOS.activateWindow(updateHistoryWindow, "updatehistory")
             onCloseClicked: { yunshOS.closeAppFromSwitcher("updatehistory") }
-            onMinimizeClicked: { updateHistoryWindow.visible = false; updateHistoryWindow.isMinimized = true; homeScreen.visible = true }
+            onMinimizeClicked: yunshOS.minimizeWindow(updateHistoryWindow, "updatehistory")
             UpdateHistoryScreen { anchors.fill: parent
                 onBackToUpdates: switchTo(settingsWindow, "settings")
             }
@@ -284,11 +391,13 @@ ApplicationWindow {
             appTitle: "Browser"
             headYaw: yunshOS.headYaw
             headPitch: yunshOS.headPitch
+            headRoll: yunshOS.headRoll
             pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 120; y: 60; width: 1000; height: 700
             visible: false
+            onActivated: yunshOS.activateWindow(browserWindow, "browser")
             onCloseClicked: { yunshOS.closeAppFromSwitcher("browser") }
-            onMinimizeClicked: { browserWindow.visible = false; browserWindow.isMinimized = true; homeScreen.visible = true }
+            onMinimizeClicked: yunshOS.minimizeWindow(browserWindow, "browser")
             YunshBrowser { anchors.fill: parent
                 onBackToHome: switchToHome()
             }
@@ -300,11 +409,13 @@ ApplicationWindow {
             appTitle: "Metaverse"
             headYaw: yunshOS.headYaw
             headPitch: yunshOS.headPitch
+            headRoll: yunshOS.headRoll
             pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 80; y: 160; width: 950; height: 680
             visible: false
+            onActivated: yunshOS.activateWindow(metaverseWindow, "metaverse")
             onCloseClicked: { yunshOS.closeAppFromSwitcher("metaverse") }
-            onMinimizeClicked: { metaverseWindow.visible = false; metaverseWindow.isMinimized = true; homeScreen.visible = true }
+            onMinimizeClicked: yunshOS.minimizeWindow(metaverseWindow, "metaverse")
             YunshMetaverse { anchors.fill: parent
                 onBackToHome: switchToHome()
             }
@@ -316,11 +427,13 @@ ApplicationWindow {
             appTitle: "终端"
             headYaw: yunshOS.headYaw
             headPitch: yunshOS.headPitch
+            headRoll: yunshOS.headRoll
             pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 200; y: 120; width: 850; height: 600
             visible: false
+            onActivated: yunshOS.activateWindow(terminalWindow, "terminal")
             onCloseClicked: { yunshOS.closeAppFromSwitcher("terminal") }
-            onMinimizeClicked: { terminalWindow.visible = false; terminalWindow.isMinimized = true; homeScreen.visible = true }
+            onMinimizeClicked: yunshOS.minimizeWindow(terminalWindow, "terminal")
             TerminalScreen { anchors.fill: parent
                 onBackToHome: switchToHome()
             }
@@ -332,11 +445,13 @@ ApplicationWindow {
             appTitle: "相册"
             headYaw: yunshOS.headYaw
             headPitch: yunshOS.headPitch
+            headRoll: yunshOS.headRoll
             pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 140; y: 80; width: 900; height: 650
             visible: false
+            onActivated: yunshOS.activateWindow(photosWindow, "photos")
             onCloseClicked: { yunshOS.closeAppFromSwitcher("photos") }
-            onMinimizeClicked: { photosWindow.visible = false; photosWindow.isMinimized = true; homeScreen.visible = true }
+            onMinimizeClicked: yunshOS.minimizeWindow(photosWindow, "photos")
             PhotosScreen { anchors.fill: parent
                 onBackToHome: switchToHome()
             }
@@ -348,11 +463,17 @@ ApplicationWindow {
             appTitle: "Android App"
             headYaw: yunshOS.headYaw
             headPitch: yunshOS.headPitch
+            headRoll: yunshOS.headRoll
             pixelsPerDegree: yunshOS.pixelsPerDegree
             x: 130; y: 80; width: 700; height: 540
             visible: false
+            onActivated: yunshOS.activateWindow(
+                androidWindow, yunshOS.androidTarget
+            )
             onCloseClicked: { yunshOS.closeAppFromSwitcher("appstore"); yunshOS.closeAppFromSwitcher("files") }
-            onMinimizeClicked: { androidWindow.visible = false; androidWindow.isMinimized = true; homeScreen.visible = true }
+            onMinimizeClicked: yunshOS.minimizeWindow(
+                androidWindow, yunshOS.androidTarget
+            )
             AndroidAppsScreen {
                 anchors.fill: parent
                 targetApp: yunshOS.androidTarget
@@ -387,6 +508,7 @@ ApplicationWindow {
         VirtualKeyboard {
             id: virtualKeyboard
             z: 1000
+            reduceMotion: yunshOS.reduceMotion
             onDismissKeyboard: virtualKeyboard.hide()
         }
 
@@ -419,6 +541,7 @@ ApplicationWindow {
         TaskSwitcher {
             id: taskSwitcher
             anchors.fill: parent
+            reduceMotion: yunshOS.reduceMotion
             openApps: yunshOS.openApps
             onSwitchToApp: function(appId) { hideTaskSwitcher(); switchToAppById(appId) }
             onCloseApp: function(appId) { yunshOS.closeAppFromSwitcher(appId) }
@@ -429,14 +552,83 @@ ApplicationWindow {
         HomeIndicator {
             id: homeIndicator
             z: 300
+            reduceMotion: yunshOS.reduceMotion
             visible: homeScreen.visible || (taskSwitcher.visible && yunshOS.openApps.length > 0)
             onSwipeUpTriggered: showTaskSwitcher()
             onClicked: showTaskSwitcher()
+        }
+
+        StereoCalibration {
+            anchors.fill: parent
+            visible: yunshOS.calibrationMode
+            z: 5000
+            ipdMm: yunshOS.ipdMm
+            eyeShiftPx: yunshOS.eyeShiftPx
+            fieldOfView: yunshOS.fieldOfView
+            onCloseRequested: yunshOS.calibrationMode = false
+        }
+
+        Rectangle {
+            id: systemToast
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 62
+            width: toastLabel.width + 44
+            height: 42
+            radius: 21
+            color: yunshOS.reduceTransparency
+                ? "#20202A" : Qt.rgba(22/255, 22/255, 35/255, 0.86)
+            border.width: 1
+            border.color: yunshOS.highContrast
+                ? Qt.rgba(1, 1, 1, 0.5) : Qt.rgba(1, 1, 1, 0.12)
+            opacity: 0
+            visible: opacity > 0
+            z: 6000
+
+            Text {
+                id: toastLabel
+                anchors.centerIn: parent
+                text: ""
+                color: "#FFFFFF"
+                font.pixelSize: 14
+                font.weight: Font.Medium
+            }
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: yunshOS.reduceMotion ? 80 : 180
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            Timer {
+                id: toastTimer
+                interval: 1600
+                repeat: false
+                onTriggered: systemToast.opacity = 0
+            }
         }
     }
 
     // ===== FLOATING WINDOW FUNCTIONS =====
     property int windowCount: 0
+
+    function activateWindow(window, appId) {
+        if (!window || !window.visible)
+            return
+        activeAppId = appId
+        window.z = 60 + (++windowCount)
+        updateWindowFocus()
+    }
+
+    function minimizeWindow(window, appId) {
+        window.visible = false
+        window.isMinimized = true
+        if (activeAppId === appId)
+            activeAppId = ""
+        homeScreen.visible = true
+        updateWindowFocus()
+    }
 
     function switchTo(window, appId) {
         if (!window.visible) homeScreen.visible = true
@@ -444,18 +636,26 @@ ApplicationWindow {
         window.isMinimized = false
         windowCount++
         window.z = 60 + windowCount
-        if (appId) trackAppOpen(appId)
+        if (appId) {
+            activeAppId = appId
+            trackAppOpen(appId)
+        }
+        applyWindowPreferences()
+        updateWindowFocus()
     }
 
     function switchToHome() {
         var ids = ["update","updatehistory","browser","metaverse","terminal",
-                    "photos","settings","about","systeminfo","network","bluetooth"]
+                    "photos","settings","about","systeminfo","network","bluetooth",
+                    "display"]
         for (var i = 0; i < ids.length; i++) {
             var w = getWindowById(ids[i])
             if (w) { w.visible = false; w.isMinimized = false }
         }
         androidWindow.visible = false
         androidWindow.isMinimized = false
+        activeAppId = ""
+        updateWindowFocus()
         homeScreen.visible = true
     }
 
@@ -480,6 +680,163 @@ ApplicationWindow {
             result.saveToFile(filename)
             console.log("Full screenshot saved to " + filename)
         })
+    }
+
+    function showToast(message) {
+        toastLabel.text = message
+        systemToast.opacity = 1
+        toastTimer.restart()
+    }
+
+    function allWindows() {
+        return [
+            settingsWindow, displayWindow, systemInfoWindow, aboutWindow,
+            networkWindow, bluetoothWindow, updateWindow, updateHistoryWindow,
+            browserWindow, metaverseWindow, terminalWindow, photosWindow,
+            androidWindow
+        ]
+    }
+
+    function applyWindowPreferences() {
+        var windows = allWindows()
+        for (var i = 0; i < windows.length; i++) {
+            windows[i].reduceMotion = reduceMotion
+            windows[i].reduceTransparency = reduceTransparency
+            windows[i].highContrast = highContrast
+        }
+    }
+
+    function updateWindowFocus() {
+        var activeWindow = getWindowById(activeAppId)
+        var windows = allWindows()
+        for (var i = 0; i < windows.length; i++)
+            windows[i].focusDimmed = focusMode && activeWindow && windows[i] !== activeWindow
+    }
+
+    function angularDelta(target, current) {
+        var delta = target - current
+        while (delta > 180) delta -= 360
+        while (delta < -180) delta += 360
+        return delta
+    }
+
+    function updateHeadPose(yaw, pitch, roll) {
+        rawHeadYaw = yaw
+        rawHeadPitch = pitch
+        rawHeadRoll = roll
+        var alpha = Math.max(0.1, Math.min(1.0, 1.0 - trackingSmoothing))
+        if (!headTrackingEnabled) {
+            filteredHeadYaw = yaw
+            filteredHeadPitch = pitch
+            filteredHeadRoll = roll
+        } else {
+            filteredHeadYaw += angularDelta(yaw, filteredHeadYaw) * alpha
+            filteredHeadPitch += (pitch - filteredHeadPitch) * alpha
+            filteredHeadRoll += angularDelta(roll, filteredHeadRoll) * alpha
+        }
+        headYaw = angularDelta(filteredHeadYaw, headCenterYaw)
+        headPitch = filteredHeadPitch - headCenterPitch
+        headRoll = angularDelta(filteredHeadRoll, headCenterRoll)
+        headTrackingEnabled = true
+    }
+
+    function recenterTracking() {
+        if (!headTrackingEnabled) {
+            showToast("头部追踪尚未连接")
+            return
+        }
+        headCenterYaw = filteredHeadYaw
+        headCenterPitch = filteredHeadPitch
+        headCenterRoll = filteredHeadRoll
+        headYaw = 0
+        headPitch = 0
+        headRoll = 0
+        showToast("已将当前朝向设为正前方")
+    }
+
+    function spatialPreferencesPayload() {
+        return {
+            stereoEnabled: stereoEnabled,
+            ipdMm: ipdMm,
+            eyeShiftPx: eyeShiftPx,
+            fieldOfView: fieldOfView,
+            trackingSmoothing: trackingSmoothing,
+            reduceMotion: reduceMotion,
+            reduceTransparency: reduceTransparency,
+            highContrast: highContrast,
+            focusMode: focusMode
+        }
+    }
+
+    function applySpatialPreferenceObject(data) {
+        if (typeof data.stereoEnabled === "boolean")
+            stereoEnabled = data.stereoEnabled
+        if (typeof data.ipdMm === "number")
+            ipdMm = data.ipdMm
+        if (typeof data.eyeShiftPx === "number")
+            eyeShiftPx = data.eyeShiftPx
+        if (typeof data.fieldOfView === "number")
+            fieldOfView = data.fieldOfView
+        if (typeof data.trackingSmoothing === "number")
+            trackingSmoothing = data.trackingSmoothing
+        if (typeof data.reduceMotion === "boolean")
+            reduceMotion = data.reduceMotion
+        if (typeof data.reduceTransparency === "boolean")
+            reduceTransparency = data.reduceTransparency
+        if (typeof data.highContrast === "boolean")
+            highContrast = data.highContrast
+        if (typeof data.focusMode === "boolean")
+            focusMode = data.focusMode
+        applyWindowPreferences()
+        updateWindowFocus()
+    }
+
+    function applySpatialSettings(settings) {
+        applySpatialPreferenceObject({
+            stereoEnabled: settings.stereoEnabled,
+            ipdMm: settings.ipdMm,
+            eyeShiftPx: settings.eyeShiftPx,
+            fieldOfView: settings.fieldOfView,
+            trackingSmoothing: settings.trackingSmoothing,
+            reduceMotion: settings.reduceMotion,
+            reduceTransparency: settings.reduceTransparency,
+            highContrast: settings.highContrast,
+            focusMode: settings.focusMode
+        })
+        spatialPreferenceSaveTimer.restart()
+    }
+
+    function loadSpatialPreferences() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", "http://127.0.0.1:8591/api/spatial-preferences", true)
+        xhr.timeout = 1200
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE || xhr.status !== 200)
+                return
+            try {
+                applySpatialPreferenceObject(JSON.parse(xhr.responseText))
+            } catch (error) {
+                console.log("YUNSH: Could not parse spatial preferences")
+            }
+        }
+        xhr.send()
+    }
+
+    function saveSpatialPreferences() {
+        applyWindowPreferences()
+        updateWindowFocus()
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/spatial-preferences", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 1200
+        xhr.send(JSON.stringify(spatialPreferencesPayload()))
+    }
+
+    Timer {
+        id: spatialPreferenceSaveTimer
+        interval: 180
+        repeat: false
+        onTriggered: yunshOS.saveSpatialPreferences()
     }
 
     // ─── First-boot flag management ────────────────
@@ -514,6 +871,19 @@ ApplicationWindow {
         onActivated: controlCenter.visible ? controlCenter.hide() : controlCenter.show()
     }
     Shortcut { sequence: "Ctrl+Up"; onActivated: showTaskSwitcher() }
+    Shortcut { sequence: "Ctrl+Shift+R"; onActivated: recenterTracking() }
+    Shortcut {
+        sequence: "Ctrl+Shift+F"
+        onActivated: {
+            focusMode = !focusMode
+            saveSpatialPreferences()
+            showToast(focusMode ? "专注模式已开启" : "专注模式已关闭")
+        }
+    }
+    Shortcut {
+        sequence: "Ctrl+Shift+D"
+        onActivated: switchTo(displayWindow, "display")
+    }
 
     Shortcut {
         sequence: "Escape"
@@ -553,7 +923,10 @@ ApplicationWindow {
         w.visible = true
         w.isMinimized = false
         w.z = 60 + (++windowCount)
+        activeAppId = appId
         trackAppOpen(appId)
+        applyWindowPreferences()
+        updateWindowFocus()
 
         // Send launch to daemon (port 8590 — needs yunsh-app-daemon running)
         try {
@@ -574,10 +947,11 @@ ApplicationWindow {
 
     // ─── Head Tracking Polling ────────────────────────
     // Polls yunsh-headtracking daemon.
-    // Uses a slow discovery probe and switches to a 100 ms stream after the
+    // Uses a slow discovery probe and switches to a 30 Hz stream after the
     // daemon is available. This also survives service startup races.
     property bool htDaemonDetected: false
-    property int htPollInterval: 100
+    property int htPollInterval: 33
+    property bool htRequestInFlight: false
 
     function probeHeadTracking() {
         var xhr = new XMLHttpRequest()
@@ -587,8 +961,8 @@ ApplicationWindow {
             if (xhr.readyState === XMLHttpRequest.DONE) {
                 if (xhr.status === 200) {
                     yunshOS.htDaemonDetected = true
-                    yunshOS.htPollInterval = 100
-                    headTrackingTimer.interval = 100
+                    yunshOS.htPollInterval = 33
+                    headTrackingTimer.interval = 33
                     headTrackingTimer.running = true
                 } else {
                     yunshOS.htDaemonDetected = false
@@ -602,25 +976,31 @@ ApplicationWindow {
 
     Timer {
         id: headTrackingTimer
-        interval: 100
+        interval: 33
         running: false  // Don't start until probe succeeds
         repeat: true
         onTriggered: {
+            if (yunshOS.htRequestInFlight)
+                return
+            yunshOS.htRequestInFlight = true
             var xhr = new XMLHttpRequest()
             xhr.open("GET", "http://127.0.0.1:8592/tracking", true)
             xhr.timeout = 200
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === XMLHttpRequest.DONE) {
+                    yunshOS.htRequestInFlight = false
                     if (xhr.status === 200) {
                         try {
                             var data = JSON.parse(xhr.responseText)
-                            yunshOS.headYaw = data.yaw || 0
-                            yunshOS.headPitch = data.pitch || 0
-                            yunshOS.headRoll = data.roll || 0
-                            yunshOS.headTrackingEnabled = true
+                            yunshOS.updateHeadPose(
+                                Number(data.yaw) || 0,
+                                Number(data.pitch) || 0,
+                                Number(data.roll) || 0
+                            )
                         } catch(e) {}
                     } else {
                         // Lost connection — slow polling
+                        yunshOS.headTrackingEnabled = false
                         if (yunshOS.htPollInterval < 5000) {
                             yunshOS.htPollInterval = Math.min(5000, yunshOS.htPollInterval * 2)
                             headTrackingTimer.interval = yunshOS.htPollInterval
@@ -655,11 +1035,13 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        console.log("YUNSH OS UI v1.0.3")
+        console.log("YUNSH OS UI v1.0.4")
         checkFirstBoot()
         showFullScreen()
+        applyWindowPreferences()
         // Probe head tracking daemon once (won't poll if not found)
         Qt.callLater(function() {
+            yunshOS.loadSpatialPreferences()
             yunshOS.probeHeadTracking()
         })
     }

@@ -1,4 +1,4 @@
-// YUNSH OS v1.0.3 - Home Indicator
+// YUNSH OS v1.0.4 - Home Indicator
 // Bottom screen pill for mouse gesture: swipe up → Task Switcher
 // Like iPhone home bar, but for mouse
 
@@ -14,6 +14,7 @@ Item {
     property int hitZoneHeight: 32  // Detection zone above the pill
     property bool isDragging: false
     property real dragThreshold: 30  // Pixels to trigger task switcher
+    property bool reduceMotion: false
 
     signal swipeUpTriggered()
     signal clicked()
@@ -91,8 +92,8 @@ Item {
             color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
         }
 
-        Behavior on opacity { NumberAnimation { duration: 100 } }
-        Behavior on scale { NumberAnimation { duration: 80; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: homeIndicator.reduceMotion ? 60 : 100 } }
+        Behavior on scale { NumberAnimation { duration: homeIndicator.reduceMotion ? 60 : 80; easing.type: Easing.OutCubic } }
     }
 
     // === Pill backdrop glow (subtle) ===

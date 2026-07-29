@@ -126,6 +126,32 @@ Behavior on opacity {
 // No spring/scale animations — just opacity cross-fade
 ```
 
+## 11. Binocular Comfort (双目舒适度)
+
+The system shell is rendered as a synchronized side-by-side frame on a shared
+focal plane. Comfort and predictability take priority over exaggerated depth.
+
+- The left surface is the interaction source; the right surface is copied on
+  the GPU from the same frame.
+- IPD metadata, horizontal fusion offset, field of view, crop, and eye order
+  are checked with a dedicated calibration target.
+- The compositor fills each eye viewport. The display controller advertises
+  the native combined mode through EDID and performs panel-specific unpacking.
+- Shell windows use scale, yaw, and occlusion as conservative depth cues.
+  True stereo applications require a future distinct per-eye rendering path.
+- Never present a 3DoF view-relative layout as a 6DoF world anchor.
+- Recenter must be available without leaving the current task.
+
+## 12. Agency and Focus (控制权与专注)
+
+- Spatial placement is selected directly from a four-position menu.
+- Focus mode removes nonessential chrome and dims inactive windows without
+  claiming to dim the real world.
+- Display and comfort preferences are validated, persisted atomically, and
+  reset with user preferences during factory reset.
+- Reduced motion, reduced transparency, and increased contrast are independent
+  choices.
+
 ## QML Implementation Notes
 
 | Principle | Key Files |
@@ -135,3 +161,6 @@ Behavior on opacity {
 | Interruptible motion | `VirtualKeyboard.qml`, `TaskSwitcher.qml` |
 | Reduced motion | `Screensaver.qml` |
 | Spatial consistency | `ActivationScreen.qml`, `SettingsScreen.qml` |
+| Binocular output | `StereoCompositor.qml`, `StereoCalibration.qml` |
+| Display comfort | `SpatialDisplaySettings.qml`, `SliderRow.qml` |
+| 3DoF interaction | `main.qml`, `MacWindow.qml`, `ControlCenter.qml` |
