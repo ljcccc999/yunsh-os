@@ -26,6 +26,7 @@ Item {
     signal openPhotos()
     signal openSpatialDisplay()
     signal openSpaceCapsule()
+    signal openScreenRelay()
     signal openAppLibrary()
     signal showControlCenter()
     signal takeScreenshot()
@@ -40,7 +41,8 @@ Item {
         { name: "终端", icon: "terminal.svg",          color: "#00D4FF",   action: "terminal" },
         { name: "相册", icon: "photos.svg",            color: "#FFC107",   action: "photos" },
         { name: "空间显示", icon: "settings.svg",      color: "#00D4FF",   action: "display" },
-        { name: "空间胶囊", icon: "files.svg",          color: "#00D4FF",   action: "spacecapsule" }
+        { name: "空间胶囊", icon: "files.svg",          color: "#00D4FF",   action: "spacecapsule" },
+        { name: "iPhone 投屏", icon: "photos.svg",       color: "#00D4FF",   action: "screenrelay" }
     ]
 
     readonly property int columns: 4
@@ -61,6 +63,7 @@ Item {
             case "photos":      homeScreen.openPhotos(); break
             case "display":     homeScreen.openSpatialDisplay(); break
             case "spacecapsule": homeScreen.openSpaceCapsule(); break
+            case "screenrelay": homeScreen.openScreenRelay(); break
             default:            console.log("Unknown app:", action)
         }
     }

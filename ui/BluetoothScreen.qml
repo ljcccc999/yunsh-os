@@ -19,6 +19,8 @@ Rectangle {
     property string scanAnimationStep: "."
     property var pairedDevices: []
     property var availableDevices: []
+    property bool phoneLinked: false
+    property string phonePairingCode: ""
 
     // ── Signals ────────────────────────────────────────
     signal backToSettings()
@@ -61,6 +63,92 @@ Rectangle {
             }
         }
         xhr.send()
+
+        var linkXhr = new XMLHttpRequest()
+        linkXhr.open("GET", "http://127.0.0.1:8591/api/link-status", true)
+        linkXhr.onreadystatechange = function() {
+            if (linkXhr.readyState === XMLHttpRequest.DONE && linkXhr.status === 200) {
+                try {
+                    phoneLinked = JSON.parse(linkXhr.responseText).connected === true
+                } catch(e) {}
+            }
+        }
+        linkXhr.send()
+    }
+
+    function createPhonePairingCode() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/link-pairing", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === XMLHttpRequest.DONE) {
+                try {
+                    var data = JSON.parse(xhr.responseText)
+                    phonePairingCode = data.success ? data.code : ""
+                } catch(e) {}
+            }
+        }
+        xhr.send(JSON.stringify({action: "new_code"}))
+    }
+
+    Rectangle {
+        id: phoneLinkCard
+        anchors.top: toggleRow.bottom
+        anchors.topMargin: 12
+        anchors.left: parent.left
+        anchors.leftMargin: 40
+        anchors.right: parent.right
+        anchors.rightMargin: 40
+        height: 76
+        radius: 18
+        color: Qt.rgba(248/255, 252/255, 255/255, 0.82)
+        border.width: 1
+        border.color: phoneLinked ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.60)
+
+        Row {
+            anchors.fill: parent
+            anchors.margins: 14
+            spacing: 13
+            Rectangle {
+                width: 46; height: 46; radius: 15
+                color: "#DDF8FF"
+                Text { anchors.centerIn: parent; text: "◉"; color: "#00AFCF"; font.pixelSize: 24 }
+            }
+            Column {
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width - 228
+                spacing: 4
+                Text { text: "YUNSH Link / iPhone"; color: "#111722"; font.pixelSize: 15; font.weight: Font.DemiBold }
+                Text {
+                    width: parent.width
+                    text: phoneLinked
+                        ? "已通过一次性密钥验证"
+                        : (phonePairingCode.length > 0
+                            ? "在 YUNSH Link 输入密钥 " + phonePairingCode
+                            : "先在 iPhone 下载 YUNSH Link，再生成一次性密钥")
+                    color: "#5B6874"
+                    font.pixelSize: 11
+                    elide: Text.ElideRight
+                }
+            }
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: 96; height: 34; radius: 17
+                color: "#00D4FF"
+                Text {
+                    anchors.centerIn: parent
+                    text: phoneLinked ? "已连接" : "生成密钥"
+                    color: "#00151B"
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: !phoneLinked
+                    onClicked: createPhonePairingCode()
+                }
+            }
+        }
     }
 
     // ── Send command to daemon through the HTTP bridge ─
@@ -352,7 +440,7 @@ Rectangle {
     // ════════════════════════════════════════════════════
     Text {
         id: pairedSectionHeader
-        anchors.top: toggleRow.bottom
+        anchors.top: phoneLinkCard.bottom
         anchors.topMargin: 24
         anchors.left: parent.left
         anchors.leftMargin: 48
@@ -366,7 +454,7 @@ Rectangle {
     // Paired devices list
     ListView {
         id: pairedListView
-        anchors.top: pairedSectionHeader.visible ? pairedSectionHeader.bottom : toggleRow.bottom
+        anchors.top: pairedSectionHeader.visible ? pairedSectionHeader.bottom : phoneLinkCard.bottom
         anchors.topMargin: 8
         anchors.left: parent.left
         anchors.leftMargin: 40
@@ -478,7 +566,7 @@ Rectangle {
     // ════════════════════════════════════════════════════
     Text {
         id: availableSectionHeader
-        anchors.top: pairedListView.visible ? pairedListView.bottom : pairedSectionHeader.visible ? pairedSectionHeader.bottom : toggleRow.bottom
+        anchors.top: pairedListView.visible ? pairedListView.bottom : pairedSectionHeader.visible ? pairedSectionHeader.bottom : phoneLinkCard.bottom
         anchors.topMargin: (pairedListView.visible || pairedSectionHeader.visible) ? 10 : 24
         anchors.left: parent.left
         anchors.leftMargin: 48
@@ -509,7 +597,7 @@ Rectangle {
     // Available / scanning devices list
     ListView {
         id: availableListView
-        anchors.top: availableSectionHeader.visible ? availableSectionHeader.bottom : pairedListView.visible ? pairedListView.bottom : toggleRow.bottom
+        anchors.top: availableSectionHeader.visible ? availableSectionHeader.bottom : pairedListView.visible ? pairedListView.bottom : phoneLinkCard.bottom
         anchors.topMargin: 8
         anchors.left: parent.left
         anchors.leftMargin: 40

@@ -159,8 +159,18 @@ Rectangle {
                 width: parent.width; height: 60
                 iconSource: "/usr/share/yunsh/icons/bluetooth.svg"
                 iconSize: 18
-                title: "蓝牙"
-                subtitle: "设备和连接"
+                title: "YUNSH 眼镜"
+                subtitle: "配对、重新连接与管理头部追踪设备"
+                showArrow: true
+                onClicked: settingsScreen.openBluetoothSettings()
+            }
+
+            GlassCard {
+                width: parent.width; height: 60
+                iconSource: "/usr/share/yunsh/icons/bluetooth.svg"
+                iconSize: 18
+                title: "YUNSH Link / iPhone"
+                subtitle: "等待手机连接、回正与系统控制"
                 showArrow: true
                 onClicked: settingsScreen.openBluetoothSettings()
             }

@@ -47,6 +47,7 @@ ApplicationWindow {
     property bool focusMode: false
     property string activeAppId: ""
     property string androidTarget: "appstore"
+    property string lastUiCommandId: ""
 
     property var openApps: []
     property var appInfo: ({
@@ -63,6 +64,7 @@ ApplicationWindow {
         "bluetooth": { name: "蓝牙", icon: "/usr/share/yunsh/icons/bluetooth.svg", color: "#2196F3" },
         "display": { name: "空间显示", icon: "/usr/share/yunsh/icons/settings.svg", color: "#00D4FF" },
         "spacecapsule": { name: "空间胶囊", icon: "/usr/share/yunsh/icons/files.svg", color: "#00D4FF" },
+        "screenrelay": { name: "iPhone 投屏", icon: "/usr/share/yunsh/icons/photos.svg", color: "#00D4FF" },
         "comfortdna": { name: "Comfort DNA", icon: "/usr/share/yunsh/icons/settings.svg", color: "#00D4FF" },
         "systeminfo": { name: "系统信息", icon: "/usr/share/yunsh/icons/about.svg", color: "#607D8B" },
         "updatehistory": { name: "更新历史", icon: "/usr/share/yunsh/icons/update.svg", color: "#607D8B" }
@@ -119,6 +121,7 @@ ApplicationWindow {
             case "bluetooth": return bluetoothWindow
             case "display": return displayWindow
             case "spacecapsule": return spaceCapsuleWindow
+            case "screenrelay": return screenRelayWindow
             case "comfortdna": return comfortDnaWindow
             case "updatehistory": return updateHistoryWindow
             case "appstore":
@@ -178,9 +181,71 @@ ApplicationWindow {
             onOpenPhotos: switchTo(photosWindow, "photos")
             onOpenSpatialDisplay: switchTo(displayWindow, "display")
             onOpenSpaceCapsule: switchTo(spaceCapsuleWindow, "spacecapsule")
+            onOpenScreenRelay: switchTo(screenRelayWindow, "screenrelay")
             onShowControlCenter: controlCenter.show()
             onTakeScreenshot: takeScreenshot()
             onOpenAppLibrary: showTaskSwitcher()
+        }
+
+        // ===== IPHONE SCREEN RELAY =====
+        MacWindow {
+            id: screenRelayWindow
+            appTitle: "iPhone Screen Relay"
+            headYaw: yunshOS.headYaw
+            headPitch: yunshOS.headPitch
+            headRoll: yunshOS.headRoll
+            pixelsPerDegree: yunshOS.pixelsPerDegree
+            x: 170; y: 60; width: 820; height: 720
+            visible: false
+            onActivated: yunshOS.activateWindow(screenRelayWindow, "screenrelay")
+            onCloseClicked: yunshOS.closeAppFromSwitcher("screenrelay")
+            onMinimizeClicked: yunshOS.minimizeWindow(screenRelayWindow, "screenrelay")
+            ScreenRelayScreen {
+                anchors.fill: parent
+                onBackToHome: switchToHome()
+            }
+        }
+
+        // Always-reachable touch/gaze target for a keyboard-free recenter.
+        Rectangle {
+            id: floatingRecenterButton
+            anchors.right: parent.right
+            anchors.rightMargin: 30
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 30
+            width: 118
+            height: 48
+            radius: 24
+            z: 420
+            visible: (!firstBoot || activationDone)
+                && !calibrationMode
+                && !screensaver_item.visible
+                && !virtualKeyboard.visible
+            color: recenterTouch.pressed ? "#45E1FF" : "#00D4FF"
+            border.width: 1
+            border.color: "#8AEEFF"
+
+            Row {
+                anchors.centerIn: parent
+                spacing: 7
+                Text {
+                    text: "⌾"
+                    color: "#00151B"
+                    font.pixelSize: 22
+                    font.weight: Font.Bold
+                }
+                Text {
+                    text: "回正"
+                    color: "#00151B"
+                    font.pixelSize: 14
+                    font.weight: Font.DemiBold
+                }
+            }
+            MouseArea {
+                id: recenterTouch
+                anchors.fill: parent
+                onClicked: yunshOS.recenterTracking()
+            }
         }
 
         // ===== CONTROL CENTER =====
@@ -754,7 +819,7 @@ ApplicationWindow {
 
     function allWindows() {
         return [
-            settingsWindow, displayWindow, comfortDnaWindow, spaceCapsuleWindow,
+            settingsWindow, displayWindow, comfortDnaWindow, spaceCapsuleWindow, screenRelayWindow,
             systemInfoWindow, aboutWindow,
             networkWindow, bluetoothWindow, updateWindow, updateHistoryWindow,
             browserWindow, metaverseWindow, terminalWindow, photosWindow,
@@ -787,6 +852,7 @@ ApplicationWindow {
             { appId: "about", window: aboutWindow },
             { appId: "network", window: networkWindow },
             { appId: "bluetooth", window: bluetoothWindow },
+            { appId: "screenrelay", window: screenRelayWindow },
             { appId: "update", window: updateWindow },
             { appId: "updatehistory", window: updateHistoryWindow },
             { appId: "browser", window: browserWindow },
@@ -926,6 +992,33 @@ ApplicationWindow {
         headPitch = 0
         headRoll = 0
         showToast("已将当前朝向设为正前方")
+    }
+
+    function pollUiCommand() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", "http://127.0.0.1:8591/api/ui-command", true)
+        xhr.timeout = 500
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE || xhr.status !== 200)
+                return
+            try {
+                var command = JSON.parse(xhr.responseText)
+                if (command.action === "recenter"
+                        && command.id
+                        && command.id !== yunshOS.lastUiCommandId) {
+                    yunshOS.lastUiCommandId = command.id
+                    yunshOS.recenterTracking()
+                }
+            } catch (error) {}
+        }
+        xhr.send()
+    }
+
+    Timer {
+        interval: 500
+        running: !firstBoot || activationDone
+        repeat: true
+        onTriggered: yunshOS.pollUiCommand()
     }
 
     function spatialPreferencesPayload() {

@@ -145,6 +145,8 @@ focal plane. Comfort and predictability take priority over exaggerated depth.
   True stereo applications require a future distinct per-eye rendering path.
 - Never present a 3DoF view-relative layout as a 6DoF world anchor.
 - Recenter must be available without leaving the current task.
+- Recenter must not require a physical keyboard: keep a persistent virtual
+  control and accept the same explicit command from YUNSH Link.
 
 ## 12. Agency and Focus (控制权与专注)
 
@@ -159,6 +161,13 @@ focal plane. Comfort and predictability take priority over exaggerated depth.
   setup, and remains editable in Settings.
 - SpaceCapsule exports only allow-listed workspace state; it never treats
   terminal history, credentials, or arbitrary application data as transferable.
+- Nearby SpaceCapsule delivery is encrypted, verifies the announced endpoint
+  identity, and waits for receiver approval.
+- Phone pairing uses an encrypted BLE characteristic plus a short-lived,
+  single-use, case-insensitive key shown on the display. It never requires a QR
+  code or camera.
+- Screen Relay is visible only after the user starts Apple's ReplayKit
+  broadcast UI. Local-network video is encrypted and cannot start silently.
 
 ## QML Implementation Notes
 
@@ -173,4 +182,5 @@ focal plane. Comfort and predictability take priority over exaggerated depth.
 | Display comfort | `SpatialDisplaySettings.qml`, `SliderRow.qml` |
 | Personal comfort | `ComfortDnaScreen.qml` |
 | Workspace transfer | `SpaceCapsuleScreen.qml`, `main.qml` |
+| iPhone screen window | `ScreenRelayScreen.qml`, `main.qml` |
 | 3DoF interaction | `main.qml`, `MacWindow.qml`, `ControlCenter.qml` |

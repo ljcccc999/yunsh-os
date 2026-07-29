@@ -22,6 +22,12 @@ YUNSH OS v2.0.0 combines the binocular spatial-display foundation with the
 first transferable workspace and personal comfort-profile experiences:
 
 - exportable and restorable `.yunshspace` SpaceCapsule files;
+- encrypted nearby YUNSH Drop between YUNSH OS devices, with receiver approval;
+- YUNSH Link workspace import and iOS share-sheet forwarding;
+- user-authorized iPhone Screen Relay as a normal spatial window;
+- separate skippable glasses and phone pairing pages with progress;
+- a case-insensitive, short-lived, single-use phone pairing key with no QR code;
+- a persistent virtual Recenter control and YUNSH Link recenter command;
 - an optional, skippable Comfort DNA step during activation;
 - steady, balanced, and responsive local comfort profiles;
 - AR-visible white liquid-glass application surfaces over an optical-black
@@ -96,16 +102,17 @@ YUNSH Flow is the planned interoperability layer between YUNSH OS and iPhone.
 It should use public Apple APIs and explicit user consent rather than attempting
 to reproduce Apple's private ecosystem protocols.
 
-### Planned experiences
+### v2.0.0 foundations
 
-- **YUNSH Drop:** send selected photos, videos, files, web links, and text from
-  an iOS Share Extension to YUNSH OS.
+- **YUNSH Drop:** send SpaceCapsules directly between nearby YUNSH OS devices,
+  or import them into YUNSH Link and forward the file through the iOS share
+  sheet to WeChat, Files, AirDrop, or another installed app.
 - **YUNSH Handoff:** continue supported URLs, reading positions, documents, and
   YUNSH application state between the phone and the spatial desktop.
 - **YUNSH Universal Clipboard:** synchronize explicitly shared clipboard
   content through YUNSH Link or a Shortcut.
-- **YUNSH Screen Relay:** place a user-authorized iPhone screen stream in one
-  YUNSH spatial window.
+- **YUNSH Screen Relay:** place a user-authorized ReplayKit iPhone broadcast in
+  one movable, resizable, pinnable YUNSH spatial window.
 
 ### Connection design
 

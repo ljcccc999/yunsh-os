@@ -244,6 +244,8 @@ add_file "${YUNSH_DIR}/system/yunsh-updater.py" "/usr/bin/yunsh-updater"
 add_file "${YUNSH_DIR}/system/yunsh-network-daemon.py" "/usr/bin/yunsh-network-daemon"
 add_file "${YUNSH_DIR}/system/yunsh-bluetooth-daemon.py" "/usr/bin/yunsh-bluetooth-daemon"
 add_file "${YUNSH_DIR}/system/yunsh-link-ble.py" "/usr/bin/yunsh-link-ble"
+add_file "${YUNSH_DIR}/system/yunsh-spaced.py" "/usr/bin/yunsh-spaced"
+add_file "${YUNSH_DIR}/system/yunsh-screen-relayd.py" "/usr/bin/yunsh-screen-relayd"
 add_file "${YUNSH_DIR}/system/yunsh-glasses-bridge.py" "/usr/bin/yunsh-glasses-bridge"
 add_file "${YUNSH_DIR}/system/yunsh-headtracking" "/usr/bin/yunsh-headtracking"
 add_file "${YUNSH_DIR}/system/yunsh-bno085-reader" "/usr/bin/yunsh-bno085-reader"
@@ -392,6 +394,48 @@ User=root
 WantedBy=multi-user.target
 APISVC
 add_file "${BUILD_DIR}/yunsh-local-api.service" "/etc/systemd/system/yunsh-local-api.service"
+
+cat > "${BUILD_DIR}/yunsh-spaced.service" << 'SPACESVC'
+[Unit]
+Description=YUNSH Drop Encrypted Nearby Workspace Receiver
+After=network-online.target avahi-daemon.service
+Wants=network-online.target avahi-daemon.service
+ConditionPathExists=/etc/yunsh/.packages_installed
+[Service]
+Type=simple
+ExecStart=/usr/bin/yunsh-spaced
+Restart=always
+RestartSec=3
+User=root
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/etc/yunsh /var/lib/yunsh/space-inbox
+NoNewPrivileges=true
+[Install]
+WantedBy=multi-user.target
+SPACESVC
+add_file "${BUILD_DIR}/yunsh-spaced.service" "/etc/systemd/system/yunsh-spaced.service"
+
+cat > "${BUILD_DIR}/yunsh-screen-relay.service" << 'RELAYDSVC'
+[Unit]
+Description=YUNSH Encrypted iPhone Screen Relay
+After=yunsh-spaced.service network-online.target avahi-daemon.service
+Requires=yunsh-spaced.service
+[Service]
+Type=simple
+ExecStart=/usr/bin/yunsh-screen-relayd
+Restart=always
+RestartSec=3
+User=root
+PrivateTmp=true
+ProtectSystem=strict
+ReadOnlyPaths=/etc/yunsh
+ReadWritePaths=/run/yunsh
+NoNewPrivileges=true
+[Install]
+WantedBy=multi-user.target
+RELAYDSVC
+add_file "${BUILD_DIR}/yunsh-screen-relay.service" "/etc/systemd/system/yunsh-screen-relay.service"
 
 # Network service
 cat > "${BUILD_DIR}/yunsh-network.service" << 'NSVC'
@@ -605,7 +649,7 @@ TERMSVC
 add_file "${BUILD_DIR}/yunsh-terminal.service" "/etc/systemd/system/yunsh-terminal.service"
 
 # Enable services
-for service in yunsh-os yunsh-firstboot yunsh-local-api yunsh-network yunsh-bluetooth \
+for service in yunsh-os yunsh-firstboot yunsh-local-api yunsh-spaced yunsh-screen-relay yunsh-network yunsh-bluetooth \
                yunsh-update yunsh-link-ble yunsh-glasses-bridge yunsh-appd yunsh-android-setup yunsh-terminal yunsh-headtracking \
                yunsh-powerd yunsh-splash; do
     echo "symlink /etc/systemd/system/multi-user.target.wants/${service}.service ../${service}.service" >> "${DEBUGFS_SCRIPT}"
@@ -634,7 +678,7 @@ add_file "${BUILD_DIR}/yunsh-hostname" "/etc/hostname"
 
 # Set permissions
 for bin in yunsh-update-daemon yunsh-updater yunsh-network-daemon yunsh-bluetooth-daemon \
-           yunsh-link-ble \
+           yunsh-link-ble yunsh-spaced yunsh-screen-relayd \
            yunsh-glasses-bridge \
            yunsh-screenshotd yunsh-factory-reset yunsh-install-progress.sh yunsh-inputd \
            yunsh-powerd yunsh-firstboot.sh yunsh-iptables.sh yunsh-ui-launcher yunsh-splash \

@@ -22,7 +22,7 @@ Item {
         {
             version: "2.0.0",
             date: "2026-07-29",
-            changelog: "YUNSH 空间工作版本。\n• 可转发和恢复的 SpaceCapsule 工作空间文件\n• 激活时可选择或跳过的 Comfort DNA\n• Side-by-Side 双目合成与 EDID 自适应输出\n• 瞳距、融合偏移、视场角与左右眼校准\n• 30 Hz 3DoF 平滑、滚转补偿与快速重新居中\n• 专注模式、辅助功能与四种空间位置",
+            changelog: "YUNSH 空间工作版本。\n• YUNSH Drop 附近加密传输、接收确认与 YUNSH Link 分享转发\n• 用户授权的 iPhone Screen Relay 空间投屏窗口\n• 多语言 Hello 激活、可跳过的眼镜/手机配对与进度\n• 不区分大小写的一次性手机配对密钥，无需二维码\n• 可转发和恢复的 SpaceCapsule 与可选 Comfort DNA\n• Side-by-Side 双目、EDID、显示校准与白色液态玻璃\n• 虚拟按钮和 iPhone 一键回正\n• 3DoF 四种空间位置、专注模式与辅助功能",
             build: "build 2026.0729"
         },
         {

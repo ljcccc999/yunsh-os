@@ -45,6 +45,17 @@ iptables -A INPUT -p tcp --dport 22 -s 192.168.0.0/16 -j ACCEPT
 iptables -A INPUT -p tcp --dport 22 -s 10.0.0.0/8     -j ACCEPT
 iptables -A INPUT -p tcp --dport 22 -s 172.16.0.0/12  -j ACCEPT
 
+# ── YUNSH Drop discovery and encrypted transfer (private LAN only) ──
+iptables -A INPUT -p udp --dport 5353 -s 192.168.0.0/16 -j ACCEPT
+iptables -A INPUT -p udp --dport 5353 -s 10.0.0.0/8     -j ACCEPT
+iptables -A INPUT -p udp --dport 5353 -s 172.16.0.0/12  -j ACCEPT
+iptables -A INPUT -p tcp --dport 8594 -s 192.168.0.0/16 -j ACCEPT
+iptables -A INPUT -p tcp --dport 8594 -s 10.0.0.0/8     -j ACCEPT
+iptables -A INPUT -p tcp --dport 8594 -s 172.16.0.0/12  -j ACCEPT
+iptables -A INPUT -p tcp --dport 8596 -s 192.168.0.0/16 -j ACCEPT
+iptables -A INPUT -p tcp --dport 8596 -s 10.0.0.0/8     -j ACCEPT
+iptables -A INPUT -p tcp --dport 8596 -s 172.16.0.0/12  -j ACCEPT
+
 # ── HTTP / HTTPS outbound (OUTPUT is ACCEPT, explicit rules for logging) ──
 # NOTE: Outbound is already allowed by default policy.
 # These rules are explicit for policy visibility.

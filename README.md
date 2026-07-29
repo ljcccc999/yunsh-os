@@ -28,7 +28,8 @@ YUNSH OS is the connection layer of the YUNSH ecosystem. It combines an optical-
 - Floating application windows with move, resize, minimize, close, and full-screen controls.
 - Direct spatial window layouts for 3DoF viewing: front, left angle, right angle, and distance presets.
 - Window pin and follow modes for view-relative display behavior.
-- SpaceCapsule export and restore for transferable `.yunshspace` workspace files.
+- SpaceCapsule export and restore, plus encrypted YUNSH Drop discovery, sender delivery, and receiver approval on the local network.
+- YUNSH Link import for forwarding `.yunshspace` files through the iOS share sheet to WeChat, Files, AirDrop, or another installed app.
 - 30 Hz head-pose sampling with adjustable smoothing, yaw wrap handling, roll compensation, and one-action recentering.
 - Home workspace, task switcher, Control Center, and a glass virtual keyboard.
 - Optional Comfort DNA onboarding with steady, balanced, and responsive local comfort profiles.
@@ -44,13 +45,17 @@ The shell uses one comfortable shared focal plane for both eyes. True stereo app
 - Persistent PTY terminal.
 - Screenshot capture with in-context preview and photo library.
 - SpaceCapsule workspace manager.
+- iPhone Screen Relay as a movable, resizable, pinnable spatial window, using an explicitly started ReplayKit broadcast over encrypted local Wi-Fi.
 - Settings, system information, update center, network, and Bluetooth management.
 - Integrated Android application environment through Waydroid on the YUNSH Wayland session; its background preparation never blocks the desktop or activation flow.
 - Built-in Android app catalogue with a verified F-Droid fallback, plus APK side-loading through `yunsh-android install-apk`.
 
 ### Device services
 
-- Guided activation and first-run setup with an optional, skippable Comfort DNA step.
+- Multilingual Hello welcome followed by a touch-first activation flow.
+- Separate, skippable glasses and iPhone pairing pages with visible progress.
+- Case-insensitive one-time phone pairing keys; no QR code or camera is required.
+- Optional, skippable Comfort DNA setup.
 - Wi-Fi and Bluetooth management.
 - OTA update service and factory-reset workflow.
 - Power, input, splash-screen, and screenshot services.
@@ -65,7 +70,9 @@ YUNSH Link is the companion application for the YUNSH display and YUNSH OS. It u
 | **Phone Mode** | Connects directly to `YUNSH V1 (Glasses)` | Reads motion and glasses battery status, and sends display-brightness controls. This mode is for direct glasses use; Bluetooth carries control and telemetry, not display video. |
 | **YUNSH OS Mode** | Connects only to the Raspberry Pi advertising as `YUNSH V1` | The Raspberry Pi connects to the glasses, relays glasses telemetry and brightness control, reports host power, and receives companion-initiated update requests over its own network connection. |
 
-Only one mode is active at a time. In YUNSH OS Mode, the iPhone does not also connect directly to the glasses; the Raspberry Pi is the single connection and telemetry hub.
+Only one mode is active at a time. In YUNSH OS Mode, the iPhone does not also connect directly to the glasses; the Raspberry Pi is the single connection and telemetry hub. The encrypted BLE characteristics are additionally protected by a short-lived, single-use YUNSH pairing key shown on the display. Key entry is case-insensitive.
+
+Screen Relay uses Apple's public ReplayKit broadcast UI and always requires an explicit iPhone confirmation. Video frames use encrypted local Wi-Fi or the iPhone hotspot; Bluetooth remains the pairing, command, and telemetry path. YUNSH Link cannot silently capture iOS or split unrelated iOS apps into separate windows.
 
 ## Architecture
 
@@ -90,7 +97,7 @@ The user interface reads the head-tracking service locally. Compatible orientati
 | Computer | Raspberry Pi 5 |
 | Display | HDMI binocular AR display controller with an EDID-advertised SBS mode, or a conventional monitor for mono development |
 | Storage | 16 GB or larger A2 microSD card recommended |
-| Input | USB keyboard and mouse for setup and desktop control |
+| Input | Touch/gaze-compatible pointer, YUNSH Link, or a mouse; no physical keyboard is required for activation or recentering |
 | Power | Stable USB-C power supply suitable for Raspberry Pi 5 |
 | Optional tracking | Bluetooth-connected motion controller |
 
@@ -111,13 +118,13 @@ Compare the result with the matching `.sha256` asset published with the release.
 
 ## First boot
 
-The initial setup downloads the required desktop packages, including the Raspberry Pi 5 DRM/KMS, EGL, OpenGL, and Vulkan runtime, and then reboots once into the activation flow. Connect Ethernet before the first power-on and keep the device online until setup finishes. A temporary network failure retries automatically without marking the setup complete. Comfort DNA is offered as an optional local comfort-profile step and can be skipped. Completing or skipping activation creates a persistent activation marker, so later boots open the desktop directly.
+The initial setup downloads the required desktop packages, including the Raspberry Pi 5 DRM/KMS, EGL, OpenGL, and Vulkan runtime, and then reboots once into the activation flow. Connect Ethernet before the first power-on and keep the device online until setup finishes. A temporary network failure retries automatically without marking the setup complete. Activation starts with an animated multilingual Hello screen, then guides language, Wi-Fi, optional glasses pairing, optional YUNSH Link phone pairing, account setup, and optional Comfort DNA. Both device-pairing pages show progress and can be skipped. Completing or skipping activation creates a persistent activation marker, so later boots open the desktop directly.
 
 Factory reset clears user data, saved Wi-Fi networks, Bluetooth pairings, and the activation marker. It preserves YUNSH OS, installed desktop dependencies, and the current system version, then returns to activation on the next boot.
 
 ## Motion tracking
 
-YUNSH OS supports optional Bluetooth-connected motion tracking for spatial interaction. The head-tracking bridge provides a consistent interface for compatible motion sources and for the built-in development simulator. After tracking is available, each floating window can be placed directly in a front, left-angle, right-angle, or distance layout from its title bar. The current direction can be recentered from Control Center or with `Ctrl+Shift+R`.
+YUNSH OS supports optional Bluetooth-connected motion tracking for spatial interaction. The head-tracking bridge provides a consistent interface for compatible motion sources and for the built-in development simulator. After tracking is available, each floating window can be placed directly in a front, left-angle, right-angle, or distance layout from its title bar. The current direction can be recentered from the always-available virtual Recenter button, Control Center, or YUNSH Link on iPhone. A keyboard shortcut remains only as a development fallback.
 
 ```text
 Bluetooth motion controller → head-tracking bridge → YUNSH OS workspace

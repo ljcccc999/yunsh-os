@@ -13,9 +13,11 @@ Protocol (all UUIDs are intentionally separate from the glasses controller):
 """
 
 import json
+import hmac
 import os
 import socket
 import sys
+import time
 
 import dbus
 import dbus.exceptions
@@ -37,11 +39,89 @@ UPDATE_SOCKET = "/tmp/yunsh-update.sock"
 GLASSES_STATUS_PATH = "/tmp/yunsh-glasses-status.json"
 POWER_STATUS_PATH = "/tmp/yunsh-power-status.json"
 GLASSES_CONTROL_PATH = "/tmp/yunsh-glasses-control.json"
+LINK_STATUS_PATH = "/tmp/yunsh-link-status.json"
+UI_COMMAND_PATH = "/tmp/yunsh-ui-command.json"
+LINK_PAIRING_PATH = "/run/yunsh/link-pairing.json"
+LINK_TRUST_PATH = "/etc/yunsh/link-trust.json"
 APP_PATH = "/top/yunsh/link"
 AGENT_PATH = f"{APP_PATH}/agent"
 SERVICE_UUID = "F000BB00-0451-4000-B000-000000000000"
 COMMAND_UUID = "F000BB01-0451-4000-B000-000000000000"
 STATUS_UUID = "F000BB02-0451-4000-B000-000000000000"
+LAST_AUTHORIZED = False
+
+
+def atomic_write_json(path: str, payload: dict) -> None:
+    temporary = path + ".tmp"
+    with open(temporary, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, separators=(",", ":"))
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, path)
+
+
+def option_device(options=None) -> str:
+    return str((options or {}).get("device", ""))
+
+
+def trusted_device(device: str) -> bool:
+    if not device:
+        return False
+    record = read_json(LINK_TRUST_PATH)
+    return hmac.compare_digest(str(record.get("device", "")), device)
+
+
+def verify_pairing_code(code, device: str) -> bool:
+    if not device:
+        return False
+    record = read_json(LINK_PAIRING_PATH)
+    try:
+        valid = (
+            not record.get("used")
+            and float(record.get("expiresAt", 0)) > time.time()
+            and hmac.compare_digest(
+                str(record.get("code", "")).upper(),
+                str(code).strip().upper(),
+            )
+        )
+    except (TypeError, ValueError):
+        valid = False
+    if not valid:
+        return False
+    record["used"] = True
+    atomic_write_json(LINK_PAIRING_PATH, record)
+    os.makedirs(os.path.dirname(LINK_TRUST_PATH), exist_ok=True)
+    atomic_write_json(
+        LINK_TRUST_PATH,
+        {"device": device, "pairedAt": time.time(), "method": "six-digit-key"},
+    )
+    os.chmod(LINK_TRUST_PATH, 0o600)
+    return True
+
+
+def note_link_activity(options=None, authorized=False) -> None:
+    device = ""
+    if options:
+        device = str(options.get("device", ""))
+    atomic_write_json(
+        LINK_STATUS_PATH,
+        {
+            "connected": True,
+            "device": device,
+            "mode": "yunsh-os",
+            "authenticated": bool(authorized),
+            "lastActivity": time.time(),
+        },
+    )
+
+
+def request_recenter() -> dict:
+    command_id = f"{time.time_ns():x}"
+    atomic_write_json(
+        UI_COMMAND_PATH,
+        {"id": command_id, "action": "recenter", "createdAt": time.time()},
+    )
+    return {"result": "recenter_requested"}
 
 
 def update_command(action: str) -> dict:
@@ -95,6 +175,7 @@ def compact_status(result: dict) -> dict:
         "gv": glasses.get("battery_mv"),
         "gl": glasses.get("brightness"),
         "hb": power.get("battery") if power.get("available") else None,
+        "pa": bool(result.get("authorized", LAST_AUTHORIZED)),
     }
 
 
@@ -197,8 +278,11 @@ class StatusCharacteristic(Characteristic):
             self.PropertiesChanged(CHAR_IFACE, {"Value": self.value}, [])
 
     @dbus.service.method(CHAR_IFACE, in_signature="a{sv}", out_signature="ay")
-    def ReadValue(self, _options):
-        self.refresh()
+    def ReadValue(self, options):
+        global LAST_AUTHORIZED
+        LAST_AUTHORIZED = trusted_device(option_device(options))
+        note_link_activity(options, LAST_AUTHORIZED)
+        self.refresh({"authorized": LAST_AUTHORIZED, **update_command("get_status")})
         return self.value
 
     @dbus.service.method(CHAR_IFACE)
@@ -221,10 +305,31 @@ class CommandCharacteristic(Characteristic):
         self.status = status
 
     @dbus.service.method(CHAR_IFACE, in_signature="aya{sv}")
-    def WriteValue(self, value, _options):
+    def WriteValue(self, value, options):
+        global LAST_AUTHORIZED
         try:
             payload = json.loads(bytes(value).decode())
             action = payload.get("action")
+            device = option_device(options)
+            authorized = trusted_device(device)
+            if action == "pair_phone":
+                authorized = verify_pairing_code(payload.get("code"), device)
+                LAST_AUTHORIZED = authorized
+                note_link_activity(options, authorized)
+                self.status.refresh(
+                    {
+                        "authorized": authorized,
+                        "result": "phone_paired" if authorized else "invalid_pairing_key",
+                    }
+                )
+                return
+            LAST_AUTHORIZED = authorized
+            note_link_activity(options, authorized)
+            if not authorized and action != "get_status":
+                raise ValueError("phone pairing key required")
+            if action == "recenter":
+                self.status.refresh(request_recenter())
+                return
             if action == "set_glasses_brightness":
                 self.status.refresh(write_glasses_brightness(payload.get("value")))
                 return

@@ -116,9 +116,9 @@ Item {
         width: Math.min(parent.width - 40, 680)
         height: Math.min(parent.height - 36, 610)
         radius: 32
-        color: Qt.rgba(15/255, 15/255, 32/255, 0.52)
+        color: Qt.rgba(248/255, 252/255, 255/255, 0.90)
         border.width: 1
-        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.07)
+        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.78)
 
         Rectangle {
             anchors.top: parent.top
@@ -146,13 +146,11 @@ Item {
                     height: 32
                     radius: 16
                     visible: !comfortDna.onboarding
-                    color: backArea.pressed
-                        ? Qt.rgba(0/255, 212/255, 255/255, 0.22)
-                        : Qt.rgba(0/255, 212/255, 255/255, 0.11)
+                    color: "#00D4FF"
                     Text {
                         anchors.centerIn: parent
                         text: "← 返回"
-                        color: "#00D4FF"
+                        color: "#00151B"
                         font.pixelSize: 13
                         font.weight: Font.Medium
                     }
@@ -169,7 +167,7 @@ Item {
                     width: 82
                     text: "可随时修改"
                     horizontalAlignment: Text.AlignRight
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.32)
+                    color: "#6F7A85"
                     font.pixelSize: 11
                 }
             }
@@ -177,7 +175,7 @@ Item {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "Comfort DNA"
-                color: "#FFFFFF"
+                color: "#111722"
                 font.pixelSize: 28
                 font.weight: Font.DemiBold
                 font.letterSpacing: -0.4
@@ -187,7 +185,7 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: parent.width - 40
                 text: "选择一个舒适起点。它只调整本机的头追平滑、视野与动效，不上传运动数据。"
-                color: Qt.rgba(255/255, 255/255, 255/255, 0.55)
+                color: "#596773"
                 font.pixelSize: 13
                 lineHeight: 1.35
                 wrapMode: Text.WordWrap
@@ -208,11 +206,11 @@ Item {
                         radius: 18
                         color: comfortDna.selectedProfile === modelData.id
                             ? Qt.rgba(0/255, 212/255, 255/255, 0.13)
-                            : Qt.rgba(255/255, 255/255, 255/255, profileArea.pressed ? 0.08 : 0.045)
+                            : (profileArea.pressed ? "#E7F8FC" : "#FFFFFF")
                         border.width: 1
                         border.color: comfortDna.selectedProfile === modelData.id
                             ? Qt.rgba(0/255, 212/255, 255/255, 0.45)
-                            : Qt.rgba(255/255, 255/255, 255/255, 0.07)
+                            : "#D8E6EC"
 
                         Row {
                             anchors.fill: parent
@@ -225,7 +223,7 @@ Item {
                                 height: 24
                                 radius: 12
                                 color: comfortDna.selectedProfile === modelData.id
-                                    ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.07)
+                                    ? "#00D4FF" : "#E0E8ED"
                                 Text {
                                     anchors.centerIn: parent
                                     text: comfortDna.selectedProfile === modelData.id ? "✓" : ""
@@ -241,14 +239,14 @@ Item {
                                 spacing: 3
                                 Text {
                                     text: modelData.name + " · " + modelData.summary
-                                    color: "#FFFFFF"
+                                    color: "#151A22"
                                     font.pixelSize: 14
                                     font.weight: Font.Medium
                                 }
                                 Text {
                                     width: parent.width
                                     text: modelData.detail
-                                    color: Qt.rgba(255/255, 255/255, 255/255, 0.42)
+                                    color: "#65727E"
                                     font.pixelSize: 11
                                     wrapMode: Text.WordWrap
                                 }
@@ -286,15 +284,13 @@ Item {
                     height: 44
                     radius: 22
                     visible: comfortDna.onboarding
-                    color: skipArea.pressed
-                        ? Qt.rgba(255/255, 255/255, 255/255, 0.10)
-                        : Qt.rgba(255/255, 255/255, 255/255, 0.045)
+                    color: "#00D4FF"
                     border.width: 1
-                    border.color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
+                    border.color: "#7BE7FF"
                     Text {
                         anchors.centerIn: parent
                         text: "以后再设置"
-                        color: "#B5B5C5"
+                        color: "#00151B"
                         font.pixelSize: 14
                     }
                     MouseArea {
@@ -309,15 +305,13 @@ Item {
                     width: 190
                     height: 44
                     radius: 22
-                    color: applyArea.pressed
-                        ? Qt.rgba(0/255, 212/255, 255/255, 0.30)
-                        : Qt.rgba(0/255, 212/255, 255/255, 0.17)
+                    color: applyArea.pressed ? "#45E1FF" : "#00D4FF"
                     border.width: 1
-                    border.color: Qt.rgba(0/255, 212/255, 255/255, 0.34)
+                    border.color: "#7BE7FF"
                     Text {
                         anchors.centerIn: parent
                         text: comfortDna.busy ? "正在保存…" : "应用舒适指纹"
-                        color: "#00D4FF"
+                        color: "#00151B"
                         font.pixelSize: 14
                         font.weight: Font.DemiBold
                     }

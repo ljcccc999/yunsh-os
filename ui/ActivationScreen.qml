@@ -1,6 +1,5 @@
-// YUNSH OS v1.0 - Activation Wizard (visionOS Style)
-// First-boot setup: welcome, language, Wi-Fi, initialization
-// All glassmorphism, no login required
+// YUNSH OS v2.0.0 - touch-first activation experience.
+// Physical keyboard input is never required.
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
@@ -18,8 +17,8 @@ Rectangle {
     signal skipActivation()
 
     // ─── State ───────────────────────────────────────
-    property int currentStep: 0  // 0=welcome, 1=language, 2=wifi, 3=account, 4=comfort, 5=initializing
-    readonly property int totalSteps: 6
+    property int currentStep: 0  // welcome, language, Wi-Fi, glasses, account, comfort, finish
+    readonly property int totalSteps: 8
 
     property string selectedLanguage: "简体中文"
     property string selectedKeyboard: "拼音"
@@ -34,6 +33,107 @@ Rectangle {
     property bool wifiConnecting: false
     property bool wifiConnected: false
     property string wifiStatusText: ""
+    property var glassesDevices: []
+    property string selectedGlassesMac: ""
+    property string selectedGlassesName: ""
+    property string glassesPairingState: "ready"
+    property string glassesPairingStatus: "打开眼镜并让它保持在附近"
+    property int glassesPairingProgress: 0
+    property bool phoneConnected: false
+    property int phonePairingProgress: 0
+    property string phonePairingStatus: "在 iPhone 上打开 YUNSH Link"
+    property string phonePairingCode: "••••••"
+    property int helloIndex: 0
+    readonly property var helloWords: ["你好", "Hello", "Bonjour", "こんにちは", "안녕하세요"]
+
+    function scanForGlasses() {
+        if (glassesPairingState === "scanning" || glassesPairingState === "pairing")
+            return
+        glassesPairingState = "scanning"
+        glassesPairingProgress = 18
+        glassesPairingStatus = "正在搜索附近的 YUNSH 眼镜…"
+        glassesDevices = []
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/bluetooth", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 18000
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return
+            try {
+                var response = JSON.parse(xhr.responseText)
+                var found = response.devices || []
+                var matching = []
+                for (var i = 0; i < found.length; i++) {
+                    var name = String(found[i].name || "")
+                    if (name.indexOf("YUNSH V1") === 0)
+                        matching.push(found[i])
+                }
+                glassesDevices = matching
+                glassesPairingProgress = matching.length > 0 ? 45 : 0
+                glassesPairingState = matching.length > 0 ? "found" : "notFound"
+                glassesPairingStatus = matching.length > 0
+                    ? "已找到 " + matching.length + " 台眼镜，请选择并配对"
+                    : "没有找到眼镜，请确认眼镜已开机"
+            } catch (error) {
+                glassesPairingState = "error"
+                glassesPairingProgress = 0
+                glassesPairingStatus = "暂时无法搜索，请重试或跳过"
+            }
+        }
+        xhr.send(JSON.stringify({command: "scan", timeout: 8}))
+    }
+
+    function pairSelectedGlasses() {
+        if (!selectedGlassesMac || glassesPairingState === "pairing")
+            return
+        glassesPairingState = "pairing"
+        glassesPairingProgress = 62
+        glassesPairingStatus = "正在建立安全配对…"
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/bluetooth", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 30000
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return
+            try {
+                var response = JSON.parse(xhr.responseText)
+                if (response.success || response.paired) {
+                    glassesPairingProgress = 100
+                    glassesPairingState = "paired"
+                    glassesPairingStatus = "配对完成，YUNSH OS 会记住这副眼镜"
+                } else {
+                    glassesPairingProgress = 45
+                    glassesPairingState = "error"
+                    glassesPairingStatus = response.error || response.message || "配对失败，请重试"
+                }
+            } catch (error) {
+                glassesPairingProgress = 45
+                glassesPairingState = "error"
+                glassesPairingStatus = "配对服务没有响应，请重试或跳过"
+            }
+        }
+        xhr.send(JSON.stringify({command: "pair", mac: selectedGlassesMac}))
+    }
+
+    function requestPhonePairingCode() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/link-pairing", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 1200
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return
+            try {
+                var data = JSON.parse(xhr.responseText)
+                phonePairingCode = data.success ? data.code : "暂不可用"
+            } catch (error) {
+                phonePairingCode = "暂不可用"
+            }
+        }
+        xhr.send(JSON.stringify({action: "new_code"}))
+    }
 
     function applyActivationConfiguration() {
         activationConfigReady = false
@@ -101,6 +201,40 @@ Rectangle {
         opacity: 0.3
     }
 
+    Timer {
+        interval: 1050
+        running: currentStep === 0
+        repeat: true
+        onTriggered: helloIndex = (helloIndex + 1) % helloWords.length
+    }
+
+    Timer {
+        interval: 1000
+        running: currentStep === 4
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: {
+            var xhr = new XMLHttpRequest()
+            xhr.open("GET", "http://127.0.0.1:8591/api/link-status", true)
+            xhr.timeout = 800
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState !== XMLHttpRequest.DONE)
+                    return
+                try {
+                    var data = JSON.parse(xhr.responseText)
+                    phoneConnected = data.connected === true
+                    phonePairingProgress = phoneConnected ? 100 : Math.min(78, phonePairingProgress + 7)
+                    phonePairingStatus = phoneConnected
+                        ? "iPhone 已连接并完成加密验证"
+                        : "正在等待 YUNSH Link 连接…"
+                } catch (error) {
+                    phonePairingStatus = "等待连接服务启动，可稍后重试或跳过"
+                }
+            }
+            xhr.send()
+        }
+    }
+
     // ════════════════════════════════════════════════════
     // STEP 0: Welcome Page
     // ════════════════════════════════════════════════════
@@ -144,7 +278,7 @@ Rectangle {
                 // Multi-language "Hello"
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "你好"
+                    text: helloWords[helloIndex]
                     color: "#FFFFFF"
                     font.pixelSize: 48
                     font.weight: Font.Light
@@ -178,14 +312,14 @@ Rectangle {
                 Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: 200; height: 48; radius: 24
-                    color: Qt.rgba(0/255, 212/255, 255/255, 0.15)
-                    border.color: Qt.rgba(0/255, 212/255, 255/255, 0.12)
+                    color: "#00D4FF"
+                    border.color: "#7BE7FF"
                     border.width: 1
 
                     Text {
                         anchors.centerIn: parent
                         text: "继续"
-                        color: "#00D4FF"
+                        color: "#00151B"
                         font.pixelSize: 16
                         font.weight: Font.Medium
                     }
@@ -193,23 +327,17 @@ Rectangle {
                     MouseArea {
                         anchors.fill: parent
                         hoverEnabled: true
-                        onEntered: parent.color = Qt.rgba(0/255, 212/255, 255/255, 0.25)
-                        onExited: parent.color = Qt.rgba(0/255, 212/255, 255/255, 0.15)
+                        onEntered: parent.color = "#45E1FF"
+                        onExited: parent.color = "#00D4FF"
                         onClicked: currentStep = 1
                     }
                 }
 
-                // Skip hint
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "按 Esc 跳过设置"
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+                    text: "全程可使用触控、眼镜指针或 YUNSH Link 操作"
+                    color: Qt.rgba(255/255, 255/255, 255/255, 0.32)
                     font.pixelSize: 10
-
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: activationScreen.skipActivation()
-                    }
                 }
             }
         }
@@ -349,21 +477,21 @@ Rectangle {
                 Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: 200; height: 44; radius: 22
-                    color: Qt.rgba(0/255, 212/255, 255/255, 0.15)
-                    border.color: Qt.rgba(0/255, 212/255, 255/255, 0.12)
+                    color: "#00D4FF"
+                    border.color: "#7BE7FF"
                     border.width: 1
 
                     Text {
                         anchors.centerIn: parent
                         text: "继续"
-                        color: "#00D4FF"; font.pixelSize: 15; font.weight: Font.Medium
+                        color: "#00151B"; font.pixelSize: 15; font.weight: Font.Medium
                     }
 
                     MouseArea {
                         anchors.fill: parent
                         hoverEnabled: true
-                        onEntered: parent.color = Qt.rgba(0/255, 212/255, 255/255, 0.25)
-                        onExited: parent.color = Qt.rgba(0/255, 212/255, 255/255, 0.15)
+                        onEntered: parent.color = "#45E1FF"
+                        onExited: parent.color = "#00D4FF"
                         onClicked: currentStep = 2
                     }
                 }
@@ -469,9 +597,9 @@ Rectangle {
                     
                     Rectangle {
                         width: 160; height: 44; radius: 22
-                        color: Qt.rgba(255/255, 255/255, 255/255, 0.03)
-                        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04); border.width: 1
-                        Text { anchors.centerIn: parent; text: "跳过"; color: "#8888A0"; font.pixelSize: 14 }
+                        color: "#00D4FF"
+                        border.color: "#7BE7FF"; border.width: 1
+                        Text { anchors.centerIn: parent; text: "跳过"; color: "#00151B"; font.pixelSize: 14; font.weight: Font.Medium }
                         MouseArea {
                             anchors.fill: parent; hoverEnabled: true
                             onClicked: currentStep = 3
@@ -480,9 +608,9 @@ Rectangle {
                     
                     Rectangle {
                         width: 160; height: 44; radius: 22
-                        color: wifiNextBtn.containsMouse ? Qt.rgba(0/255, 212/255, 255/255, 0.25) : Qt.rgba(0/255, 212/255, 255/255, 0.15)
-                        border.color: Qt.rgba(0/255, 212/255, 255/255, 0.12); border.width: 1
-                        Text { anchors.centerIn: parent; text: "下一步"; color: "#00D4FF"; font.pixelSize: 14; font.weight: Font.Medium }
+                        color: wifiNextBtn.containsMouse ? "#45E1FF" : "#00D4FF"
+                        border.color: "#7BE7FF"; border.width: 1
+                        Text { anchors.centerIn: parent; text: "下一步"; color: "#00151B"; font.pixelSize: 14; font.weight: Font.Medium }
                         MouseArea {
                             id: wifiNextBtn
                             anchors.fill: parent
@@ -541,11 +669,317 @@ Rectangle {
     }
 
     // ════════════════════════════════════════════════════
-    // STEP 3: Create Account
+    // STEP 3: Optional glasses pairing
     // ════════════════════════════════════════════════════
     Item {
         anchors.fill: parent
         visible: currentStep === 3
+
+        onVisibleChanged: {
+            if (visible && glassesPairingState === "ready")
+                scanForGlasses()
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: 560
+            height: 500
+            radius: 34
+            color: Qt.rgba(248/255, 252/255, 255/255, 0.88)
+            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.75)
+            border.width: 1
+
+            Column {
+                anchors.fill: parent
+                anchors.margins: 30
+                spacing: 15
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "连接你的 YUNSH 眼镜"
+                    color: "#10131A"
+                    font.pixelSize: 25
+                    font.weight: Font.DemiBold
+                }
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 470
+                    text: "配对后可使用 3DoF 头部追踪、亮度和电量状态。此步骤可以跳过，稍后也能在蓝牙设置中完成。"
+                    color: "#59616E"
+                    font.pixelSize: 13
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    lineHeight: 1.25
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: 7
+                    radius: 4
+                    color: "#DDE7ED"
+                    Rectangle {
+                        width: parent.width * glassesPairingProgress / 100
+                        height: parent.height
+                        radius: 4
+                        color: "#00D4FF"
+                        Behavior on width { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    text: glassesPairingStatus
+                    color: glassesPairingState === "error" ? "#C43D4A" : "#237489"
+                    font.pixelSize: 12
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                ScrollView {
+                    width: parent.width
+                    height: 190
+                    clip: true
+
+                    Column {
+                        width: parent.width
+                        spacing: 8
+
+                        Text {
+                            width: parent.width
+                            visible: glassesDevices.length === 0
+                            text: glassesPairingState === "scanning"
+                                ? "正在扫描附近设备…"
+                                : "附近还没有可选择的 YUNSH 眼镜"
+                            color: "#75808D"
+                            font.pixelSize: 13
+                            horizontalAlignment: Text.AlignHCenter
+                            topPadding: 56
+                        }
+
+                        Repeater {
+                            model: glassesDevices
+                            Rectangle {
+                                required property var modelData
+                                width: parent.width
+                                height: 64
+                                radius: 18
+                                color: selectedGlassesMac === modelData.mac ? "#DDF8FF" : "#FFFFFF"
+                                border.width: 1
+                                border.color: selectedGlassesMac === modelData.mac ? "#00D4FF" : "#DCE8EE"
+
+                                Row {
+                                    anchors.fill: parent
+                                    anchors.margins: 13
+                                    spacing: 12
+                                    Rectangle {
+                                        width: 38; height: 38; radius: 12
+                                        color: "#E5FAFF"
+                                        Text { anchors.centerIn: parent; text: "⌁"; color: "#00AACA"; font.pixelSize: 22 }
+                                    }
+                                    Column {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width - 100
+                                        Text { width: parent.width; text: modelData.name || "YUNSH V1 (Glasses)"; color: "#151922"; font.pixelSize: 14; font.weight: Font.Medium; elide: Text.ElideRight }
+                                        Text { text: modelData.paired ? "已配对，可重新连接" : "可配对"; color: "#697582"; font.pixelSize: 11 }
+                                    }
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: selectedGlassesMac === modelData.mac ? "✓" : ""
+                                        color: "#00AACA"
+                                        font.pixelSize: 19
+                                    }
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        selectedGlassesMac = modelData.mac
+                                        selectedGlassesName = modelData.name || "YUNSH V1 (Glasses)"
+                                        glassesPairingStatus = "已选择 " + selectedGlassesName
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 10
+
+                    Rectangle {
+                        width: 145; height: 44; radius: 22
+                        color: "#00D4FF"
+                        Text { anchors.centerIn: parent; text: "重新搜索"; color: "#00151B"; font.pixelSize: 14; font.weight: Font.Medium }
+                        MouseArea { anchors.fill: parent; enabled: glassesPairingState !== "pairing"; onClicked: scanForGlasses() }
+                    }
+                    Rectangle {
+                        width: 145; height: 44; radius: 22
+                        color: "#00D4FF"
+                        opacity: selectedGlassesMac.length > 0 && glassesPairingState !== "pairing" ? 1 : 0.42
+                        Text {
+                            anchors.centerIn: parent
+                            text: glassesPairingState === "pairing" ? "配对中…" : "配对"
+                            color: "#00151B"
+                            font.pixelSize: 14
+                            font.weight: Font.Medium
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            enabled: selectedGlassesMac.length > 0 && glassesPairingState !== "pairing"
+                            onClicked: pairSelectedGlasses()
+                        }
+                    }
+                    Rectangle {
+                        width: 145; height: 44; radius: 22
+                        color: "#00D4FF"
+                        Text {
+                            anchors.centerIn: parent
+                            text: glassesPairingState === "paired" ? "继续" : "跳过"
+                            color: "#00151B"
+                            font.pixelSize: 14
+                            font.weight: Font.Medium
+                        }
+                        MouseArea { anchors.fill: parent; onClicked: currentStep = 4 }
+                    }
+                }
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════
+    // STEP 4: Optional iPhone / YUNSH Link pairing
+    // ════════════════════════════════════════════════════
+    Item {
+        anchors.fill: parent
+        visible: currentStep === 4
+
+        onVisibleChanged: {
+            if (visible) {
+                phonePairingProgress = 20
+                phonePairingStatus = "在 YUNSH Link 输入下方的一次性密钥"
+                requestPhonePairingCode()
+            }
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: 540; height: 590; radius: 34
+            color: Qt.rgba(248/255, 252/255, 255/255, 0.90)
+            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.78)
+            border.width: 1
+
+            Column {
+                anchors.fill: parent
+                anchors.margins: 34
+                spacing: 18
+
+                Rectangle {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 82; height: 82; radius: 25
+                    color: "#E1F9FF"
+                    Text { anchors.centerIn: parent; text: "◉"; color: "#00AFCF"; font.pixelSize: 42 }
+                }
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "连接 iPhone"
+                    color: "#10131A"
+                    font.pixelSize: 25
+                    font.weight: Font.DemiBold
+                }
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 450
+                    text: "请先在 iPhone 下载并打开 YUNSH Link，再选择“YUNSH OS 模式”并连接 YUNSH V1，然后输入眼镜中显示的一次性密钥。无需二维码。"
+                    color: "#59616E"
+                    font.pixelSize: 13
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    lineHeight: 1.3
+                }
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: "未安装？请通过 YUNSH 官方安装页或当前 TestFlight 获取 YUNSH Link"
+                    color: "#008DA8"
+                    font.pixelSize: 11
+                    font.weight: Font.Medium
+                }
+
+                Rectangle {
+                    width: parent.width; height: 8; radius: 4
+                    color: "#DDE7ED"
+                    Rectangle {
+                        width: parent.width * phonePairingProgress / 100
+                        height: parent.height; radius: 4
+                        color: "#00D4FF"
+                        Behavior on width { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+                    }
+                }
+
+                Text {
+                    width: parent.width
+                    text: phonePairingStatus
+                    color: phoneConnected ? "#14865D" : "#237489"
+                    font.pixelSize: 13
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                Rectangle {
+                    width: parent.width
+                    height: 84
+                    radius: 20
+                    color: "#FFFFFF"
+                    border.width: 1
+                    border.color: "#DCE8EE"
+                    Column {
+                        anchors.centerIn: parent
+                        spacing: 4
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: phoneConnected ? "✓ 安全控制通道已建立" : phonePairingCode
+                            color: "#00AFCF"
+                            font.pixelSize: phoneConnected ? 17 : 31
+                            font.weight: Font.Bold
+                            font.letterSpacing: phoneConnected ? 0 : 7
+                        }
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: phoneConnected ? "密钥已使用并失效" : "10 分钟有效 · 仅在 YUNSH Link 中输入"
+                            color: "#64717D"
+                            font.pixelSize: 11
+                        }
+                    }
+                }
+
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 12
+                    Rectangle {
+                        width: 190; height: 46; radius: 23
+                        color: "#00D4FF"
+                        Text { anchors.centerIn: parent; text: "跳过"; color: "#00151B"; font.pixelSize: 14; font.weight: Font.Medium }
+                        MouseArea { anchors.fill: parent; onClicked: currentStep = 5 }
+                    }
+                    Rectangle {
+                        width: 190; height: 46; radius: 23
+                        color: "#00D4FF"
+                        opacity: phoneConnected ? 1 : 0.42
+                        Text { anchors.centerIn: parent; text: "继续"; color: "#00151B"; font.pixelSize: 14; font.weight: Font.Medium }
+                        MouseArea { anchors.fill: parent; enabled: phoneConnected; onClicked: currentStep = 5 }
+                    }
+                }
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════
+    // STEP 5: Create Account
+    // ════════════════════════════════════════════════════
+    Item {
+        anchors.fill: parent
+        visible: currentStep === 5
 
         Rectangle {
             anchors.centerIn: parent
@@ -666,24 +1100,25 @@ Rectangle {
 
                     Rectangle {
                         width: 160; height: 44; radius: 22
-                        color: Qt.rgba(255/255, 255/255, 255/255, 0.03)
-                        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04); border.width: 1
-                        Text { anchors.centerIn: parent; text: "跳过"; color: "#8888A0"; font.pixelSize: 14 }
+                        color: "#00D4FF"
+                        border.color: "#7BE7FF"; border.width: 1
+                        Text { anchors.centerIn: parent; text: "跳过"; color: "#00151B"; font.pixelSize: 14; font.weight: Font.Medium }
                         MouseArea {
                             anchors.fill: parent; hoverEnabled: true
                             onClicked: {
                                 accountUsername = "yunsh"
                                 accountPassword = "yunsh123"
-                                currentStep = 4
+                                currentStep = 6
                             }
                         }
                     }
 
                     Rectangle {
                         width: 160; height: 44; radius: 22
-                        color: accountNextBtn.containsMouse && (accountPassword.length > 0 && accountPassword === accountConfirmPassword) ? Qt.rgba(0/255, 212/255, 255/255, 0.25) : Qt.rgba(0/255, 212/255, 255/255, 0.15)
-                        border.color: Qt.rgba(0/255, 212/255, 255/255, 0.12); border.width: 1
-                        Text { anchors.centerIn: parent; text: "继续"; color: (accountPassword.length > 0 && accountPassword === accountConfirmPassword) ? "#00D4FF" : "#555566"; font.pixelSize: 14; font.weight: Font.Medium }
+                        color: "#00D4FF"
+                        opacity: accountPassword.length > 0 && accountPassword === accountConfirmPassword ? 1 : 0.42
+                        border.color: "#7BE7FF"; border.width: 1
+                        Text { anchors.centerIn: parent; text: "继续"; color: "#00151B"; font.pixelSize: 14; font.weight: Font.Medium }
                         MouseArea {
                             id: accountNextBtn; anchors.fill: parent; hoverEnabled: true
                             onClicked: {
@@ -693,7 +1128,7 @@ Rectangle {
                                 } else if (accountPassword !== accountConfirmPassword) {
                                     accountError = "两次密码不一致"
                                 } else {
-                                    currentStep = 4
+                                    currentStep = 6
                                 }
                             }
                         }
@@ -704,27 +1139,27 @@ Rectangle {
     }
 
     // ════════════════════════════════════════════════════
-    // STEP 4: Optional Comfort DNA
+    // STEP 6: Optional Comfort DNA
     // ════════════════════════════════════════════════════
     Item {
         anchors.fill: parent
-        visible: currentStep === 4
+        visible: currentStep === 6
 
         ComfortDnaScreen {
             id: activationComfortDna
             anchors.fill: parent
             onboarding: true
-            onProfileApplied: currentStep = 5
-            onSetupSkipped: currentStep = 5
+            onProfileApplied: currentStep = 7
+            onSetupSkipped: currentStep = 7
         }
     }
 
     // ════════════════════════════════════════════════════
-    // STEP 5: Initializing...
+    // STEP 7: Initializing...
     // ════════════════════════════════════════════════════
     Item {
         anchors.fill: parent
-        visible: currentStep === 5
+        visible: currentStep === 7
 
         property int progressValue: 0
         property int _timerCount: 0
@@ -738,7 +1173,7 @@ Rectangle {
 
         Timer {
             interval: 80
-            running: currentStep === 5 && activationConfigReady && progressValue < 100
+            running: currentStep === 7 && activationConfigReady && progressValue < 100
             repeat: true
             onTriggered: {
                 _timerCount++
@@ -761,7 +1196,7 @@ Rectangle {
 
         Timer {
             interval: 2000
-            running: currentStep === 5 && !activationConfigReady && activationConfigError.length > 0
+            running: currentStep === 7 && !activationConfigReady && activationConfigError.length > 0
             repeat: false
             onTriggered: applyActivationConfiguration()
         }
@@ -850,9 +1285,9 @@ Rectangle {
     Shortcut {
         sequence: "Escape"
         onActivated: {
-            if (currentStep < 3) currentStep++
-            else if (currentStep === 3) currentStep = 4
-            else if (currentStep === 4) activationComfortDna.skipSetup()
+            if (currentStep < 5) currentStep++
+            else if (currentStep === 5) currentStep = 6
+            else if (currentStep === 6) activationComfortDna.skipSetup()
             else skipActivation()
         }
     }

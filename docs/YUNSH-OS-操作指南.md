@@ -189,10 +189,12 @@
 ### SpaceCapsule（空间胶囊）
 
 - 从主屏幕打开“空间胶囊”。
-- 输入空间名称并点击“保存并导出”。
+- 输入空间名称并点击“保存当前空间”。
 - 系统把当前已打开应用、窗口尺寸、空间位置、固定/跟随状态和受支持的应用状态保存为 `.yunshspace` 文件。
-- 文件位于 `/home/yunsh/Downloads`，可通过文件传输、U 盘或后续 YUNSH Flow 转发。
-- 把收到的 `.yunshspace` 文件复制到另一台 YUNSH OS 的 Downloads，刷新列表并点击“恢复”。
+- 选择“发送”，系统会通过 Bonjour 发现同一 Wi-Fi 或 iPhone 热点中的 YUNSH OS，并使用 TLS 加密发送。
+- 接收设备会显示发送方、空间名称和窗口数；只有点击“接受并恢复”后才会导入。
+- 文件也保存在 `/home/yunsh/Downloads`，可以作为离线备份。
+- YUNSH Link 的 Drop 页面可以用已配对密钥加密导入胶囊，再通过 iOS 分享面板转发到微信、文件、隔空投送或其他 App。
 - 导入前系统会校验文件格式、版本、大小和应用白名单。
 - 当前浏览器可恢复网页地址；终端命令、密码和任意第三方应用私有状态不会写入胶囊。
 
@@ -204,8 +206,18 @@
 - “稳定”更重视平滑与减少大幅运动；“平衡”是推荐默认值；“灵敏”优先响应速度与视野。
 
 ### 激活向导（首次开机）
-- 欢迎 → 选择语言 → 连接 Wi-Fi → 设置账户（可跳过）→ Comfort DNA（可跳过）→ 初始化
+- 多语言“你好 / Hello”欢迎 → 选择语言 → Wi-Fi → 配对眼镜（可跳过）→ 配对 iPhone（可跳过）→ 账户（可跳过）→ Comfort DNA（可跳过）→ 初始化
+- 眼镜配对页显示搜索、选择、安全配对和完成进度。
+- iPhone 配对页先提示下载并打开 YUNSH Link，再显示一次性 6 位密钥；密钥不区分大小写、不使用二维码、10 分钟有效且使用后失效。
+- 激活后可在“设置 → YUNSH 眼镜”或“设置 → YUNSH Link / iPhone”重新配对。
 - 跳过则使用默认账户 `yunsh:yunsh123`
+
+### iPhone Screen Relay（投屏窗口）
+
+- 在 YUNSH Link 完成密钥配对，并让 iPhone 与 YUNSH OS 处于同一 Wi-Fi 或 iPhone 热点。
+- 打开 YUNSH Link 的 Display 页面，点击系统广播按钮并在 iOS ReplayKit 面板中明确开始。
+- YUNSH OS 打开“iPhone 投屏”后，画面作为普通空间窗口显示，可移动、缩放、固定、跟随或放到四种空间预设。
+- iOS 不允许静默录屏；每次广播都由用户主动开始。当前功能不会把每个 iOS App 拆成独立空间窗口。
 
 ---
 
@@ -221,6 +233,8 @@
 | yunsh-screenshotd | — | 截图保存 |
 | yunsh-inputd | — | 输入管理 |
 | yunsh-powerd | — | 电源管理 |
+| yunsh-spaced | :8594 TLS | YUNSH Drop 附近发现、加密传输和接收确认 |
+| yunsh-screen-relay | :8596 TLS | ReplayKit 投屏帧接收 |
 
 ---
 

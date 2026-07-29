@@ -45,6 +45,8 @@ install_runtime "${YUNSH_DIR}/system/yunsh-updater.py" "yunsh-updater"
 install_runtime "${YUNSH_DIR}/system/yunsh-network-daemon.py" "yunsh-network-daemon"
 install_runtime "${YUNSH_DIR}/system/yunsh-bluetooth-daemon.py" "yunsh-bluetooth-daemon"
 install_runtime "${YUNSH_DIR}/system/yunsh-link-ble.py" "yunsh-link-ble"
+install_runtime "${YUNSH_DIR}/system/yunsh-spaced.py" "yunsh-spaced"
+install_runtime "${YUNSH_DIR}/system/yunsh-screen-relayd.py" "yunsh-screen-relayd"
 install_runtime "${YUNSH_DIR}/system/yunsh-glasses-bridge.py" "yunsh-glasses-bridge"
 install_runtime "${YUNSH_DIR}/system/yunsh-headtracking" "yunsh-headtracking"
 install_runtime "${YUNSH_DIR}/system/yunsh-bno085-reader" "yunsh-bno085-reader"
@@ -64,7 +66,7 @@ install_runtime "${YUNSH_DIR}/boot/yunsh-firstboot.sh" "yunsh-firstboot.sh"
 install_runtime "${YUNSH_DIR}/boot/yunsh-iptables.sh" "yunsh-iptables.sh"
 
 required_services=(
-    yunsh-os yunsh-firstboot yunsh-local-api yunsh-network yunsh-bluetooth
+    yunsh-os yunsh-firstboot yunsh-local-api yunsh-spaced yunsh-screen-relay yunsh-network yunsh-bluetooth
     yunsh-update yunsh-link-ble yunsh-glasses-bridge yunsh-appd
     yunsh-android-setup yunsh-terminal yunsh-headtracking yunsh-powerd yunsh-splash
 )

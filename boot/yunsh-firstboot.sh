@@ -158,7 +158,7 @@ install_apt 14 "Python environment" python3-pip python3-smbus2
 install_apt 20 "WebEngine" qt6-webengine-dev libqt6webenginequick6 qml6-module-qtwebengine
 install_apt 24 "Android display and container runtime" lxc python3-dbus python3-gi weston libwayland-client0 qml6-module-qtwayland-compositor qt6-wayland
 install_apt 32 "Network & BT" network-manager wpasupplicant bluez
-install_apt 38 "System tools" openssh-server avahi-daemon i2c-tools curl wget git unzip python3-pil
+install_apt 38 "System tools" openssh-server avahi-daemon avahi-utils openssl i2c-tools curl wget git unzip python3-pil
 install_apt 44 "Chinese fonts" fonts-noto-cjk
 install_apt 50 "Audio" pulseaudio alsa-utils
 # Raspberry Pi 5 uses the BCM2712 VideoCore VII through the DRM/KMS + V3D
@@ -191,7 +191,7 @@ pct 78 "Configuring firewall & SSH..."
 setup_firewall
 
 pct 84 "Enabling YUNSH services..."
-systemctl enable yunsh-os yunsh-local-api yunsh-network yunsh-bluetooth yunsh-update yunsh-link-ble yunsh-glasses-bridge \
+systemctl enable yunsh-os yunsh-local-api yunsh-network yunsh-bluetooth yunsh-update yunsh-link-ble yunsh-glasses-bridge yunsh-spaced yunsh-screen-relay \
     yunsh-appd yunsh-android-setup yunsh-terminal yunsh-headtracking yunsh-powerd \
     fstrim.timer 2>/dev/null || true
 
