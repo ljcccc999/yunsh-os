@@ -47,6 +47,9 @@ ApplicationWindow {
     property bool highContrast: false
     property bool focusMode: false
     property bool recordingActive: false
+    // 0 disables automatic screen-off/lock. Values are persisted with the
+    // local spatial preferences because this is a per-device comfort setting.
+    property int autoLockSeconds: 120
     property string pendingSystemAction: ""
     property int systemActionConfirmStage: 0
     property string activeAppId: ""
@@ -286,7 +289,8 @@ ApplicationWindow {
             }
             onRequestLock: {
                 controlCenter.hide()
-                screensaver_item.visible = true
+                screensaver_item.passwordRequired = true
+                screensaver_item.show()
             }
             onRequestSystemAction: function(action) {
                 controlCenter.hide()
@@ -307,7 +311,9 @@ ApplicationWindow {
             onActivated: yunshOS.activateWindow(settingsWindow, "settings")
             onCloseClicked: { yunshOS.closeAppFromSwitcher("settings") }
             onMinimizeClicked: yunshOS.minimizeWindow(settingsWindow, "settings")
-            SettingsScreen { anchors.fill: parent
+            SettingsScreen {
+                anchors.fill: parent
+                autoLockSeconds: yunshOS.autoLockSeconds
                 onBackToHome: switchToHome()
                 onOpenUpdatePage: switchTo(updateWindow, "update")
                 onOpenUpdateHistory: switchTo(updateHistoryWindow, "updatehistory")
@@ -317,6 +323,11 @@ ApplicationWindow {
                 onOpenDisplaySettings: switchTo(displayWindow, "display")
                 onOpenComfortDna: switchTo(comfortDnaWindow, "comfortdna")
                 onOpenSoundSettings: { settingsWindow.visible = false; controlCenter.show() }
+                onRequestAutoLockSeconds: function(seconds) {
+                    yunshOS.autoLockSeconds = seconds
+                    idleTimer.restart()
+                    yunshOS.saveSpatialPreferences()
+                }
                 onRequestFactoryReset: yunshOS.beginSystemActionConfirmation("factory_reset")
             }
         }
@@ -656,20 +667,29 @@ ApplicationWindow {
             visible: false
             z: 400
             onWake: {
-                screensaver_item.visible = false
+                if (!screensaver_item.passwordRequired) {
+                    screensaver_item.visible = false
+                    idleTimer.restart()
+                }
+            }
+            onUnlocked: {
+                screensaver_item.hideScreen()
                 idleTimer.restart()
             }
         }
 
-        // ─── Idle timer — shows screensaver after 2 min no mouse ───
+        // ─── Idle timer — turns the AR surface black and locks locally ───
         Timer {
             id: idleTimer
-            interval: 120000  // 2 minutes
-            running: true
+            interval: Math.max(1, yunshOS.autoLockSeconds) * 1000
+            running: yunshOS.autoLockSeconds > 0
             repeat: false
             onTriggered: {
                 if (!screensaver_item.visible) {
-                    screensaver_item.visible = true
+                    // Automatic screen-off is intentionally frictionless;
+                    // explicit Lock remains password-protected.
+                    screensaver_item.passwordRequired = false
+                    screensaver_item.show()
                 }
             }
         }
@@ -1294,7 +1314,8 @@ ApplicationWindow {
             reduceMotion: reduceMotion,
             reduceTransparency: reduceTransparency,
             highContrast: highContrast,
-            focusMode: focusMode
+            focusMode: focusMode,
+            autoLockSeconds: autoLockSeconds
         }
     }
 
@@ -1317,6 +1338,8 @@ ApplicationWindow {
             highContrast = data.highContrast
         if (typeof data.focusMode === "boolean")
             focusMode = data.focusMode
+        if (typeof data.autoLockSeconds === "number")
+            autoLockSeconds = Math.max(0, Math.min(3600, Math.round(data.autoLockSeconds)))
         applyWindowPreferences()
         updateWindowFocus()
     }
@@ -1331,7 +1354,8 @@ ApplicationWindow {
             reduceMotion: settings.reduceMotion,
             reduceTransparency: settings.reduceTransparency,
             highContrast: settings.highContrast,
-            focusMode: settings.focusMode
+            focusMode: settings.focusMode,
+            autoLockSeconds: settings.autoLockSeconds
         })
         spatialPreferenceSaveTimer.restart()
     }
@@ -1422,7 +1446,10 @@ ApplicationWindow {
             if (controlCenter.visible) { controlCenter.hide(); return }
             if (screenshotOverlay.visible) { screenshotOverlay.cancelled(); return }
             if (virtualKeyboard.visible) { virtualKeyboard.hide(); return }
-            if (screensaver_item.visible) { screensaver_item.wake(); return }
+            if (screensaver_item.visible) {
+                if (!screensaver_item.passwordRequired) screensaver_item.wake()
+                return
+            }
             if (activationScreen.visible && !activationDone) {
                 activationScreen.skipActivation()
                 return
@@ -1559,7 +1586,9 @@ ApplicationWindow {
         onPositionChanged: {
             idleTimer.restart()
             if (screensaver_item.visible) {
-                screensaver_item.visible = false
+                if (!screensaver_item.passwordRequired)
+                    screensaver_item.wake()
+                return
             }
         }
     }

@@ -13,8 +13,45 @@ Rectangle {
 
     property string currentTime: "00:00"
     property string currentDate: ""
+    // Smart wake is the default: an automatic display-off can be resumed
+    // immediately. Explicit locking switches this to password-required.
+    property bool passwordRequired: false
+    property bool unlockBusy: false
+    property string unlockError: ""
 
     signal wake()
+    signal unlocked()
+
+    function attemptUnlock() {
+        if (unlockBusy || unlockPassword.text.length === 0)
+            return
+        unlockBusy = true
+        unlockError = ""
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/verify-boot-password", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 6000
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return
+            unlockBusy = false
+            try {
+                var result = JSON.parse(xhr.responseText || "{}")
+                if (xhr.status === 200 && result.success) {
+                    unlockPassword.text = ""
+                    unlockError = ""
+                    screensaver.unlocked()
+                } else {
+                    unlockError = result.error || "本机密码不正确"
+                    unlockPassword.text = ""
+                    unlockPassword.forceActiveFocus()
+                }
+            } catch (error) {
+                unlockError = "解锁服务暂时不可用"
+            }
+        }
+        xhr.send(JSON.stringify({password: unlockPassword.text}))
+    }
 
     // ─── Clock timer ──────────────────────────────
     Timer {
@@ -97,7 +134,7 @@ Rectangle {
     Text {
         anchors.bottom: parent.bottom; anchors.bottomMargin: 12
         anchors.horizontalCenter: parent.horizontalCenter
-        text: "点击唤醒"
+        text: passwordRequired ? "输入本机密码以解锁" : "点击唤醒"
         color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
         font.pixelSize: 11
     }
@@ -106,17 +143,70 @@ Rectangle {
     MouseArea {
         anchors.fill: parent
         hoverEnabled: false
+        enabled: !passwordRequired
         onClicked: {
             screensaver.wake()
         }
 
-        // Also wake on mouse move
-        onMouseXChanged: screensaver.wake()
-        onMouseYChanged: screensaver.wake()
     }
 
-    // ─── Shortcut: any key wakes ──────────────────
-    Keys.onPressed: screensaver.wake()
+    // ─── Local unlock panel ──────────────────────────
+    Rectangle {
+        id: unlockPanel
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenterOffset: 130
+        width: 390; height: 152; radius: 28
+        visible: passwordRequired
+        color: Qt.rgba(1, 1, 1, 0.88)
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.95)
+
+        Column {
+            anchors.fill: parent
+            anchors.margins: 18
+            spacing: 8
+            Text {
+                text: "本机已锁定"
+                color: "#101820"; font.pixelSize: 16; font.weight: Font.DemiBold
+            }
+            Rectangle {
+                width: parent.width; height: 42; radius: 13
+                color: Qt.rgba(20/255, 35/255, 50/255, 0.08)
+                border.width: 1
+                border.color: unlockPassword.activeFocus ? "#00AEE6" : Qt.rgba(20/255, 35/255, 50/255, 0.12)
+                TextInput {
+                    id: unlockPassword
+                    anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14
+                    enabled: !unlockBusy
+                    focus: screensaver.visible && passwordRequired
+                    color: "#101820"; font.pixelSize: 16
+                    echoMode: TextInput.Password
+                    passwordCharacter: "●"
+                    verticalAlignment: TextInput.AlignVCenter
+                    selectByMouse: true
+                    clip: true
+                    onAccepted: screensaver.attemptUnlock()
+                }
+            }
+            Row {
+                width: parent.width
+                spacing: 10
+                Text { text: unlockError; color: "#C62828"; font.pixelSize: 12; width: 205; elide: Text.ElideRight; anchors.verticalCenter: parent.verticalCenter }
+                Rectangle {
+                    width: 130; height: 32; radius: 16
+                    color: "#00B8E8"
+                    opacity: unlockPassword.text.length > 0 && !unlockBusy ? 1 : 0.45
+                    Text { anchors.centerIn: parent; text: unlockBusy ? "正在解锁…" : "解锁"; color: "#FFFFFF"; font.pixelSize: 13; font.weight: Font.DemiBold }
+                    MouseArea { anchors.fill: parent; enabled: unlockPassword.text.length > 0 && !unlockBusy; onClicked: screensaver.attemptUnlock() }
+                }
+            }
+        }
+    }
+
+    Keys.onPressed: function(event) {
+        if (!passwordRequired) screensaver.wake()
+    }
 
     // ─── Show/hide animation ──────────────────────
     // Apple: prefers-reduced-motion → short opacity cross-fade, no slide/spring
@@ -130,6 +220,10 @@ Rectangle {
         }
         opacity = 0
         visible = true
+        if (passwordRequired) {
+            unlockError = ""
+            Qt.callLater(function() { unlockPassword.forceActiveFocus() })
+        }
         // Quick fade in for reduced-motion compatibility (Apple: keep opacity/color changes)
         opacity = 1
         // Force clock update

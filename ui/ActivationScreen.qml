@@ -26,6 +26,8 @@ Rectangle {
     property string accountUsername: "YUNSH User"
     property string accountPassword: ""
     property string accountConfirmPassword: ""
+    property string bootPassword: ""
+    property string bootConfirmPassword: ""
     property bool accountValid: false
     property string accountError: ""
     property bool activationConfigReady: false
@@ -164,7 +166,8 @@ Rectangle {
             language: selectedLanguage,
             keyboard: selectedKeyboard,
             displayName: accountUsername,
-            password: accountPassword
+            password: accountPassword,
+            bootPassword: bootPassword
         }))
     }
 
@@ -1030,7 +1033,7 @@ Rectangle {
 
         Rectangle {
             anchors.centerIn: parent
-            width: 520; height: 480
+            width: 560; height: 650
             radius: 32
             color: Qt.rgba(15/255, 15/255, 32/255, 0.5)
             border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
@@ -1048,7 +1051,7 @@ Rectangle {
 
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "显示名称保存在本机；开机密码会同步给 Linux 用户 yunsh"
+                    text: "YUNSH 账户密码与本机锁定密码完全独立；默认自动熄屏可直接唤醒"
                     color: Qt.rgba(255/255, 255/255, 255/255, 0.4)
                     font.pixelSize: 12
                     bottomPadding: 16
@@ -1081,12 +1084,54 @@ Rectangle {
                     }
                 }
 
+                Column {
+                    spacing: 6
+                    Text { text: "本机开机与锁屏密码"; color: Qt.rgba(255/255, 255/255, 255/255, 0.6); font.pixelSize: 12 }
+                    Rectangle {
+                        width: 380; height: 44; radius: 12
+                        color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+                        border.color: bootPassInput.activeFocus ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                        border.width: 1
+                        EditableInput {
+                            id: bootPassInput
+                            anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
+                            verticalAlignment: TextInput.AlignVCenter
+                            color: "#FFFFFF"; font.pixelSize: 15
+                            echoMode: TextInput.Password
+                            placeholderText: "输入独立的本机密码"
+                            placeholderTextColor: Qt.rgba(255/255, 255/255, 255/255, 0.2)
+                            onTextChanged: bootPassword = text
+                        }
+                    }
+                }
+
+                Column {
+                    spacing: 6
+                    Text { text: "确认本机密码"; color: Qt.rgba(255/255, 255/255, 255/255, 0.6); font.pixelSize: 12 }
+                    Rectangle {
+                        width: 380; height: 44; radius: 12
+                        color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+                        border.color: bootConfirmInput.activeFocus ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                        border.width: 1
+                        EditableInput {
+                            id: bootConfirmInput
+                            anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
+                            verticalAlignment: TextInput.AlignVCenter
+                            color: "#FFFFFF"; font.pixelSize: 15
+                            echoMode: TextInput.Password
+                            placeholderText: "再次输入本机密码"
+                            placeholderTextColor: Qt.rgba(255/255, 255/255, 255/255, 0.2)
+                            onTextChanged: bootConfirmPassword = text
+                        }
+                    }
+                }
+
                 // Password field
                 Column {
                     spacing: 6
                     Row {
                         spacing: 8
-                        Text { text: "密码"; color: Qt.rgba(255/255, 255/255, 255/255, 0.6); font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
+                        Text { text: "YUNSH 账户密码"; color: Qt.rgba(255/255, 255/255, 255/255, 0.6); font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
                     }
                     Rectangle {
                         width: 380; height: 44; radius: 12
@@ -1099,7 +1144,7 @@ Rectangle {
                             verticalAlignment: TextInput.AlignVCenter
                             color: "#FFFFFF"; font.pixelSize: 15
                             echoMode: TextInput.Password
-                            placeholderText: "输入密码"
+                            placeholderText: "输入 YUNSH 账户密码"
                             placeholderTextColor: Qt.rgba(255/255, 255/255, 255/255, 0.2)
                             onTextChanged: accountPassword = text
                         }
@@ -1111,7 +1156,7 @@ Rectangle {
                     spacing: 6
                     Row {
                         spacing: 8
-                        Text { text: "确认密码"; color: Qt.rgba(255/255, 255/255, 255/255, 0.6); font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
+                        Text { text: "确认 YUNSH 账户密码"; color: Qt.rgba(255/255, 255/255, 255/255, 0.6); font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
                     }
                     Rectangle {
                         width: 380; height: 44; radius: 12
@@ -1124,7 +1169,7 @@ Rectangle {
                             verticalAlignment: TextInput.AlignVCenter
                             color: "#FFFFFF"; font.pixelSize: 15
                             echoMode: TextInput.Password
-                            placeholderText: "再次输入密码"
+                            placeholderText: "再次输入 YUNSH 账户密码"
                             placeholderTextColor: Qt.rgba(255/255, 255/255, 255/255, 0.2)
                             onTextChanged: accountConfirmPassword = text
                         }
@@ -1155,6 +1200,8 @@ Rectangle {
                                 accountUsername = "YUNSH User"
                                 accountPassword = ""
                                 accountConfirmPassword = ""
+                                bootPassword = ""
+                                bootConfirmPassword = ""
                                 currentStep = 6
                             }
                         }
@@ -1163,7 +1210,7 @@ Rectangle {
                     Rectangle {
                         width: 160; height: 44; radius: 22
                         color: "#00D4FF"
-                        opacity: accountPassword.length > 0 && accountPassword === accountConfirmPassword ? 1 : 0.42
+                        opacity: accountPassword.length > 0 && accountPassword === accountConfirmPassword && bootPassword.length > 0 && bootPassword === bootConfirmPassword ? 1 : 0.42
                         border.color: "#7BE7FF"; border.width: 1
                         Text { anchors.centerIn: parent; text: "继续"; color: "#00151B"; font.pixelSize: 14; font.weight: Font.Medium }
                         MouseArea {
@@ -1176,6 +1223,10 @@ Rectangle {
                                     accountError = "密码至少需要4个字符"
                                 } else if (accountPassword !== accountConfirmPassword) {
                                     accountError = "两次密码不一致"
+                                } else if (bootPassword.length < 4) {
+                                    accountError = "本机密码至少需要4个字符"
+                                } else if (bootPassword !== bootConfirmPassword) {
+                                    accountError = "两次本机密码不一致"
                                 } else {
                                     currentStep = 6
                                 }

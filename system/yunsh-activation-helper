@@ -156,6 +156,7 @@ def configure_activation(payload):
     """Persist first-run preferences without allowing arbitrary commands."""
     display_name = str(payload.get("displayName", "YUNSH User")).strip()
     password = str(payload.get("password", ""))
+    boot_password = str(payload.get("bootPassword", ""))
     language = str(payload.get("language", "简体中文"))
     keyboard = str(payload.get("keyboard", "拼音"))
     allowed_languages = {"简体中文", "English", "日本語", "한국어"}
@@ -175,7 +176,24 @@ def configure_activation(payload):
         or "\x00" in password
     ):
         return {"success": False, "error": "Password must contain 4–128 valid characters"}
+    if boot_password and (
+        len(boot_password) < 4
+        or len(boot_password) > 128
+        or "\n" in boot_password
+        or "\r" in boot_password
+        or "\x00" in boot_password
+    ):
+        return {"success": False, "error": "Boot password must contain 4–128 valid characters"}
     try:
+        # The Linux credential is deliberately separate from the YUNSH account
+        # credential.  It is used only for the local unlock gate.
+        if boot_password:
+            changed = subprocess.run(
+                ["chpasswd"], input=f"yunsh:{boot_password}\n",
+                capture_output=True, text=True, timeout=10,
+            )
+            if changed.returncode != 0:
+                return {"success": False, "error": changed.stderr.strip() or "无法设置本机密码"}
         os.makedirs(YUNSH_CONFIG_DIR, exist_ok=True)
         fd, temp_path = tempfile.mkstemp(prefix="language.", dir=YUNSH_CONFIG_DIR)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -200,20 +218,6 @@ def configure_activation(payload):
             "passwordHash": password_hash,
             "createdAt": datetime.now(timezone.utc).isoformat(),
         }
-        if password:
-            changed = subprocess.run(
-                ["chpasswd"],
-                input=f"yunsh:{password}\n",
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            if changed.returncode != 0:
-                return {
-                    "success": False,
-                    "error": changed.stderr.strip()
-                    or "Could not synchronize the Linux account password",
-                }
         account_path = os.path.join(YUNSH_CONFIG_DIR, "account.json")
         fd, temp_path = tempfile.mkstemp(prefix="account.", dir=YUNSH_CONFIG_DIR)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -227,8 +231,25 @@ def configure_activation(payload):
         return {"success": False, "error": str(exc)}
 
 
-def change_account_password(payload):
-    """Change the YUNSH boot password and Linux yunsh password together."""
+def verify_linux_password(username, password):
+    """Verify a local Linux password without ever returning its stored hash."""
+    if not password:
+        return False
+    try:
+        import crypt
+        import spwd
+
+        encoded = spwd.getspnam(username).sp_pwdp
+        if not encoded or encoded.startswith(("!", "*")):
+            return False
+        candidate = crypt.crypt(password, encoded)
+        return bool(candidate) and secrets.compare_digest(candidate, encoded)
+    except (ImportError, KeyError, PermissionError, OSError):
+        return False
+
+
+def change_boot_password(payload):
+    """Change only the Linux yunsh password used for local unlock."""
     current_password = str(payload.get("currentPassword", ""))
     new_password = str(payload.get("newPassword", ""))
     if (
@@ -239,44 +260,9 @@ def change_account_password(payload):
     ):
         return {"success": False, "error": "密码必须包含 4–128 个有效字符"}
 
-    account_path = os.path.join(YUNSH_CONFIG_DIR, "account.json")
-    account = read_json(account_path, {})
-    if account.get("passwordProtected") is True:
-        try:
-            salt = bytes.fromhex(str(account.get("passwordSalt", "")))
-            expected = str(account.get("passwordHash", ""))
-            actual = hashlib.pbkdf2_hmac(
-                "sha256", current_password.encode("utf-8"), salt, 310000
-            ).hex()
-        except (TypeError, ValueError):
-            return {"success": False, "error": "本地账户凭据已损坏"}
-        if not secrets.compare_digest(actual, expected):
-            return {"success": False, "error": "当前开机密码不正确"}
-    elif current_password != "yunsh123":
+    if not verify_linux_password("yunsh", current_password):
         return {"success": False, "error": "当前开机密码不正确"}
-
-    salt = secrets.token_bytes(16)
-    updated = {
-        **account,
-        "schema": 1,
-        "type": "local",
-        "displayName": account.get("displayName") or "YUNSH User",
-        "passwordProtected": True,
-        "passwordKdf": "pbkdf2-sha256-310000",
-        "passwordSalt": salt.hex(),
-        "passwordHash": hashlib.pbkdf2_hmac(
-            "sha256", new_password.encode("utf-8"), salt, 310000
-        ).hex(),
-        "passwordChangedAt": datetime.now(timezone.utc).isoformat(),
-    }
-    os.makedirs(YUNSH_CONFIG_DIR, exist_ok=True)
-    fd, temp_path = tempfile.mkstemp(prefix="account.", dir=YUNSH_CONFIG_DIR)
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(updated, handle, ensure_ascii=False)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.chmod(temp_path, 0o600)
         changed = subprocess.run(
             ["chpasswd"],
             input=f"yunsh:{new_password}\n",
@@ -287,28 +273,21 @@ def change_account_password(payload):
         if changed.returncode != 0:
             return {
                 "success": False,
-                "error": changed.stderr.strip() or "无法同步 Linux 账户密码",
+                "error": changed.stderr.strip() or "无法修改 Linux 开机密码",
             }
-        try:
-            os.replace(temp_path, account_path)
-        except OSError:
-            subprocess.run(
-                ["chpasswd"],
-                input=f"yunsh:{current_password}\n",
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            raise
-        return {"success": True, "linuxUser": "yunsh"}
+        return {"success": True, "linuxUser": "yunsh", "yunshAccountChanged": False}
     except Exception as exc:
         return {"success": False, "error": str(exc)}
-    finally:
-        try:
-            if os.path.exists(temp_path):
-                os.unlink(temp_path)
-        except OSError:
-            pass
+
+
+def verify_boot_password(payload):
+    """Authenticate the local unlock gate without exposing any credential."""
+    password = str(payload.get("password", ""))
+    if len(password) > 128 or any(character in password for character in "\r\n\x00"):
+        return {"success": False, "error": "密码格式不正确"}
+    if not verify_linux_password("yunsh", password):
+        return {"success": False, "error": "本机密码不正确"}
+    return {"success": True}
 
 
 def set_glasses_brightness(payload):
@@ -1106,8 +1085,10 @@ class Handler(BaseHTTPRequestHandler):
                 result = {"success": False, "error": "Unsupported transfer action"}
         elif self.path == "/api/link-pairing":
             result = create_link_pairing_code()
-        elif self.path == "/api/account-password":
-            result = change_account_password(payload)
+        elif self.path == "/api/boot-password":
+            result = change_boot_password(payload)
+        elif self.path == "/api/verify-boot-password":
+            result = verify_boot_password(payload)
         else:
             action = payload.get("action")
             if action == "connect_wifi":

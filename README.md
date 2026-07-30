@@ -105,12 +105,16 @@ app does not retain the API key.
 
 ### Device services
 
-- Multilingual Hello welcome followed by a touch-first activation flow and an
-  optional local YUNSH profile. The display name stays local; its boot password
-  is securely hashed for the profile and synchronized to the fixed Linux
-  `yunsh` maintenance account.
-- Settings can verify and change the boot password later; a successful change
-  updates both the local YUNSH credential and Linux user `yunsh`.
+- Multilingual Hello welcome followed by a touch-first activation flow with
+  separate local YUNSH-account and device-unlock passwords. The YUNSH-account
+  password is stored as a PBKDF2-SHA256 hash; changing either credential never
+  changes the other.
+- Smart Wake is the default: automatic display-off turns the AR surface black
+  and can be resumed immediately. An explicit local Lock requires the device
+  password before returning to the desktop; Orbit and YUNSH Link cannot bypass
+  that local check.
+- Settings can verify and change only the Linux user `yunsh` device-unlock
+  password later; the local YUNSH-account credential remains unchanged.
 - Separate, skippable glasses and iPhone pairing pages with visible progress.
 - Case-insensitive one-time phone pairing keys; no QR code or camera is required.
 - Optional, skippable Comfort DNA setup.

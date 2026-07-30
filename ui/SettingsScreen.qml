@@ -23,6 +23,20 @@ Rectangle {
 
     property string osVersionName: "YUNSH OS v2.0.1"
     property string selectedLanguageDisplay: "简体中文 · 拼音"
+    property int autoLockSeconds: 120
+    signal requestAutoLockSeconds(int seconds)
+
+    function autoLockLabel() {
+        if (autoLockSeconds <= 0) return "永不自动熄屏"
+        if (autoLockSeconds < 60) return autoLockSeconds + " 秒后自动熄屏并锁定"
+        return (autoLockSeconds / 60) + " 分钟后自动熄屏并锁定"
+    }
+
+    function cycleAutoLock() {
+        var presets = [30, 60, 120, 300, 600, 0]
+        var index = presets.indexOf(autoLockSeconds)
+        requestAutoLockSeconds(presets[(index + 1 + presets.length) % presets.length])
+    }
 
     function loadVersionConfig() {
         var xhr = new XMLHttpRequest()
@@ -97,7 +111,7 @@ Rectangle {
         }
         passwordBusy = true
         var xhr = new XMLHttpRequest()
-        xhr.open("POST", "http://127.0.0.1:8591/api/account-password", true)
+        xhr.open("POST", "http://127.0.0.1:8591/api/boot-password", true)
         xhr.setRequestHeader("Content-Type", "application/json")
         xhr.timeout = 15000
         xhr.onreadystatechange = function() {
@@ -286,14 +300,24 @@ Rectangle {
                 width: parent.width; height: 60
                 iconSource: "/usr/share/yunsh/icons/settings.svg"
                 iconSize: 18
-                title: "开机密码"
-                subtitle: "修改后同步更新 Linux 用户 yunsh 的密码"
+                title: "本机锁定密码"
+                subtitle: "仅修改 Linux 用户 yunsh 的本机密码"
                 showArrow: true
                 onClicked: {
                     passwordError = ""
                     passwordDialog.visible = true
                     currentPasswordField.forceActiveFocus()
                 }
+            }
+
+            GlassCard {
+                width: parent.width; height: 60
+                iconSource: "/usr/share/yunsh/icons/settings.svg"
+                iconSize: 18
+                title: "自动熄屏与锁定"
+                subtitle: autoLockLabel() + " · 点击切换"
+                showArrow: true
+                onClicked: settingsScreen.cycleAutoLock()
             }
             
             GlassCard {
@@ -462,7 +486,7 @@ Rectangle {
                 }
                 Text {
                     width: parent.width
-                    text: "新密码会同时成为 Linux 用户 yunsh 的密码。若激活时跳过了密码，当前密码为设备默认密码。"
+                    text: "这只修改 Linux 用户 yunsh 的本机开机与锁屏密码，不会修改 YUNSH 账户密码。"
                     color: "#60707C"
                     font.pixelSize: 13
                     wrapMode: Text.Wrap
