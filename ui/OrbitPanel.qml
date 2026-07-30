@@ -25,6 +25,10 @@ Item {
     property var kimiModels: ["kimi-k3", "kimi-k2.6"]
     property var compatibleModels: ["输入模型名称"]
     property var conversationHistory: []
+    property string pendingApprovalId: ""
+    property string pendingApprovalSummary: ""
+    property string pendingApprovalPermission: ""
+    property bool pendingApprovalAlwaysConfirm: false
 
     signal toastRequested(string message)
 
@@ -108,6 +112,7 @@ Item {
         settingsPermission.checked = values.settings !== false
         networkPermission.checked = values.network !== false
         screenPermission.checked = values.screen !== false
+        microphonePermission.checked = values.microphone !== false
         memoryPermission.checked = values.memory !== false
         worldPermission.checked = values.world !== false
     }
@@ -138,6 +143,7 @@ Item {
                 settings: settingsPermission.checked,
                 network: networkPermission.checked,
                 screen: screenPermission.checked,
+                microphone: microphonePermission.checked,
                 memory: memoryPermission.checked,
                 world: worldPermission.checked
             },
@@ -179,28 +185,97 @@ Item {
         request("POST", "/v1/chat", {message: message, history: history},
                 function(status, body) {
             busy = false
-            var reply = status === 200 && body.success
-                ? body.reply
-                : "没有完成： " + (body.error || "Orbit 运行时不可用")
-            conversationHistory.push({role: "assistant", content: reply})
-            if (conversationHistory.length > 24)
-                conversationHistory = conversationHistory.slice(-24)
-            messagesModel.append({role: "assistant", content: reply})
-            messageList.positionViewAtEnd()
-            if (status === 200 && body.success && speakResponses)
-                request("POST", "/v1/voice/speak", {text: reply, voice: voice},
-                        function(_voiceStatus, _voiceBody) {})
+            handleAgentResponse(status, body)
         })
     }
 
-    function listenForPrompt() {
+    function handleAgentResponse(status, body) {
+        if (status !== 200 || !body.success) {
+            appendAssistantReply("没有完成：" + (body.error || "Orbit 运行时不可用"), false)
+            return
+        }
+        if (body.approval) {
+            pendingApprovalId = body.approval.requestId || ""
+            pendingApprovalSummary = body.approval.summary || "Orbit 请求一项系统权限"
+            pendingApprovalPermission = body.approval.permissionLabel || "系统操作"
+            pendingApprovalAlwaysConfirm = body.approval.alwaysConfirm === true
+            statusText = "等待你的授权"
+            return
+        }
+        pendingApprovalId = ""
+        pendingApprovalSummary = ""
+        appendAssistantReply(body.reply || "任务已完成。", true)
+    }
+
+    function appendAssistantReply(reply, speak) {
+        conversationHistory.push({role: "assistant", content: reply})
+        if (conversationHistory.length > 24)
+            conversationHistory = conversationHistory.slice(-24)
+        messagesModel.append({role: "assistant", content: reply})
+        messageList.positionViewAtEnd()
+        statusText = configured
+            ? "系统级 · " + providerDisplayName() + " · " + modelName
+            : "系统级 · 等待配置 API"
+        if (speak && speakResponses)
+            request("POST", "/v1/voice/speak", {text: reply, voice: voice},
+                    function(_voiceStatus, _voiceBody) {})
+    }
+
+    function respondToApproval(decision) {
+        if (!pendingApprovalId.length || busy)
+            return
+        if (pendingApprovalId === "voice") {
+            pendingApprovalId = ""
+            if (decision === "deny") {
+                statusText = configured
+                    ? "系统级 · " + providerDisplayName() + " · " + modelName
+                    : "系统级 · 等待配置 API"
+                return
+            }
+            if (decision === "always") {
+                busy = true
+                request("POST", "/v1/permissions/grant",
+                        {name: "voice_listen"}, function(status, body) {
+                    busy = false
+                    if (status !== 200 || !body.success) {
+                        toastRequested(body.error || "无法保存麦克风授权")
+                        return
+                    }
+                    listenForPrompt(true)
+                })
+            } else {
+                listenForPrompt(true)
+            }
+            return
+        }
+        busy = true
+        var requestId = pendingApprovalId
+        pendingApprovalId = ""
+        request("POST", "/v1/approve", {
+            requestId: requestId,
+            decision: decision
+        }, function(status, body) {
+            busy = false
+            handleAgentResponse(status, body)
+        })
+    }
+
+    function listenForPrompt(approved) {
         if (busy)
             return
         busy = true
         statusText = "正在聆听…"
-        request("POST", "/v1/voice/listen", {}, function(status, body) {
+        request("POST", "/v1/voice/listen", {approved: approved === true}, function(status, body) {
             busy = false
             refreshStatus()
+            if (body.approvalRequired) {
+                pendingApprovalId = "voice"
+                pendingApprovalSummary = body.summary || "允许 Orbit 使用麦克风"
+                pendingApprovalPermission = body.permissionLabel || "麦克风"
+                pendingApprovalAlwaysConfirm = false
+                statusText = "等待你的授权"
+                return
+            }
             if (status !== 200 || !body.success) {
                 toastRequested(body.error || "语音识别不可用")
                 return
@@ -398,9 +473,58 @@ Item {
 
                     Text {
                         visible: busy
-                        text: "Orbit 正在思考并执行…"
+                        text: "Orbit 正在规划、执行并检查结果…"
                         color: "#61707C"
                         font.pixelSize: 12
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        height: pendingApprovalId.length ? 154 : 0
+                        visible: pendingApprovalId.length > 0
+                        radius: 22
+                        color: "#FFF8E8"
+                        border.width: 1
+                        border.color: "#FFD88A"
+                        clip: true
+
+                        Column {
+                            anchors.fill: parent
+                            anchors.margins: 16
+                            spacing: 10
+                            Text {
+                                text: "Orbit 请求权限 · " + pendingApprovalPermission
+                                color: "#8A5700"
+                                font.pixelSize: 12
+                                font.weight: Font.DemiBold
+                            }
+                            Text {
+                                width: parent.width
+                                text: pendingApprovalSummary
+                                color: "#2C2518"
+                                font.pixelSize: 13
+                                wrapMode: Text.Wrap
+                            }
+                            Row {
+                                anchors.right: parent.right
+                                spacing: 8
+                                Button {
+                                    text: "拒绝"
+                                    flat: true
+                                    onClicked: respondToApproval("deny")
+                                }
+                                Button {
+                                    text: "始终允许"
+                                    visible: !pendingApprovalAlwaysConfirm
+                                    flat: true
+                                    onClicked: respondToApproval("always")
+                                }
+                                Button {
+                                    text: "仅本次允许"
+                                    onClicked: respondToApproval("once")
+                                }
+                            }
+                        }
                     }
 
                     Rectangle {
@@ -421,7 +545,7 @@ Item {
                             placeholderText: "让 Orbit 为你完成任务"
                             color: "#111820"
                             background: Item {}
-                            enabled: !busy
+                            enabled: !busy && !pendingApprovalId.length
                             onAccepted: sendMessage()
                         }
                         Rectangle {
@@ -440,7 +564,7 @@ Item {
                             MouseArea {
                                 id: micMouse
                                 anchors.fill: parent
-                                enabled: !busy
+                                enabled: !busy && !pendingApprovalId.length
                                 onClicked: listenForPrompt()
                             }
                         }
@@ -460,7 +584,7 @@ Item {
                             }
                             MouseArea {
                                 anchors.fill: parent
-                                enabled: !busy
+                                enabled: !busy && !pendingApprovalId.length
                                 onClicked: sendMessage()
                             }
                         }
@@ -552,7 +676,7 @@ Item {
                         }
 
                         Text {
-                            text: "系统权限 · 默认全部开启"
+                            text: "系统能力与权限"
                             color: "#101820"
                             font.pixelSize: 16
                             font.weight: Font.DemiBold
@@ -570,6 +694,7 @@ Item {
                             CheckBox { id: settingsPermission; text: "修改系统设置"; checked: true }
                             CheckBox { id: networkPermission; text: "访问网络"; checked: true }
                             CheckBox { id: screenPermission; text: "读取屏幕与窗口状态"; checked: true }
+                            CheckBox { id: microphonePermission; text: "使用麦克风"; checked: true }
                             CheckBox { id: memoryPermission; text: "保存长期任务记忆"; checked: true }
                             CheckBox { id: worldPermission; text: "控制 YUNSH 世界层"; checked: true }
                         }
@@ -597,7 +722,7 @@ Item {
 
                         Text {
                             width: parent.width
-                            text: "API Key 使用设备密钥加密保存在本机，不会显示完整内容。关闭某项权限后，Orbit 对应工具会立即拒绝执行。"
+                            text: "API Key 使用设备密钥加密保存在本机。功能开启后，Orbit 第一次使用敏感能力仍会请求“仅本次”或“始终允许”；关闭功能会立即撤销对应授权。破坏性操作永远需要重新确认。"
                             color: "#71808B"
                             font.pixelSize: 11
                             wrapMode: Text.Wrap

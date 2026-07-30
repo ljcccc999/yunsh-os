@@ -1,16 +1,15 @@
-// YUNSH OS v1.0 - Control Center (visionOS/iOS Style)
-// Swipe-down panel from top-right, inspired by iOS Control Center + visionOS glassmorphism
+// YUNSH system menu — anchored to the persistent top-left YUNSH mark.
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
 Item {
-    id: controlCenterRoot
+    id: root
 
-    // ─── Public Properties ───────────────────────────────────────────────
     property bool wifiOn: false
     property bool bluetoothOn: false
+    property bool recording: false
     property string wifiSSID: ""
     property string btDevice: ""
     property string currentTime: "00:00"
@@ -18,8 +17,27 @@ Item {
     property int volumeLevel: 55
     property bool focusMode: false
     property bool stereoEnabled: false
-    property bool headTrackingConnected: false
     property bool reduceMotion: false
+
+    signal dismissPanel()
+    signal openNetwork()
+    signal openBluetooth()
+    signal openSettings()
+    signal openPhotos()
+    signal openUpdate()
+    signal takeScreenshot()
+    signal takeRegionScreenshot()
+    signal toggleRecording()
+    signal toggleWifi()
+    signal toggleBluetooth()
+    signal toggleKeyboard()
+    signal toggleFocusMode()
+    signal openSpatialDisplay()
+    signal requestLock()
+    signal requestSystemAction(string action)
+
+    visible: false
+    z: 150
 
     function postJson(path, payload, callback) {
         var xhr = new XMLHttpRequest()
@@ -38,10 +56,10 @@ Item {
         networkRequest.onreadystatechange = function() {
             if (networkRequest.readyState === XMLHttpRequest.DONE && networkRequest.status === 200) {
                 try {
-                    var network = JSON.parse(networkRequest.responseText)
-                    wifiOn = network.enabled === true
-                    wifiSSID = network.ssid || ""
-                } catch (error) {}
+                    var state = JSON.parse(networkRequest.responseText)
+                    wifiOn = state.enabled === true
+                    wifiSSID = state.ssid || ""
+                } catch (_error) {}
             }
         }
         networkRequest.send()
@@ -51,40 +69,25 @@ Item {
         bluetoothRequest.onreadystatechange = function() {
             if (bluetoothRequest.readyState === XMLHttpRequest.DONE && bluetoothRequest.status === 200) {
                 try {
-                    var bluetooth = JSON.parse(bluetoothRequest.responseText)
-                    bluetoothOn = bluetooth.powered === true
-                    var paired = bluetooth.paired_devices || []
+                    var state = JSON.parse(bluetoothRequest.responseText)
+                    bluetoothOn = state.powered === true
                     btDevice = ""
-                    for (var i = 0; i < paired.length; i++) {
-                        if (paired[i].connected) {
-                            btDevice = paired[i].name || ""
+                    var devices = state.paired_devices || []
+                    for (var i = 0; i < devices.length; i++) {
+                        if (devices[i].connected) {
+                            btDevice = devices[i].name || ""
                             break
                         }
                     }
-                } catch (error) {}
+                } catch (_error) {}
             }
         }
         bluetoothRequest.send()
-
-        var glassesRequest = new XMLHttpRequest()
-        glassesRequest.open("GET", "http://127.0.0.1:8591/api/glasses-status", true)
-        glassesRequest.onreadystatechange = function() {
-            if (glassesRequest.readyState === XMLHttpRequest.DONE && glassesRequest.status === 200) {
-                try {
-                    var glasses = JSON.parse(glassesRequest.responseText)
-                    if (typeof glasses.brightness === "number")
-                        brightnessLevel = glasses.brightness
-                } catch (error) {}
-            }
-        }
-        glassesRequest.send()
     }
 
     function applyWifiPower() {
-        postJson("/api/network", {
-            command: "power",
-            enabled: wifiOn
-        }, function() { refreshSystemState() })
+        postJson("/api/network", {command: "power", enabled: wifiOn},
+                 function() { refreshSystemState() })
     }
 
     function applyBluetoothPower() {
@@ -93,822 +96,352 @@ Item {
         }, function() { refreshSystemState() })
     }
 
-    Timer {
-        id: brightnessApplyTimer
-        interval: 120
-        repeat: false
-        onTriggered: controlCenterRoot.postJson("/api/glasses", {
-            action: "set_brightness",
-            value: brightnessLevel
-        })
+    function activateTile(action) {
+        if (action === "wifi") {
+            wifiOn = !wifiOn
+            toggleWifi()
+        } else if (action === "bluetooth") {
+            bluetoothOn = !bluetoothOn
+            toggleBluetooth()
+        } else if (action === "keyboard") {
+            toggleKeyboard()
+        } else if (action === "screenshot") {
+            takeScreenshot()
+        } else if (action === "region") {
+            takeRegionScreenshot()
+        } else if (action === "record") {
+            toggleRecording()
+        } else if (action === "focus") {
+            toggleFocusMode()
+        } else if (action === "display") {
+            openSpatialDisplay()
+        } else if (action === "photos") {
+            openPhotos()
+        } else if (action === "settings") {
+            openSettings()
+        } else if (action === "update") {
+            openUpdate()
+        } else if (action === "lock") {
+            requestLock()
+        }
     }
 
-    Timer {
-        id: volumeApplyTimer
-        interval: 120
-        repeat: false
-        onTriggered: controlCenterRoot.postJson("/api/audio", {
-            action: "set_volume",
-            value: volumeLevel
-        })
+    function tileActive(action) {
+        if (action === "wifi") return wifiOn
+        if (action === "bluetooth") return bluetoothOn
+        if (action === "record") return recording
+        if (action === "focus") return focusMode
+        if (action === "display") return stereoEnabled
+        return false
     }
 
-    // ─── Signals ─────────────────────────────────────────────────────────
-    signal dismissPanel()
-    signal openNetwork()
-    signal openBluetooth()
-    signal takeScreenshot()
-    signal toggleWifi()
-    signal toggleBluetooth()
-    signal toggleKeyboard()
-    signal toggleFocusMode()
-    signal openSpatialDisplay()
-    signal recenterTracking()
-
-    // ─── Visibility & state ──────────────────────────────────────────────
-    visible: false
-    z: 150
-
-    // ─── Timer for clock updates ─────────────────────────────────────────
     Timer {
         id: clockTimer
         interval: 1000
-        running: controlCenterRoot.visible
+        running: root.visible
         repeat: true
-        onTriggered: {
-            var d = new Date()
-            currentTime = d.toLocaleTimeString(Qt.locale("zh_CN"), "HH:mm")
-        }
+        onTriggered: currentTime = new Date().toLocaleTimeString(
+                         Qt.locale("zh_CN"), "HH:mm")
     }
 
-    // ─── Backdrop (semi-transparent, click to dismiss) ───────────────────
+    Timer {
+        id: brightnessTimer
+        interval: 120
+        onTriggered: root.postJson("/api/glasses", {
+            action: "set_brightness", value: brightnessLevel
+        })
+    }
+
+    Timer {
+        id: volumeTimer
+        interval: 120
+        onTriggered: root.postJson("/api/audio", {
+            action: "set_volume", value: volumeLevel
+        })
+    }
+
     Rectangle {
-        id: backdrop
         anchors.fill: parent
-        color: Qt.rgba(0, 0, 0, 0.5)
-        opacity: controlCenterRoot.visible ? 1.0 : 0.0
-
-        Behavior on opacity {
-            NumberAnimation { duration: controlCenterRoot.reduceMotion ? 80 : 200; easing.type: Easing.OutCubic }
-        }
-
+        color: Qt.rgba(0, 0, 0, 0.34)
         MouseArea {
             anchors.fill: parent
-            onClicked: {
-                animateOut.start()
-                controlCenterRoot.dismissPanel()
-            }
+            onClicked: root.hide()
         }
     }
 
-    // ─── Panel Container ─────────────────────────────────────────────────
-    Item {
-        id: panelContainer
+    Rectangle {
+        id: menu
+        anchors.left: parent.left
+        anchors.leftMargin: 18
         anchors.top: parent.top
-        anchors.topMargin: 60   // Below status bar area
-        anchors.right: parent.right
-        anchors.rightMargin: 20
-
-        width: 420
-        height: panelContent.height + 40
-
-        opacity: controlCenterRoot.visible ? 1.0 : 0.0
-
-        // Slide in/out animation
-        transform: Translate {
-            id: panelTranslate
-            y: controlCenterRoot.visible ? 0 : -30
-            Behavior on y {
-                NumberAnimation {
-                    duration: controlCenterRoot.reduceMotion ? 80 : 250
-                    easing.type: controlCenterRoot.reduceMotion ? Easing.OutCubic : Easing.OutBack
-                }
-            }
-        }
+        anchors.topMargin: 66
+        width: Math.min(520, parent.width - 36)
+        height: Math.min(790, parent.height - 86)
+        radius: 32
+        color: Qt.rgba(248/255, 253/255, 1, 0.92)
+        border.width: 1
+        border.color: "#FFFFFF"
+        clip: true
+        opacity: root.visible ? 1 : 0
+        scale: root.visible ? 1 : 0.96
+        transformOrigin: Item.TopLeft
 
         Behavior on opacity {
+            NumberAnimation { duration: root.reduceMotion ? 70 : 170 }
+        }
+        Behavior on scale {
             NumberAnimation {
-                duration: controlCenterRoot.reduceMotion ? 80 : 250
-                easing.type: controlCenterRoot.reduceMotion ? Easing.OutCubic : Easing.OutBack
+                duration: root.reduceMotion ? 70 : 220
+                easing.type: Easing.OutCubic
             }
         }
 
-        // ─── Glass Panel ─────────────────────────────────────────────
-        GlassPanel {
-            id: glassPanel
+        Rectangle {
             anchors.fill: parent
+            anchors.margins: 2
+            radius: 30
+            color: "transparent"
+            border.width: 1
+            border.color: Qt.rgba(0/255, 212/255, 255/255, 0.16)
+            z: 2
+        }
 
-            // visionOS deep glass
-            panelColor: Qt.rgba(18/255, 18/255, 35/255, 0.65)
-            borderColor: Qt.rgba(255/255, 255/255, 255/255, 0.04)
-            glassOpacity: 0.65
-            blurRadius: 28
-            cornerRadius: 28
-            borderWidth: 1
-            shadowDepth: 20
-            shadowOpacity: 0.6
-            glowBorder: false
+        Flickable {
+            anchors.fill: parent
+            anchors.margins: 22
+            contentHeight: content.height
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            z: 1
 
-            // ─── Content ─────────────────────────────────────────────
-            Item {
-                id: panelContent
-                anchors.fill: parent
-                anchors.margins: 0
-                anchors.topMargin: 20
-                anchors.bottomMargin: 20
-                anchors.leftMargin: 20
-                anchors.rightMargin: 20
+            Column {
+                id: content
+                width: parent.width
+                spacing: 18
 
-                implicitHeight: contentColumn.height + 40
-
-                Column {
-                    id: contentColumn
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    spacing: 20
-
-                    // ── Section: Quick Toggles (3-column grid) ──────
-                    Grid {
-                        id: toggleGrid
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        columns: 3
-                        columnSpacing: 28
-                        rowSpacing: 18
-                        horizontalItemAlignment: Grid.AlignHCenter
-
-                        // Wi-Fi toggle
-                        Column {
-                            spacing: 6
-                            height: 72
-
-                            Rectangle {
-                                id: wifiToggleBtn
-                                width: 48; height: 48; radius: 24
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                color: wifiOn ? Qt.rgba(0/255, 150/255, 255/255, 0.25)
-                                             : Qt.rgba(255/255, 255/255, 255/255, 0.06)
-                                border.color: wifiOn ? Qt.rgba(0/255, 150/255, 255/255, 0.3)
-                                                     : Qt.rgba(255/255, 255/255, 255/255, 0.08)
-                                border.width: 1
-
-                                Image {
-                                    anchors.centerIn: parent
-                                    source: "/usr/share/yunsh/icons/wifi.svg"
-                                    width: 22; height: 22
-                                    sourceSize.width: 44; sourceSize.height: 44
-                                    fillMode: Image.PreserveAspectFit
-                                }
-
-                                // Outer glow when active
-                                Rectangle {
-                                    anchors.fill: parent; radius: 24
-                                    color: "transparent"
-                                    border.color: wifiOn ? Qt.rgba(0/255, 150/255, 255/255, 0.12) : "transparent"
-                                    border.width: 3
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    onEntered: parent.scale = 1.1
-                                    onExited: parent.scale = 1.0
-                                    onClicked: {
-                                        wifiOn = !wifiOn
-                                        controlCenterRoot.toggleWifi()
-                                    }
-                                }
-
-                                Behavior on scale {
-                                    NumberAnimation { duration: 120; easing.type: Easing.OutBack }
-                                }
-                            }
-
-                            Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: "Wi-Fi"
-                                color: "#CCCCDD"
-                                font.pixelSize: 10
-                                font.weight: Font.Medium
-                            }
-                        }
-
-                        // Bluetooth toggle
-                        Column {
-                            spacing: 6
-                            height: 72
-
-                            Rectangle {
-                                id: btToggleBtn
-                                width: 48; height: 48; radius: 24
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                color: bluetoothOn ? Qt.rgba(0/255, 150/255, 255/255, 0.25)
-                                                   : Qt.rgba(255/255, 255/255, 255/255, 0.06)
-                                border.color: bluetoothOn ? Qt.rgba(0/255, 150/255, 255/255, 0.3)
-                                                         : Qt.rgba(255/255, 255/255, 255/255, 0.08)
-                                border.width: 1
-
-                                Image {
-                                    anchors.centerIn: parent
-                                    source: "/usr/share/yunsh/icons/bluetooth.svg"
-                                    width: 22; height: 22
-                                    sourceSize.width: 44; sourceSize.height: 44
-                                    fillMode: Image.PreserveAspectFit
-                                }
-
-                                Rectangle {
-                                    anchors.fill: parent; radius: 24
-                                    color: "transparent"
-                                    border.color: bluetoothOn ? Qt.rgba(0/255, 150/255, 255/255, 0.12) : "transparent"
-                                    border.width: 3
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    onEntered: parent.scale = 1.1
-                                    onExited: parent.scale = 1.0
-                                    onClicked: {
-                                        bluetoothOn = !bluetoothOn
-                                        controlCenterRoot.toggleBluetooth()
-                                    }
-                                }
-
-                                Behavior on scale {
-                                    NumberAnimation { duration: 120; easing.type: Easing.OutBack }
-                                }
-                            }
-
-                            Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: "蓝牙"
-                                color: "#CCCCDD"
-                                font.pixelSize: 10
-                                font.weight: Font.Medium
-                            }
-                        }
-
-                        // Keyboard toggle
-                        Column {
-                            spacing: 6
-                            height: 72
-
-                            Rectangle {
-                                id: keyboardToggleBtn
-                                width: 48; height: 48; radius: 24
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
-                                border.color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
-                                border.width: 1
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "⌨️"
-                                    font.pixelSize: 20
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    onEntered: parent.scale = 1.1
-                                    onExited: parent.scale = 1.0
-                                    onClicked: controlCenterRoot.toggleKeyboard()
-                                }
-
-                                Behavior on scale {
-                                    NumberAnimation { duration: 120; easing.type: Easing.OutBack }
-                                }
-                            }
-
-                            Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: "键盘"
-                                color: "#CCCCDD"
-                                font.pixelSize: 10
-                                font.weight: Font.Medium
-                            }
-                        }
-
-                        // Screenshot
-                        Column {
-                            spacing: 6
-                            height: 72
-
-                            Rectangle {
-                                id: screenshotBtn
-                                width: 48; height: 48; radius: 24
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
-                                border.color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
-                                border.width: 1
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "📷"
-                                    font.pixelSize: 20
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    onEntered: parent.scale = 1.1
-                                    onExited: parent.scale = 1.0
-                                    onClicked: controlCenterRoot.takeScreenshot()
-                                }
-
-                                Behavior on scale {
-                                    NumberAnimation { duration: 120; easing.type: Easing.OutBack }
-                                }
-                            }
-
-                            Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: "截图"
-                                color: "#CCCCDD"
-                                font.pixelSize: 10
-                                font.weight: Font.Medium
-                            }
-                        }
-
-                        // Focus mode
-                        Column {
-                            spacing: 6
-                            height: 72
-
-                            Rectangle {
-                                id: focusButton
-                                width: 48; height: 48; radius: 24
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                color: focusMode
-                                    ? Qt.rgba(0, 212/255, 1, 0.24)
-                                    : Qt.rgba(1, 1, 1, 0.06)
-                                border.width: 1
-                                border.color: focusMode
-                                    ? Qt.rgba(0, 212/255, 1, 0.42)
-                                    : Qt.rgba(1, 1, 1, 0.08)
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "◉"
-                                    color: focusMode ? "#00D4FF" : "#FFFFFF"
-                                    font.pixelSize: 22
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onPressed: parent.scale = 0.94
-                                    onReleased: parent.scale = 1.0
-                                    onCanceled: parent.scale = 1.0
-                                    onClicked: controlCenterRoot.toggleFocusMode()
-                                }
-
-                                Behavior on scale {
-                                    NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
-                                }
-                            }
-
-                            Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: "专注"
-                                color: focusMode ? "#00D4FF" : "#CCCCDD"
-                                font.pixelSize: 10
-                                font.weight: Font.Medium
-                            }
-                        }
-
-                        // Recenter 3DoF orientation
-                        Column {
-                            spacing: 6
-                            height: 72
-
-                            Rectangle {
-                                id: recenterButton
-                                width: 48; height: 48; radius: 24
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                color: Qt.rgba(1, 1, 1, 0.06)
-                                border.width: 1
-                                border.color: headTrackingConnected
-                                    ? Qt.rgba(0, 212/255, 1, 0.24)
-                                    : Qt.rgba(1, 1, 1, 0.06)
-                                opacity: headTrackingConnected ? 1.0 : 0.42
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "⌖"
-                                    color: headTrackingConnected ? "#00D4FF" : "#FFFFFF"
-                                    font.pixelSize: 22
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    enabled: headTrackingConnected
-                                    onPressed: parent.scale = 0.94
-                                    onReleased: parent.scale = 1.0
-                                    onCanceled: parent.scale = 1.0
-                                    onClicked: controlCenterRoot.recenterTracking()
-                                }
-
-                                Behavior on scale {
-                                    NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
-                                }
-                            }
-
-                            Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: "居中"
-                                color: headTrackingConnected ? "#CCCCDD" : "#666680"
-                                font.pixelSize: 10
-                                font.weight: Font.Medium
-                            }
-                        }
-
-                        // Binocular display settings
-                        Column {
-                            spacing: 6
-                            height: 72
-
-                            Rectangle {
-                                id: spatialDisplayButton
-                                width: 48; height: 48; radius: 24
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                color: stereoEnabled
-                                    ? Qt.rgba(0, 212/255, 1, 0.16)
-                                    : Qt.rgba(1, 1, 1, 0.06)
-                                border.width: 1
-                                border.color: stereoEnabled
-                                    ? Qt.rgba(0, 212/255, 1, 0.3)
-                                    : Qt.rgba(1, 1, 1, 0.08)
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "◐"
-                                    color: stereoEnabled ? "#00D4FF" : "#FFFFFF"
-                                    font.pixelSize: 22
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onPressed: parent.scale = 0.94
-                                    onReleased: parent.scale = 1.0
-                                    onCanceled: parent.scale = 1.0
-                                    onClicked: controlCenterRoot.openSpatialDisplay()
-                                }
-
-                                Behavior on scale {
-                                    NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
-                                }
-                            }
-
-                            Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: stereoEnabled ? "双目" : "显示"
-                                color: stereoEnabled ? "#00D4FF" : "#CCCCDD"
-                                font.pixelSize: 10
-                                font.weight: Font.Medium
-                            }
-                        }
+                Row {
+                    width: parent.width
+                    height: 48
+                    spacing: 12
+                    Image {
+                        source: "/usr/share/yunsh/logo/logo-32.png"
+                        width: 34; height: 34
+                        anchors.verticalCenter: parent.verticalCenter
+                        fillMode: Image.PreserveAspectFit
                     }
-
-                    // ── Separator line ───────────────────────────────
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        height: 1
-                        color: Qt.rgba(255/255, 255/255, 255/255, 0.05)
-                    }
-
-                    // ── Section: Sliders ─────────────────────────────
                     Column {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        spacing: 14
-
-                        // Brightness slider
-                        Row {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            spacing: 10
-                            height: 36
-
-                            Text {
-                                text: "☀️"
-                                font.pixelSize: 16
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 24
-                            }
-
-                            Rectangle {
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: parent.width - 44
-                                height: 6; radius: 3
-                                color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
-
-                                Rectangle {
-                                    width: parent.width * brightnessLevel / 100
-                                    height: parent.height; radius: 3
-                                    color: Qt.rgba(0/255, 212/255, 255/255, 0.4)
-                                }
-
-                                // Thumb
-                                Rectangle {
-                                    x: Math.max(-6, parent.width * brightnessLevel / 100 - 6)
-                                    y: -4
-                                    width: 14; height: 14; radius: 7
-                                    color: "#00D4FF"
-                                    border.color: Qt.rgba(255/255, 255/255, 255/255, 0.2)
-                                    border.width: 1
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onPositionChanged: function(mouse) {
-                                        brightnessLevel = Math.round(
-                                            Math.max(0, Math.min(mouse.x, parent.width)) /
-                                            parent.width * 100
-                                        )
-                                        brightnessApplyTimer.restart()
-                                    }
-                                }
-                            }
+                        width: parent.width - 120
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 1
+                        Text {
+                            text: "YUNSH"
+                            color: "#101820"
+                            font.pixelSize: 19
+                            font.weight: Font.DemiBold
+                            font.letterSpacing: 1.1
                         }
-
-                        // Volume slider
-                        Row {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            spacing: 10
-                            height: 36
-
-                            Text {
-                                text: "🔊"
-                                font.pixelSize: 16
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 24
-                            }
-
-                            Rectangle {
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: parent.width - 44
-                                height: 6; radius: 3
-                                color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
-
-                                Rectangle {
-                                    width: parent.width * volumeLevel / 100
-                                    height: parent.height; radius: 3
-                                    color: Qt.rgba(255/255, 255/255, 255/255, 0.25)
-                                }
-
-                                Rectangle {
-                                    x: Math.max(-6, parent.width * volumeLevel / 100 - 6)
-                                    y: -4
-                                    width: 14; height: 14; radius: 7
-                                    color: "#FFFFFF"
-                                    border.color: Qt.rgba(255/255, 255/255, 255/255, 0.2)
-                                    border.width: 1
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onPositionChanged: function(mouse) {
-                                        volumeLevel = Math.round(
-                                            Math.max(0, Math.min(mouse.x, parent.width)) /
-                                            parent.width * 100
-                                        )
-                                        volumeApplyTimer.restart()
-                                    }
-                                }
-                            }
+                        Text {
+                            text: (wifiSSID.length ? wifiSSID : "YUNSH OS")
+                                  + (recording ? " · 正在录屏" : "")
+                            color: recording ? "#E43A45" : "#61707C"
+                            font.pixelSize: 11
                         }
                     }
-
-                    // ── Separator line ───────────────────────────────
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        height: 1
-                        color: Qt.rgba(255/255, 255/255, 255/255, 0.05)
+                    Text {
+                        text: currentTime
+                        color: "#101820"
+                        font.pixelSize: 16
+                        font.weight: Font.Medium
+                        anchors.verticalCenter: parent.verticalCenter
                     }
+                }
 
-                    // ── Section: Large controls (Wi-Fi / Bluetooth) ──
-                    Row {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        spacing: 12
+                Grid {
+                    width: parent.width
+                    columns: 4
+                    spacing: 10
 
-                        // Wi-Fi card (large)
+                    Repeater {
+                        model: [
+                            {label: "Wi-Fi", symbol: "⌁", action: "wifi"},
+                            {label: "蓝牙", symbol: "ᛒ", action: "bluetooth"},
+                            {label: "键盘", symbol: "⌨", action: "keyboard"},
+                            {label: "全屏截图", symbol: "▣", action: "screenshot"},
+                            {label: "区域截图", symbol: "⌗", action: "region"},
+                            {label: recording ? "停止录屏" : "录屏", symbol: recording ? "■" : "●", action: "record"},
+                            {label: "专注", symbol: "◉", action: "focus"},
+                            {label: "显示", symbol: "◐", action: "display"},
+                            {label: "相册", symbol: "▧", action: "photos"},
+                            {label: "设置", symbol: "⚙", action: "settings"},
+                            {label: "系统更新", symbol: "↻", action: "update"},
+                            {label: "锁定", symbol: "⌾", action: "lock"}
+                        ]
+
                         Rectangle {
-                            width: (parent.width - 12) / 2
-                            height: 72
-                            radius: 16
-                            color: Qt.rgba(0/255, 150/255, 255/255, 0.08)
-                            border.color: Qt.rgba(0/255, 150/255, 255/255, 0.12)
+                            required property var modelData
+                            width: (content.width - 30) / 4
+                            height: 82
+                            radius: 20
+                            property bool active: root.tileActive(modelData.action)
+                            color: tileMouse.pressed ? "#DDF7FD"
+                                : (active ? "#E1F9FF" : "#FFFFFF")
                             border.width: 1
+                            border.color: active ? "#8DEAFF" : "#DDEBF0"
+                            scale: tileMouse.pressed ? 0.96
+                                : (tileMouse.containsMouse ? 1.035 : 1)
 
-                            Row {
-                                anchors.left: parent.left
-                                anchors.leftMargin: 14
-                                anchors.verticalCenter: parent.verticalCenter
-                                spacing: 10
-
-                                Image {
-                                    source: "/usr/share/yunsh/icons/wifi.svg"
-                                    width: 22; height: 22
-                                    sourceSize.width: 44; sourceSize.height: 44
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    fillMode: Image.PreserveAspectFit
-                                }
-
-                                Column {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    spacing: 2
-                                    Text {
-                                        text: "Wi-Fi"
-                                        color: "#0096FF"
-                                        font.pixelSize: 13
-                                        font.weight: Font.Bold
-                                    }
-                                    Text {
-                                        text: wifiOn ? (wifiSSID !== "" ? wifiSSID : "已开启") : "已关闭"
-                                        color: wifiOn ? "#88CCFF" : "#666680"
-                                        font.pixelSize: 11
-                                    }
-                                }
-                            }
-
-                            Text {
-                                anchors.right: parent.right
-                                anchors.rightMargin: 12
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: "›"
-                                color: "#0096FF"
-                                font.pixelSize: 22
-                                font.weight: Font.Light
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                onEntered: parent.color = Qt.rgba(0/255, 150/255, 255/255, 0.15)
-                                onExited: parent.color = Qt.rgba(0/255, 150/255, 255/255, 0.08)
-                                onClicked: controlCenterRoot.openNetwork()
-                            }
-                        }
-
-                        // Bluetooth card (large)
-                        Rectangle {
-                            width: (parent.width - 12) / 2
-                            height: 72
-                            radius: 16
-                            color: Qt.rgba(0/255, 150/255, 255/255, 0.08)
-                            border.color: Qt.rgba(0/255, 150/255, 255/255, 0.12)
-                            border.width: 1
-
-                            Row {
-                                anchors.left: parent.left
-                                anchors.leftMargin: 14
-                                anchors.verticalCenter: parent.verticalCenter
-                                spacing: 10
-
-                                Image {
-                                    source: "/usr/share/yunsh/icons/bluetooth.svg"
-                                    width: 22; height: 22
-                                    sourceSize.width: 44; sourceSize.height: 44
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    fillMode: Image.PreserveAspectFit
-                                }
-
-                                Column {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    spacing: 2
-                                    Text {
-                                        text: "蓝牙"
-                                        color: "#0096FF"
-                                        font.pixelSize: 13
-                                        font.weight: Font.Bold
-                                    }
-                                    Text {
-                                        text: bluetoothOn ? (btDevice !== "" ? btDevice : "已开启") : "已关闭"
-                                        color: bluetoothOn ? "#88CCFF" : "#666680"
-                                        font.pixelSize: 11
-                                    }
-                                }
-                            }
-
-                            Text {
-                                anchors.right: parent.right
-                                anchors.rightMargin: 12
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: "›"
-                                color: "#0096FF"
-                                font.pixelSize: 22
-                                font.weight: Font.Light
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                onEntered: parent.color = Qt.rgba(0/255, 150/255, 255/255, 0.15)
-                                onExited: parent.color = Qt.rgba(0/255, 150/255, 255/255, 0.08)
-                                onClicked: controlCenterRoot.openBluetooth()
-                            }
-                        }
-                    }
-
-                    // ── Section: Connection info ─────────────────────
-                    Column {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        spacing: 4
-
-                        // Wi-Fi status
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            height: 32
-                            radius: 8
-                            color: wifiOn && wifiSSID !== ""
-                                   ? Qt.rgba(0/255, 230/255, 118/255, 0.06)
-                                   : "transparent"
-
-                            visible: wifiOn && wifiSSID !== ""
-
-                            Row {
-                                anchors.left: parent.left
-                                anchors.leftMargin: 8
-                                anchors.verticalCenter: parent.verticalCenter
-                                spacing: 6
-
-                                Text {
-                                    text: "📶"
-                                    font.pixelSize: 12
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
-                                Text {
-                                    text: "Wi-Fi: " + wifiSSID
-                                    color: "#88CCFF"
-                                    font.pixelSize: 12
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
-                            }
-                        }
-
-                        // Bluetooth status
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            height: 32
-                            radius: 8
-                            color: bluetoothOn && btDevice !== ""
-                                   ? Qt.rgba(0/255, 230/255, 118/255, 0.06)
-                                   : "transparent"
-
-                            visible: bluetoothOn && btDevice !== ""
-
-                            Row {
-                                anchors.left: parent.left
-                                anchors.leftMargin: 8
-                                anchors.verticalCenter: parent.verticalCenter
-                                spacing: 6
-
-                                Text {
-                                    text: "🎧"
-                                    font.pixelSize: 12
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
-                                Text {
-                                    text: "蓝牙: " + btDevice
-                                    color: "#88CCFF"
-                                    font.pixelSize: 12
-                                    anchors.verticalCenter: parent.verticalCenter
-                                }
-                            }
-                        }
-
-                        // Time display
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            height: 28
-                            radius: 8
-                            color: Qt.rgba(255/255, 255/255, 255/255, 0.03)
-
-                            Row {
+                            Column {
                                 anchors.centerIn: parent
-                                spacing: 6
+                                spacing: 5
+                                Text {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: modelData.symbol
+                                    color: modelData.action === "record" && recording
+                                        ? "#E43A45" : (parent.parent.active ? "#00A9CC" : "#17212A")
+                                    font.pixelSize: 23
+                                    font.weight: Font.Medium
+                                }
+                                Text {
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: modelData.label
+                                    color: "#26333D"
+                                    font.pixelSize: 10
+                                    font.weight: Font.Medium
+                                }
+                            }
+                            MouseArea {
+                                id: tileMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                onClicked: root.activateTile(modelData.action)
+                            }
+                            Behavior on scale {
+                                NumberAnimation {
+                                    duration: 100
+                                    easing.type: Easing.OutCubic
+                                }
+                            }
+                        }
+                    }
+                }
 
-                                Text {
-                                    text: "🕐"
-                                    font.pixelSize: 12
-                                    anchors.verticalCenter: parent.verticalCenter
+                Rectangle {
+                    width: parent.width
+                    height: 118
+                    radius: 24
+                    color: "#FFFFFF"
+                    border.width: 1
+                    border.color: "#DDEBF0"
+
+                    Column {
+                        anchors.fill: parent
+                        anchors.margins: 18
+                        spacing: 20
+
+                        Row {
+                            width: parent.width
+                            spacing: 12
+                            Text { text: "☀"; color: "#17212A"; width: 20; font.pixelSize: 17 }
+                            Slider {
+                                width: parent.width - 32
+                                from: 0; to: 100
+                                value: brightnessLevel
+                                onMoved: {
+                                    brightnessLevel = Math.round(value)
+                                    brightnessTimer.restart()
                                 }
-                                Text {
-                                    text: currentTime
-                                    color: "#FFFFFF"
-                                    font.pixelSize: 14
-                                    font.weight: Font.Bold
-                                    anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+                        Row {
+                            width: parent.width
+                            spacing: 12
+                            Text { text: "◖"; color: "#17212A"; width: 20; font.pixelSize: 17 }
+                            Slider {
+                                width: parent.width - 32
+                                from: 0; to: 100
+                                value: volumeLevel
+                                onMoved: {
+                                    volumeLevel = Math.round(value)
+                                    volumeTimer.restart()
                                 }
+                            }
+                        }
+                    }
+                }
+
+                Row {
+                    width: parent.width
+                    spacing: 10
+                    Repeater {
+                        model: [
+                            {label: "网络详情", action: "network"},
+                            {label: "蓝牙设备", action: "bluetooth"}
+                        ]
+                        Rectangle {
+                            required property var modelData
+                            width: (content.width - 10) / 2
+                            height: 48
+                            radius: 18
+                            color: detailMouse.pressed ? "#DDF7FD" : "#FFFFFF"
+                            border.width: 1
+                            border.color: "#DDEBF0"
+                            Text {
+                                anchors.centerIn: parent
+                                text: modelData.label + "  ›"
+                                color: "#17212A"
+                                font.pixelSize: 12
+                                font.weight: Font.Medium
+                            }
+                            MouseArea {
+                                id: detailMouse
+                                anchors.fill: parent
+                                onClicked: {
+                                    if (modelData.action === "network") root.openNetwork()
+                                    else root.openBluetooth()
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Text {
+                    text: "电源与恢复"
+                    color: "#61707C"
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                    leftPadding: 4
+                }
+
+                Row {
+                    width: parent.width
+                    spacing: 10
+                    Repeater {
+                        model: [
+                            {label: "重新启动", action: "restart", danger: false},
+                            {label: "关机", action: "shutdown", danger: false},
+                            {label: "恢复出厂", action: "factory_reset", danger: true}
+                        ]
+                        Rectangle {
+                            required property var modelData
+                            width: (content.width - 20) / 3
+                            height: 48
+                            radius: 18
+                            color: powerMouse.pressed
+                                ? (modelData.danger ? "#FFE0E2" : "#E7F4F7")
+                                : "#FFFFFF"
+                            border.width: 1
+                            border.color: modelData.danger ? "#FFB8BE" : "#DDEBF0"
+                            Text {
+                                anchors.centerIn: parent
+                                text: modelData.label
+                                color: modelData.danger ? "#D62F3A" : "#17212A"
+                                font.pixelSize: 12
+                                font.weight: Font.Medium
+                            }
+                            MouseArea {
+                                id: powerMouse
+                                anchors.fill: parent
+                                onClicked: root.requestSystemAction(modelData.action)
                             }
                         }
                     }
@@ -917,64 +450,13 @@ Item {
         }
     }
 
-    // ─── Animation definitions ──────────────────────────────────────────
-    SequentialAnimation {
-        id: animateOut
-
-        ParallelAnimation {
-            NumberAnimation {
-                target: panelContainer
-                property: "opacity"
-                to: 0.0
-                duration: controlCenterRoot.reduceMotion ? 80 : 150
-                easing.type: Easing.InCubic
-            }
-            NumberAnimation {
-                target: panelTranslate
-                property: "y"
-                to: -20
-                duration: controlCenterRoot.reduceMotion ? 80 : 150
-                easing.type: Easing.InCubic
-            }
-        }
-
-        ScriptAction {
-            script: {
-                controlCenterRoot.visible = false
-            }
-        }
-    }
-
-    // ─── Show function (call from parent) ───────────────────────────────
     function show() {
         visible = true
-        panelContainer.opacity = 1.0
-        panelTranslate.y = 0
-        // Reset clock timer on show
-        var d = new Date()
-        currentTime = d.toLocaleTimeString(Qt.locale("zh_CN"), "HH:mm")
-        clockTimer.running = true
+        currentTime = new Date().toLocaleTimeString(Qt.locale("zh_CN"), "HH:mm")
         refreshSystemState()
     }
 
-    // ─── Hide function ──────────────────────────────────────────────────
     function hide() {
-        animateOut.start()
-        clockTimer.running = false
-    }
-
-    // ─── Reset visibility if dismissed externally ───────────────────────
-    onVisibleChanged: {
-        if (visible) {
-            var d = new Date()
-            currentTime = d.toLocaleTimeString(Qt.locale("zh_CN"), "HH:mm")
-            clockTimer.running = true
-            backdrop.opacity = 1.0
-            panelContainer.opacity = 1.0
-            panelTranslate.y = 0
-        } else {
-            clockTimer.running = false
-            backdrop.opacity = 0.0
-        }
+        visible = false
     }
 }

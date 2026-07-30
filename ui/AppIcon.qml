@@ -1,5 +1,5 @@
 // YUNSH OS v1.0 - App Icon Component (visionOS Style)
-// Apple-style rounded-square glass icon with immediate press feedback.
+// visionOS-style circular liquid-glass icon with gaze/pointer depth feedback.
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
@@ -12,6 +12,8 @@ Item {
     property string appPackage: ""
     property bool isSystemApp: false
     property color iconColor: Qt.rgba(20/255, 20/255, 35/255, 0.5)
+    property bool hovered: false
+    property bool pressedState: false
 
     signal clicked()
 
@@ -22,7 +24,7 @@ Item {
         anchors.centerIn: parent
         spacing: 8
 
-        // Rounded-square system icon
+        // Circular system icon
         Item {
             width: 72
             height: 72
@@ -37,20 +39,22 @@ Item {
                 border.width: 1
             }
 
-            // Consistent squircle-like application tile.
+            // Circular liquid-glass application surface.
             Rectangle {
                 id: iconCircle
                 anchors.centerIn: parent
                 width: 64
                 height: 64
-                radius: 17
+                radius: 32
+                anchors.verticalCenterOffset: appIcon.hovered && !appIcon.pressedState ? -5 : 0
+                scale: appIcon.pressedState ? 0.96 : (appIcon.hovered ? 1.14 : 1.0)
                 color: appIcon.iconColor
                 border.color: Qt.rgba(255/255, 255/255, 255/255, 0.72)
                 border.width: 1
 
                 // White liquid-glass material that stays visible optically.
                 Rectangle {
-                    anchors.fill: parent; radius: 17
+                    anchors.fill: parent; radius: 32
                     color: Qt.rgba(255/255, 255/255, 255/255, 0.70)
                 }
 
@@ -87,9 +91,17 @@ Item {
                 // Glow on hover
                 Rectangle {
                     id: glowEffect
-                    anchors.fill: parent; radius: 17
-                    color: Qt.rgba(0/255, 212/255, 255/255, 0.0)
-                    visible: false
+                    anchors.fill: parent; radius: 32
+                    color: appIcon.hovered
+                        ? Qt.rgba(0/255, 212/255, 255/255, 0.13)
+                        : Qt.rgba(0/255, 212/255, 255/255, 0.0)
+                }
+
+                Behavior on scale {
+                    NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+                }
+                Behavior on anchors.verticalCenterOffset {
+                    NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
                 }
             }
 
@@ -123,24 +135,12 @@ Item {
     MouseArea {
         anchors.fill: parent
         onClicked: appIcon.clicked()
-        onPressed: iconCircle.scale = 0.96
-        onReleased: iconCircle.scale = containsMouse ? 1.06 : 1.0
-        onCanceled: iconCircle.scale = 1.0
+        onPressed: appIcon.pressedState = true
+        onReleased: appIcon.pressedState = false
+        onCanceled: appIcon.pressedState = false
         hoverEnabled: true
 
-        onEntered: {
-            iconCircle.scale = 1.06
-            glowEffect.visible = true
-            glowEffect.color = Qt.rgba(0/255, 212/255, 255/255, 0.1)
-        }
-        onExited: {
-            iconCircle.scale = 1.0
-            glowEffect.color = Qt.rgba(0/255, 212/255, 255/255, 0.0)
-            glowEffect.visible = false
-        }
-
-        Behavior on scale {
-            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
-        }
+        onEntered: appIcon.hovered = true
+        onExited: appIcon.hovered = false
     }
 }

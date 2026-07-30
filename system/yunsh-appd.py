@@ -18,6 +18,7 @@ SCREENSHOT_DIR = os.environ.get(
 DOWNLOAD_DIR = os.path.realpath(
     os.environ.get("YUNSH_DOWNLOAD_DIR", "/home/yunsh/Downloads")
 )
+UI_STATE_PATH = os.environ.get("YUNSH_UI_STATE_PATH", "/tmp/yunsh-ui-state.json")
 
 # Map internal app IDs to launch actions
 APP_MAP = {
@@ -69,6 +70,12 @@ class AppHandler(BaseHTTPRequestHandler):
             result = self.install_apk(req.get("path", ""))
         elif action == "delete_screenshot":
             result = self.delete_screenshot(req.get("path", ""))
+        elif action == "screen_recording":
+            result = self.screen_recording(req.get("command", "status"))
+        elif action == "system_action":
+            result = self.system_action(req.get("command", ""))
+        elif action == "set_ui_state":
+            result = self.set_ui_state(req.get("state", {}))
 
         self._send_json(result)
 
@@ -156,6 +163,69 @@ class AppHandler(BaseHTTPRequestHandler):
             return {"status": "error", "message": "Timeout capturing screenshot"}
         except Exception as e:
             return {"status": "error", "message": str(e)}
+
+    def screen_recording(self, command):
+        if command not in {"start", "stop", "status"}:
+            return {"status": "error", "message": "Invalid recording command"}
+        try:
+            result = subprocess.run(
+                ["/usr/bin/yunsh-recordingd", command],
+                capture_output=True, text=True, timeout=45,
+            )
+            payload = json.loads(result.stdout or "{}")
+            if result.returncode != 0:
+                payload.setdefault(
+                    "message", result.stderr.strip() or "Recording command failed"
+                )
+                payload["status"] = "error"
+            return payload
+        except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+            return {"status": "error", "message": str(exc)}
+
+    def system_action(self, command):
+        commands = {
+            "restart": ["/usr/bin/systemctl", "reboot"],
+            "shutdown": ["/usr/bin/systemctl", "poweroff"],
+            "factory_reset": ["/usr/bin/yunsh-factory-reset"],
+        }
+        if command not in commands:
+            return {"status": "error", "message": "Invalid system action"}
+        try:
+            subprocess.Popen(
+                ["/bin/bash", "-c", "sleep 1; exec \"$@\"", "yunsh-system-action"]
+                + commands[command],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            return {"status": "ok", "accepted": command}
+        except OSError as exc:
+            return {"status": "error", "message": str(exc)}
+
+    def set_ui_state(self, state):
+        if not isinstance(state, dict):
+            return {"status": "error", "message": "Invalid UI state"}
+        allowed = {
+            "activeAppId": str(state.get("activeAppId", ""))[:64],
+            "homeVisible": state.get("homeVisible") is True,
+            "worldVisible": state.get("worldVisible") is True,
+            "focusMode": state.get("focusMode") is True,
+            "recording": state.get("recording") is True,
+            "openApps": [
+                str(item)[:64] for item in state.get("openApps", [])[:32]
+            ] if isinstance(state.get("openApps"), list) else [],
+            "updatedAt": time.time(),
+        }
+        temporary = UI_STATE_PATH + ".tmp"
+        try:
+            with open(temporary, "w", encoding="utf-8") as handle:
+                json.dump(allowed, handle)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, UI_STATE_PATH)
+            return {"status": "ok"}
+        except OSError as exc:
+            return {"status": "error", "message": str(exc)}
 
     def android_status(self):
         try:

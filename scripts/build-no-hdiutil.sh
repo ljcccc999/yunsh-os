@@ -251,6 +251,8 @@ add_file "${YUNSH_DIR}/system/yunsh-headtracking" "/usr/bin/yunsh-headtracking"
 add_file "${YUNSH_DIR}/system/yunsh-bno085-reader" "/usr/bin/yunsh-bno085-reader"
 add_file "${YUNSH_DIR}/system/yunsh-headtracking-sim" "/usr/bin/yunsh-headtracking-sim"
 add_file "${YUNSH_DIR}/system/yunsh-screenshotd" "/usr/bin/yunsh-screenshotd"
+add_file "${YUNSH_DIR}/system/yunsh-recordingd" "/usr/bin/yunsh-recordingd"
+add_file "${YUNSH_DIR}/system/yunsh-media-setup" "/usr/bin/yunsh-media-setup"
 add_file "${YUNSH_DIR}/system/yunsh-factory-reset" "/usr/bin/yunsh-factory-reset"
 add_file "${YUNSH_DIR}/system/yunsh-install-progress.sh" "/usr/bin/yunsh-install-progress.sh"
 add_file "${YUNSH_DIR}/system/yunsh-inputd" "/usr/bin/yunsh-inputd"
@@ -577,6 +579,25 @@ WantedBy=multi-user.target
 ORBITVOICESVC
 add_file "${BUILD_DIR}/orbit-voice-setup.service" "/etc/systemd/system/orbit-voice-setup.service"
 
+cat > "${BUILD_DIR}/yunsh-media-setup.service" << 'MEDIASVC'
+[Unit]
+Description=YUNSH Optional Screen Recording and OCR Setup
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/yunsh/.packages_installed
+ConditionPathExists=!/var/lib/yunsh/media/.ready
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/yunsh-media-setup
+TimeoutStartSec=1800
+Restart=on-failure
+RestartSec=120
+Nice=10
+[Install]
+WantedBy=multi-user.target
+MEDIASVC
+add_file "${BUILD_DIR}/yunsh-media-setup.service" "/etc/systemd/system/yunsh-media-setup.service"
+
 # Android runtime setup is deliberately independent of yunsh-os.service.
 # A slow/unavailable Android image server must never prevent the desktop from
 # reaching activation. This service retries in the background after firstboot.
@@ -693,7 +714,7 @@ add_file "${BUILD_DIR}/yunsh-terminal.service" "/etc/systemd/system/yunsh-termin
 # Enable services
 for service in yunsh-os yunsh-firstboot yunsh-local-api yunsh-spaced yunsh-screen-relay yunsh-network yunsh-bluetooth \
                yunsh-update yunsh-link-ble yunsh-glasses-bridge yunsh-appd yunsh-android-setup yunsh-terminal yunsh-headtracking \
-               yunsh-powerd yunsh-splash orbit orbit-voice-setup; do
+               yunsh-powerd yunsh-splash yunsh-media-setup orbit orbit-voice-setup; do
     echo "symlink /etc/systemd/system/multi-user.target.wants/${service}.service ../${service}.service" >> "${DEBUGFS_SCRIPT}"
 done
 # Network: disable dhcpcd, enable NetworkManager + fstrim
@@ -725,7 +746,7 @@ for bin in yunsh-update-daemon yunsh-updater yunsh-network-daemon yunsh-bluetoot
            yunsh-screenshotd yunsh-factory-reset yunsh-install-progress.sh yunsh-inputd \
            yunsh-powerd yunsh-firstboot.sh yunsh-iptables.sh yunsh-ui-launcher yunsh-splash \
            yunsh-appd yunsh-terminal yunsh-disk-helper yunsh-headtracking yunsh-headtracking-sim \
-           yunsh-bno085-reader yunsh-activation-helper yunsh-android orbitd orbit-voice-setup; do
+           yunsh-bno085-reader yunsh-activation-helper yunsh-android yunsh-recordingd yunsh-media-setup orbitd orbit-voice-setup; do
     echo "set_inode_field /usr/bin/${bin} mode 0100755" >> "${DEBUGFS_SCRIPT}"
 done
 echo "set_inode_field /etc/rc.local mode 0100755" >> "${DEBUGFS_SCRIPT}"
@@ -797,6 +818,8 @@ REQUIRED_ROOT_FILES="
 /usr/bin/yunsh-android
 /usr/bin/orbitd
 /usr/bin/orbit-voice-setup
+/usr/bin/yunsh-recordingd
+/usr/bin/yunsh-media-setup
 /usr/share/yunsh/ui/main.qml
 /usr/share/yunsh/ui/HomeScreen.qml
 /usr/share/yunsh/ui/OrbitPanel.qml
@@ -809,11 +832,13 @@ REQUIRED_ROOT_FILES="
 /etc/systemd/system/yunsh-android-setup.service
 /etc/systemd/system/orbit.service
 /etc/systemd/system/orbit-voice-setup.service
+/etc/systemd/system/yunsh-media-setup.service
 /etc/systemd/system/multi-user.target.wants/yunsh-os.service
 /etc/systemd/system/multi-user.target.wants/yunsh-firstboot.service
 /etc/systemd/system/multi-user.target.wants/yunsh-android-setup.service
 /etc/systemd/system/multi-user.target.wants/orbit.service
 /etc/systemd/system/multi-user.target.wants/orbit-voice-setup.service
+/etc/systemd/system/multi-user.target.wants/yunsh-media-setup.service
 "
 for required in ${REQUIRED_ROOT_FILES}; do
     if ! "${E2FSPROGS}/sbin/debugfs" -R "stat ${required}" "${ROOT_TEST_IMG}" 2>&1 |

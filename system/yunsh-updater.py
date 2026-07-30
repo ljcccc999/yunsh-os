@@ -229,7 +229,11 @@ def install_bundle(bundle_path: str) -> dict:
 
             try:
                 subprocess.run(["systemctl", "daemon-reload"], check=False)
-                for unit in ("orbit.service", "orbit-voice-setup.service"):
+                for unit in (
+                    "orbit.service",
+                    "orbit-voice-setup.service",
+                    "yunsh-media-setup.service",
+                ):
                     if os.path.exists(os.path.join("/etc/systemd/system", unit)):
                         subprocess.run(["systemctl", "enable", unit], check=False)
             except FileNotFoundError:

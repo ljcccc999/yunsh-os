@@ -63,17 +63,24 @@ Item {
             Rectangle {
                 width: 48
                 height: 48
-                radius: 14
+                radius: 24
                 color: Qt.rgba(255/255, 255/255, 255/255, 0.02)
                 border.color: Qt.rgba(255/255, 255/255, 255/255, 0.03)
                 border.width: 1
                 
                 // Hover scale effect (macOS dock zoom)
                 property real hoverScale: 1.0
-                transform: Scale { origin.x: 24; origin.y: 24; xScale: hoverScale; yScale: hoverScale }
+                property real hoverLift: 0
+                transform: [
+                    Scale { origin.x: 24; origin.y: 24; xScale: hoverScale; yScale: hoverScale },
+                    Translate { y: hoverLift }
+                ]
                 
                 Behavior on hoverScale {
                     NumberAnimation { duration: 100; easing.type: Easing.OutBack }
+                }
+                Behavior on hoverLift {
+                    NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
                 }
                 
                 Image {
@@ -102,11 +109,13 @@ Item {
                     hoverEnabled: true
                     onEntered: {
                         parent.color = Qt.rgba(0/255, 212/255, 255/255, 0.08)
-                        parent.hoverScale = 1.12
+                        parent.hoverScale = 1.15
+                        parent.hoverLift = -5
                     }
                     onExited: {
                         parent.color = Qt.rgba(255/255, 255/255, 255/255, 0.02)
                         parent.hoverScale = 1.0
+                        parent.hoverLift = 0
                     }
                     onClicked: {
                         if (index < dockApps.length) {

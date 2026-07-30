@@ -46,6 +46,9 @@ ApplicationWindow {
     property bool reduceTransparency: false
     property bool highContrast: false
     property bool focusMode: false
+    property bool recordingActive: false
+    property string pendingSystemAction: ""
+    property int systemActionConfirmStage: 0
     property string activeAppId: ""
     property string androidTarget: "appstore"
     property string lastUiCommandId: ""
@@ -163,7 +166,6 @@ ApplicationWindow {
             id: homeScreen
             anchors.fill: parent
             visible: !firstBoot || activationDone
-            showDock: !yunshOS.focusMode
             showStatusBar: false
             stereoEnabled: yunshOS.stereoEnabled
             headTrackingConnected: yunshOS.headTrackingEnabled
@@ -254,16 +256,26 @@ ApplicationWindow {
             visible: false
             z: 300
             focusMode: yunshOS.focusMode
+            recording: yunshOS.recordingActive
             stereoEnabled: yunshOS.stereoEnabled
-            headTrackingConnected: yunshOS.headTrackingEnabled
             reduceMotion: yunshOS.reduceMotion
-            onDismissPanel: controlCenter.hide()
             onOpenNetwork: { controlCenter.hide(); switchTo(networkWindow, "network") }
             onOpenBluetooth: { controlCenter.hide(); switchTo(bluetoothWindow, "bluetooth") }
+            onOpenSettings: { controlCenter.hide(); switchTo(settingsWindow, "settings") }
+            onOpenPhotos: { controlCenter.hide(); switchTo(photosWindow, "photos") }
+            onOpenUpdate: { controlCenter.hide(); switchTo(updateWindow, "update") }
             onToggleWifi: controlCenter.applyWifiPower()
             onToggleBluetooth: controlCenter.applyBluetoothPower()
             onToggleKeyboard: { controlCenter.hide(); virtualKeyboard.visible ? virtualKeyboard.hide() : virtualKeyboard.show() }
-            onTakeScreenshot: takeScreenshot()
+            onTakeScreenshot: {
+                controlCenter.hide()
+                Qt.callLater(function() { takeScreenshot() })
+            }
+            onTakeRegionScreenshot: {
+                controlCenter.hide()
+                screenshotOverlay.visible = true
+            }
+            onToggleRecording: yunshOS.toggleScreenRecording()
             onToggleFocusMode: {
                 yunshOS.focusMode = !yunshOS.focusMode
                 saveSpatialPreferences()
@@ -272,9 +284,13 @@ ApplicationWindow {
                 controlCenter.hide()
                 switchTo(displayWindow, "display")
             }
-            onRecenterTracking: {
+            onRequestLock: {
                 controlCenter.hide()
-                yunshOS.recenterTracking()
+                screensaver_item.visible = true
+            }
+            onRequestSystemAction: function(action) {
+                controlCenter.hide()
+                yunshOS.beginSystemActionConfirmation(action)
             }
         }
 
@@ -301,6 +317,7 @@ ApplicationWindow {
                 onOpenDisplaySettings: switchTo(displayWindow, "display")
                 onOpenComfortDna: switchTo(comfortDnaWindow, "comfortdna")
                 onOpenSoundSettings: { settingsWindow.visible = false; controlCenter.show() }
+                onRequestFactoryReset: yunshOS.beginSystemActionConfirmation("factory_reset")
             }
         }
 
@@ -729,16 +746,117 @@ ApplicationWindow {
             }
         }
 
+        Rectangle {
+            id: systemActionDialog
+            anchors.fill: parent
+            z: 6900
+            visible: yunshOS.systemActionConfirmStage > 0
+            color: Qt.rgba(0, 0, 0, 0.58)
+
+            MouseArea { anchors.fill: parent }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: 500
+                height: yunshOS.pendingSystemAction === "factory_reset" ? 310 : 270
+                radius: 32
+                color: "#F8FDFF"
+                border.width: 1
+                border.color: "#FFFFFF"
+
+                Column {
+                    anchors.fill: parent
+                    anchors.margins: 30
+                    spacing: 16
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: yunshOS.systemActionConfirmStage === 1
+                            ? "确认系统操作" : "最后一次确认"
+                        color: "#111820"
+                        font.pixelSize: 23
+                        font.weight: Font.DemiBold
+                    }
+                    Text {
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.WordWrap
+                        text: {
+                            if (yunshOS.pendingSystemAction === "factory_reset")
+                                return yunshOS.systemActionConfirmStage === 1
+                                    ? "恢复出厂设置会保留 YUNSH OS，但清除账户、配对信息、Orbit API Key、用户文件、截图和个性化设置。"
+                                    : "此操作无法撤销。设备完成清理后会自动重启并重新进入激活流程。"
+                            if (yunshOS.pendingSystemAction === "restart")
+                                return yunshOS.systemActionConfirmStage === 1
+                                    ? "系统将关闭所有应用并重新启动，未保存的内容可能丢失。"
+                                    : "确定现在重新启动 YUNSH OS 吗？"
+                            return yunshOS.systemActionConfirmStage === 1
+                                ? "系统将关闭所有应用并停止运行，未保存的内容可能丢失。"
+                                : "确定现在关闭 YUNSH OS 吗？"
+                        }
+                        color: "#52616C"
+                        font.pixelSize: 14
+                        lineHeight: 1.35
+                    }
+                    Item { width: 1; height: 6 }
+                    Row {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        spacing: 12
+                        Rectangle {
+                            width: 150; height: 48; radius: 24
+                            color: cancelSystemMouse.pressed ? "#E7F1F4" : "#EEF5F7"
+                            Text {
+                                anchors.centerIn: parent
+                                text: "取消"
+                                color: "#17212A"
+                                font.pixelSize: 14
+                                font.weight: Font.Medium
+                            }
+                            MouseArea {
+                                id: cancelSystemMouse
+                                anchors.fill: parent
+                                onClicked: yunshOS.cancelSystemAction()
+                            }
+                        }
+                        Rectangle {
+                            width: 190; height: 48; radius: 24
+                            color: confirmSystemMouse.pressed ? "#C72732"
+                                : (yunshOS.systemActionConfirmStage === 1 ? "#00D4FF" : "#E43A45")
+                            Text {
+                                anchors.centerIn: parent
+                                text: yunshOS.systemActionConfirmStage === 1
+                                    ? "继续" : (yunshOS.pendingSystemAction === "factory_reset"
+                                        ? "抹掉并恢复" : (yunshOS.pendingSystemAction === "restart"
+                                            ? "立即重启" : "立即关机"))
+                                color: yunshOS.systemActionConfirmStage === 1 ? "#00191F" : "#FFFFFF"
+                                font.pixelSize: 14
+                                font.weight: Font.DemiBold
+                            }
+                            MouseArea {
+                                id: confirmSystemMouse
+                                anchors.fill: parent
+                                onClicked: {
+                                    if (yunshOS.systemActionConfirmStage === 1)
+                                        yunshOS.systemActionConfirmStage = 2
+                                    else
+                                        yunshOS.executeConfirmedSystemAction()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         SystemMenuBar {
             id: systemMenuBar
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
             z: 7000
-            visible: (!firstBoot || activationDone)
-                && !screensaver_item.visible
-                && !calibrationMode
+            visible: !firstBoot || activationDone
             orbitConfigured: orbitPanel.configured
+            recordingActive: yunshOS.recordingActive
             onOpenSystemMenu: controlCenter.show()
             onOpenWorld: yunshOS.openWorld()
             onOpenOrbit: orbitPanel.openPanel()
@@ -748,7 +866,7 @@ ApplicationWindow {
             id: orbitPanel
             anchors.fill: parent
             z: 7100
-            visible: (!firstBoot || activationDone) && !screensaver_item.visible
+            visible: !firstBoot || activationDone
             showTrigger: false
             onToastRequested: function(message) { yunshOS.showToast(message) }
         }
@@ -833,6 +951,88 @@ ApplicationWindow {
             result.saveToFile(filename)
             console.log("Full screenshot saved to " + filename)
         })
+    }
+
+    function appDaemonRequest(payload, callback) {
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8590", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 50000
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return
+            try {
+                callback(JSON.parse(xhr.responseText || "{}"))
+            } catch (_error) {
+                callback({status: "error", message: "系统服务返回异常"})
+            }
+        }
+        xhr.ontimeout = function() {
+            callback({status: "error", message: "系统服务响应超时"})
+        }
+        xhr.send(JSON.stringify(payload))
+    }
+
+    function toggleScreenRecording() {
+        var command = recordingActive ? "stop" : "start"
+        appDaemonRequest({action: "screen_recording", command: command},
+                         function(result) {
+            if (result.status !== "ok") {
+                showToast("录屏失败：" + (result.message || "录屏组件不可用"))
+                return
+            }
+            recordingActive = result.recording === true
+            showToast(recordingActive ? "已开始录屏" : "录屏已保存到视频")
+        })
+    }
+
+    function refreshRecordingStatus() {
+        appDaemonRequest({action: "screen_recording", command: "status"},
+                         function(result) {
+            if (result.status === "ok")
+                recordingActive = result.recording === true
+        })
+    }
+
+    function beginSystemActionConfirmation(action) {
+        if (["restart", "shutdown", "factory_reset"].indexOf(action) < 0)
+            return
+        pendingSystemAction = action
+        systemActionConfirmStage = 1
+    }
+
+    function cancelSystemAction() {
+        pendingSystemAction = ""
+        systemActionConfirmStage = 0
+    }
+
+    function executeConfirmedSystemAction() {
+        var action = pendingSystemAction
+        cancelSystemAction()
+        appDaemonRequest({action: "system_action", command: action},
+                         function(result) {
+            if (result.status !== "ok")
+                showToast("系统操作失败：" + (result.message || "未知错误"))
+            else
+                showToast("系统正在处理…")
+        })
+    }
+
+    function reportUiState() {
+        var ids = []
+        for (var i = 0; i < openApps.length; i++)
+            ids.push(openApps[i].appId)
+        appDaemonRequest({
+            action: "set_ui_state",
+            state: {
+                activeAppId: activeAppId,
+                homeVisible: homeScreen.visible,
+                worldVisible: worldLayer.visible,
+                focusMode: focusMode,
+                recording: recordingActive,
+                openApps: ids
+            }
+        }, function(_result) {})
     }
 
     function showToast(message) {
@@ -1039,6 +1239,28 @@ ApplicationWindow {
                         yunshOS.launchApp(appId)
                     else
                         yunshOS.switchToAppById(appId)
+                } else if (command.action === "confirm_system_action"
+                           && command.systemAction) {
+                    yunshOS.beginSystemActionConfirmation(
+                        String(command.systemAction))
+                } else if (command.action === "ui_action" && command.uiAction) {
+                    var action = String(command.uiAction)
+                    if (action === "home") {
+                        yunshOS.switchToHome()
+                    } else if (action === "task_switcher") {
+                        yunshOS.showTaskSwitcher()
+                    } else if (action === "close_active" && yunshOS.activeAppId) {
+                        yunshOS.closeAppFromSwitcher(yunshOS.activeAppId)
+                    } else if (action === "minimize_active" && yunshOS.activeAppId) {
+                        var activeWindow = yunshOS.getWindowById(yunshOS.activeAppId)
+                        if (activeWindow)
+                            yunshOS.minimizeWindow(activeWindow, yunshOS.activeAppId)
+                    } else if (action === "toggle_keyboard") {
+                        virtualKeyboard.visible
+                            ? virtualKeyboard.hide() : virtualKeyboard.show()
+                    } else if (action === "lock") {
+                        screensaver_item.visible = true
+                    }
                 }
             } catch (error) {}
         }
@@ -1050,6 +1272,16 @@ ApplicationWindow {
         running: !firstBoot || activationDone
         repeat: true
         onTriggered: yunshOS.pollUiCommand()
+    }
+
+    Timer {
+        interval: 2000
+        running: !firstBoot || activationDone
+        repeat: true
+        onTriggered: {
+            yunshOS.reportUiState()
+            yunshOS.refreshRecordingStatus()
+        }
     }
 
     function spatialPreferencesPayload() {

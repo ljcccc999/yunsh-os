@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Encrypted local-network receiver for YUNSH SpaceCapsule offers."""
 
+import base64
 import hashlib
 import hmac
+import http.client
 import json
 import os
 import re
@@ -30,6 +32,14 @@ PAIRING_PATH = os.environ.get(
 CERT_PATH = os.path.join(CONFIG_DIR, "space-transfer.crt")
 KEY_PATH = os.path.join(CONFIG_DIR, "space-transfer.key")
 MAX_BODY = 1024 * 1024
+FLOW_MAX_BODY = 35 * 1024 * 1024
+FLOW_MAX_FILE = 24 * 1024 * 1024
+FLOW_DIR = os.environ.get(
+    "YUNSH_FLOW_DIR", "/home/yunsh/Downloads/YUNSH Flow"
+)
+FLOW_CLIPBOARD_PATH = os.environ.get(
+    "YUNSH_FLOW_CLIPBOARD_PATH", "/run/yunsh/flow-clipboard.json"
+)
 ALLOWED_APPS = {
     "settings", "browser", "terminal", "photos", "appstore",
     "files", "update", "about", "network", "bluetooth", "display",
@@ -37,6 +47,12 @@ ALLOWED_APPS = {
 }
 RATE_LOCK = threading.Lock()
 RATE_BUCKETS = {}
+ORBIT_ROUTES = {
+    "/v1/phone/orbit/status": ("GET", "/v1/status"),
+    "/v1/phone/orbit/chat": ("POST", "/v1/chat"),
+    "/v1/phone/orbit/config": ("POST", "/v1/config"),
+    "/v1/phone/orbit/approve": ("POST", "/v1/approve"),
+}
 
 
 def atomic_write_json(path, payload):
@@ -121,6 +137,29 @@ def phone_authorized(key):
     )
 
 
+def orbit_proxy(method, path, payload=None):
+    expected_method, upstream_path = ORBIT_ROUTES[path]
+    if method != expected_method:
+        return 405, {"success": False, "error": "Method not allowed"}
+    body = None
+    headers = {}
+    if payload is not None:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    connection = http.client.HTTPConnection("127.0.0.1", 8597, timeout=85)
+    try:
+        connection.request(method, upstream_path, body=body, headers=headers)
+        response = connection.getresponse()
+        raw = response.read(MAX_BODY + 1)
+        if len(raw) > MAX_BODY:
+            raise ValueError("Orbit response too large")
+        return response.status, json.loads(raw or b"{}")
+    except (OSError, ValueError, http.client.HTTPException) as exc:
+        return 502, {"success": False, "error": f"Orbit unavailable: {exc}"}
+    finally:
+        connection.close()
+
+
 def read_record_path(path):
     try:
         with open(path, "r", encoding="utf-8") as handle:
@@ -168,6 +207,104 @@ def phone_capsules():
     return result[:50]
 
 
+def flow_path(filename):
+    name = os.path.basename(str(filename or ""))
+    if (
+        name != filename
+        or not name
+        or len(name) > 128
+        or not re.fullmatch(r"[^/\\\\\x00-\x1f]+", name)
+    ):
+        return None
+    base = os.path.realpath(FLOW_DIR)
+    path = os.path.realpath(os.path.join(base, name))
+    return path if path.startswith(base + os.sep) else None
+
+
+def flow_files():
+    result = []
+    try:
+        names = os.listdir(FLOW_DIR)
+    except OSError:
+        return result
+    for name in names:
+        path = flow_path(name)
+        try:
+            if not path or not os.path.isfile(path):
+                continue
+            size = os.path.getsize(path)
+            if size > FLOW_MAX_FILE:
+                continue
+            result.append({
+                "filename": name,
+                "size": size,
+                "modifiedAt": os.path.getmtime(path),
+            })
+        except OSError:
+            continue
+    result.sort(key=lambda item: item["modifiedAt"], reverse=True)
+    return result[:100]
+
+
+def save_flow_upload(payload):
+    name = str(payload.get("filename", ""))
+    path = flow_path(name)
+    encoded = payload.get("dataBase64")
+    if not path or not isinstance(encoded, str):
+        raise ValueError("Invalid Flow upload")
+    try:
+        data = base64.b64decode(encoded, validate=True)
+    except (ValueError, TypeError) as exc:
+        raise ValueError("Invalid Flow file data") from exc
+    if not data or len(data) > FLOW_MAX_FILE:
+        raise ValueError("Flow files must be 24 MB or smaller")
+    os.makedirs(FLOW_DIR, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".flow-", dir=FLOW_DIR)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, path)
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+    return {"success": True, "filename": name, "size": len(data)}
+
+
+def clipboard_text():
+    for command in (["wl-paste", "--no-newline"], ["xclip", "-selection", "clipboard", "-o"]):
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=3)
+            if result.returncode == 0:
+                return result.stdout[:20000]
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return str(read_record_path(FLOW_CLIPBOARD_PATH).get("text", ""))[:20000]
+
+
+def set_clipboard_text(payload):
+    text = str(payload.get("text", ""))
+    if not text or len(text) > 20000 or "\x00" in text:
+        raise ValueError("Clipboard text must contain 1–20000 characters")
+    copied = False
+    for command in (["wl-copy"], ["xclip", "-selection", "clipboard"]):
+        try:
+            result = subprocess.run(
+                command, input=text, capture_output=True, text=True, timeout=3
+            )
+            if result.returncode == 0:
+                copied = True
+                break
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    atomic_write_json(FLOW_CLIPBOARD_PATH, {"text": text, "updatedAt": time.time()})
+    return {"success": True, "clipboardUpdated": copied}
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "YUNSHSpace/2.0"
 
@@ -180,12 +317,12 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def read_json(self):
+    def read_json(self, max_length=MAX_BODY):
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             return None
-        if length <= 0 or length > MAX_BODY:
+        if length <= 0 or length > max_length:
             return None
         try:
             return json.loads(self.rfile.read(length))
@@ -213,6 +350,47 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(403, {"success": False, "error": "Paired phone required"})
                 return
             self.send_json(200, {"success": True, "capsules": phone_capsules()})
+            return
+        if parsed.path == "/v1/phone/orbit/status":
+            if not phone_authorized(self.headers.get("X-YUNSH-Key")):
+                self.send_json(403, {"success": False, "error": "Paired phone required"})
+                return
+            status, result = orbit_proxy("GET", parsed.path)
+            self.send_json(status, result)
+            return
+        if parsed.path == "/v1/phone/flow/files":
+            if not phone_authorized(self.headers.get("X-YUNSH-Key")):
+                self.send_json(403, {"success": False, "error": "Paired phone required"})
+                return
+            self.send_json(200, {"success": True, "files": flow_files()})
+            return
+        if parsed.path == "/v1/phone/flow/file":
+            if not phone_authorized(self.headers.get("X-YUNSH-Key")):
+                self.send_json(403, {"success": False, "error": "Paired phone required"})
+                return
+            filename = parse_qs(parsed.query).get("filename", [""])[0]
+            path = flow_path(filename)
+            try:
+                if not path or os.path.getsize(path) > FLOW_MAX_FILE:
+                    raise OSError("not found")
+                with open(path, "rb") as handle:
+                    body = handle.read(FLOW_MAX_FILE + 1)
+            except OSError:
+                self.send_json(404, {"success": False, "error": "Flow file not found"})
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if parsed.path == "/v1/phone/flow/clipboard":
+            if not phone_authorized(self.headers.get("X-YUNSH-Key")):
+                self.send_json(403, {"success": False, "error": "Paired phone required"})
+                return
+            self.send_json(200, {"success": True, "text": clipboard_text()})
             return
         if parsed.path == "/v1/phone/capsule":
             if not phone_authorized(self.headers.get("X-YUNSH-Key")):
@@ -252,6 +430,52 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json(404, {"success": False, "error": "Not found"})
 
     def do_POST(self):
+        if self.path in {
+            "/v1/phone/flow/upload",
+            "/v1/phone/flow/clipboard",
+        }:
+            if not phone_authorized(self.headers.get("X-YUNSH-Key")):
+                self.send_json(403, {"success": False, "error": "Paired phone required"})
+                return
+            if not rate_allowed(self.client_address[0]):
+                self.send_json(429, {"success": False, "error": "Too many Flow requests"})
+                return
+            payload = self.read_json(
+                FLOW_MAX_BODY if self.path.endswith("/upload") else MAX_BODY
+            )
+            if not isinstance(payload, dict):
+                self.send_json(400, {"success": False, "error": "Invalid request"})
+                return
+            try:
+                result = (
+                    save_flow_upload(payload)
+                    if self.path.endswith("/upload")
+                    else set_clipboard_text(payload)
+                )
+                self.send_json(200, result)
+            except ValueError as exc:
+                self.send_json(400, {"success": False, "error": str(exc)})
+            except OSError as exc:
+                self.send_json(500, {"success": False, "error": str(exc)})
+            return
+        if self.path in {
+            "/v1/phone/orbit/chat",
+            "/v1/phone/orbit/config",
+            "/v1/phone/orbit/approve",
+        }:
+            if not phone_authorized(self.headers.get("X-YUNSH-Key")):
+                self.send_json(403, {"success": False, "error": "Paired phone required"})
+                return
+            if not rate_allowed(self.client_address[0]):
+                self.send_json(429, {"success": False, "error": "Too many Orbit requests"})
+                return
+            payload = self.read_json()
+            if not isinstance(payload, dict):
+                self.send_json(400, {"success": False, "error": "Invalid request"})
+                return
+            status, result = orbit_proxy("POST", self.path, payload)
+            self.send_json(status, result)
+            return
         if self.path != "/v1/offers":
             self.send_json(404, {"success": False, "error": "Not found"})
             return

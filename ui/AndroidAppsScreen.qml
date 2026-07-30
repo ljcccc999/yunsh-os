@@ -89,7 +89,7 @@ Rectangle {
             anchors.horizontalCenter: parent.horizontalCenter
             width: 82
             height: 82
-            radius: 24
+            radius: 41
             color: Qt.rgba(255/255, 152/255, 0/255, 0.14)
             border.color: Qt.rgba(255/255, 255/255, 255/255, 0.10)
 

@@ -52,6 +52,8 @@ install_runtime "${YUNSH_DIR}/system/yunsh-headtracking" "yunsh-headtracking"
 install_runtime "${YUNSH_DIR}/system/yunsh-bno085-reader" "yunsh-bno085-reader"
 install_runtime "${YUNSH_DIR}/system/yunsh-headtracking-sim" "yunsh-headtracking-sim"
 install_runtime "${YUNSH_DIR}/system/yunsh-screenshotd" "yunsh-screenshotd"
+install_runtime "${YUNSH_DIR}/system/yunsh-recordingd" "yunsh-recordingd"
+install_runtime "${YUNSH_DIR}/system/yunsh-media-setup" "yunsh-media-setup"
 install_runtime "${YUNSH_DIR}/system/yunsh-factory-reset" "yunsh-factory-reset"
 install_runtime "${YUNSH_DIR}/system/yunsh-install-progress.sh" "yunsh-install-progress.sh"
 install_runtime "${YUNSH_DIR}/system/yunsh-inputd" "yunsh-inputd"
@@ -71,7 +73,7 @@ required_services=(
     yunsh-os yunsh-firstboot yunsh-local-api yunsh-spaced yunsh-screen-relay yunsh-network yunsh-bluetooth
     yunsh-update yunsh-link-ble yunsh-glasses-bridge yunsh-appd
     yunsh-android-setup yunsh-terminal yunsh-headtracking yunsh-powerd yunsh-splash
-    orbit orbit-voice-setup
+    orbit orbit-voice-setup yunsh-media-setup
 )
 for service_name in "${required_services[@]}"; do
     service="${BUILD_DIR}/${service_name}.service"

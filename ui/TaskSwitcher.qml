@@ -168,7 +168,7 @@ Item {
                             // App icon in preview center
                             Rectangle {
                                 anchors.centerIn: parent
-                                width: 64; height: 64; radius: 20
+                                width: 64; height: 64; radius: 32
                                 color: Qt.rgba(
                                     parseInt(appData.color.substring(1,3), 16) / 255,
                                     parseInt(appData.color.substring(3,5), 16) / 255,

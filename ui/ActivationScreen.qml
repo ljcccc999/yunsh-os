@@ -23,7 +23,7 @@ Rectangle {
     property string selectedLanguage: "简体中文"
     property string selectedKeyboard: "拼音"
     property string wifiSSID: ""
-    property string accountUsername: "yunsh"
+    property string accountUsername: "YUNSH User"
     property string accountPassword: ""
     property string accountConfirmPassword: ""
     property bool accountValid: false
@@ -163,6 +163,7 @@ Rectangle {
             action: "configure_activation",
             language: selectedLanguage,
             keyboard: selectedKeyboard,
+            displayName: accountUsername,
             password: accountPassword
         }))
     }
@@ -201,7 +202,8 @@ Rectangle {
             speakResponses: true,
             permissions: {
                 apps: true, files: true, shell: true, settings: true,
-                network: true, screen: true, memory: true, world: true
+                network: true, screen: true, microphone: true,
+                memory: true, world: true
             }
         }))
     }
@@ -1040,13 +1042,13 @@ Rectangle {
 
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "创建账户"
+                    text: "创建本地 YUNSH 账户"
                     color: "#FFFFFF"; font.pixelSize: 22; font.weight: Font.Medium
                 }
 
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "设置用户名和密码来保护您的设备"
+                    text: "显示名称保存在本机；开机密码会同步给 Linux 用户 yunsh"
                     color: Qt.rgba(255/255, 255/255, 255/255, 0.4)
                     font.pixelSize: 12
                     bottomPadding: 16
@@ -1069,12 +1071,11 @@ Rectangle {
                             anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
                             verticalAlignment: TextInput.AlignVCenter
                             color: "#FFFFFF"; font.pixelSize: 15
-                            placeholderText: "yunsh"
-                            text: "yunsh"
-                            readOnly: true
+                            placeholderText: "你的显示名称"
+                            text: "YUNSH User"
                             placeholderTextColor: Qt.rgba(255/255, 255/255, 255/255, 0.2)
                             onTextChanged: {
-                                accountUsername = text.length > 0 ? text : "yunsh"
+                                accountUsername = text
                             }
                         }
                     }
@@ -1151,8 +1152,9 @@ Rectangle {
                         MouseArea {
                             anchors.fill: parent; hoverEnabled: true
                             onClicked: {
-                                accountUsername = "yunsh"
-                                accountPassword = "yunsh123"
+                                accountUsername = "YUNSH User"
+                                accountPassword = ""
+                                accountConfirmPassword = ""
                                 currentStep = 6
                             }
                         }
@@ -1168,7 +1170,9 @@ Rectangle {
                             id: accountNextBtn; anchors.fill: parent; hoverEnabled: true
                             onClicked: {
                                 accountError = ""
-                                if (accountPassword.length < 4) {
+                                if (accountUsername.trim().length < 1) {
+                                    accountError = "请输入显示名称"
+                                } else if (accountPassword.length < 4) {
                                     accountError = "密码至少需要4个字符"
                                 } else if (accountPassword !== accountConfirmPassword) {
                                     accountError = "两次密码不一致"

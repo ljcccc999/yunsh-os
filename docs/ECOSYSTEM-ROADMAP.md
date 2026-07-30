@@ -44,12 +44,17 @@ adds the persistent system-world foundation and Orbit system agent:
 - window pin and follow behavior;
 - focus mode, reduced motion, reduced transparency, and increased contrast;
 - validated, persistent display and comfort preferences.
-- a permanent YUNSH / METAVERSE / Orbit system menu bar;
+- three permanent liquid-glass YUNSH / METAVERSE / Orbit buttons;
 - YUNSH META Universe as a shell-owned world layer rather than an application;
 - Orbit auto-start, provider/model/own-key configuration, encrypted local
-  credentials, full default permissions, tool execution, and optional voice;
+  credentials, plan–act–observe–verify execution, first-use capability
+  approval, destructive-action confirmation, screen observation, recording,
+  semantic shell control, task plans, memory, and optional voice;
 - default sweet female speech, optional male speech, and honest USB/Bluetooth
   microphone detection with background voice preparation.
+- one shared on-device Orbit runtime across the glasses conversation panel and
+  a standalone Orbit iPhone app, using YUNSH Link pairing and the
+  TLS-encrypted local-network path.
 
 Release assets are published through
 <https://github.com/ljcccc999/yunsh-os/releases>. Structural image validation
@@ -178,17 +183,17 @@ Orbit UI
   │
 orbitd
   ├── local context and conversation state
-  ├── user-selectable permissions, enabled by default
+  ├── user-selectable capability switches and first-use approval
   ├── system tools and UI command bridge
   ├── device-key-encrypted provider credential
   └── selected model-provider API
 ```
 
-The model proposes tool calls and the local runtime owns execution. In this
-release application, file, shell, settings, network, screen, memory, and world
-permissions are enabled by default as a deliberate full-system-agent choice.
-Users can disable any category in Orbit settings. Raw shell access is therefore
-powerful and must be treated as trusted-device access.
+The model proposes tool calls and the local runtime owns execution. Capability
+categories can be disabled in settings; enabled categories still ask for
+Allow Once, Always Allow, or Deny when a sensitive tool is first used.
+Destructive commands and power/recovery actions always require fresh approval
+and cannot be permanently trusted. Raw shell remains trusted-device access.
 
 ### Commercial access and quotas
 

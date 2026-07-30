@@ -37,8 +37,13 @@ UI_COMMAND_PATH = pathlib.Path(
 )
 MAX_BODY = 1024 * 1024
 MAX_HISTORY = 24
-MAX_TOOL_ROUNDS = 6
+MAX_TOOL_ROUNDS = 16
 MAX_TOOL_OUTPUT = 24000
+PENDING_APPROVALS = {}
+PENDING_LOCK = threading.Lock()
+UI_STATE_PATH = pathlib.Path(
+    os.environ.get("YUNSH_UI_STATE_PATH", "/tmp/yunsh-ui-state.json")
+)
 VOICE_MODEL_DIR = STATE_DIR / "voice" / "vosk-model-small-cn-0.22"
 VOICE_CHOICES = {
     "sweet_female": {
@@ -86,10 +91,33 @@ PERMISSION_LABELS = {
     "settings": "修改系统设置",
     "network": "访问网络",
     "screen": "读取屏幕与窗口状态",
+    "microphone": "使用麦克风进行语音识别",
     "memory": "保存长期任务记忆",
     "world": "控制 YUNSH 世界层",
 }
 DEFAULT_PERMISSIONS = {name: True for name in PERMISSION_LABELS}
+TOOL_PERMISSION = {
+    "open_app": "apps",
+    "open_world": "world",
+    "recenter": "settings",
+    "ui_action": "apps",
+    "system_status": "screen",
+    "ui_state": "screen",
+    "capture_screen": "screen",
+    "start_screen_recording": "screen",
+    "stop_screen_recording": "screen",
+    "recording_status": "screen",
+    "list_directory": "files",
+    "read_file": "files",
+    "write_file": "files",
+    "run_command": "shell",
+    "update_plan": "memory",
+    "remember": "memory",
+    "wait": "apps",
+    "power_action": "settings",
+    "voice_listen": "microphone",
+}
+ALWAYS_CONFIRM_TOOLS = {"power_action"}
 
 TOOLS = [
     {
@@ -128,6 +156,26 @@ TOOLS = [
             "name": "recenter",
             "description": "Recenter the current 3DoF viewing direction.",
             "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "ui_action",
+            "description": "Control the YUNSH shell semantically without guessing screen coordinates.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": [
+                            "home", "task_switcher", "close_active",
+                            "minimize_active", "toggle_keyboard", "lock",
+                        ],
+                    }
+                },
+                "required": ["action"],
+            },
         },
     },
     {
@@ -189,6 +237,117 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "ui_state",
+            "description": "Observe the active app, open windows, world layer, focus mode, and recording state.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "capture_screen",
+            "description": "Capture the current display for verification and return OCR text when available.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "start_screen_recording",
+            "description": "Start visibly indicated screen recording.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "stop_screen_recording",
+            "description": "Stop screen recording and return the saved video path.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recording_status",
+            "description": "Check whether screen recording is active.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_plan",
+            "description": "Create or update the explicit plan for a multi-step task.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "objective": {"type": "string"},
+                    "steps": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "step": {"type": "string"},
+                                "status": {
+                                    "type": "string",
+                                    "enum": ["pending", "in_progress", "completed"],
+                                },
+                            },
+                            "required": ["step", "status"],
+                        },
+                    },
+                },
+                "required": ["objective", "steps"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remember",
+            "description": "Save a durable user-approved fact or task note.",
+            "parameters": {
+                "type": "object",
+                "properties": {"text": {"type": "string"}},
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "wait",
+            "description": "Wait briefly for a background action, then continue observing.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "seconds": {"type": "number", "minimum": 0.2, "maximum": 15}
+                },
+                "required": ["seconds"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "power_action",
+            "description": "Restart, shut down, or factory-reset YUNSH OS. Always needs fresh approval.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "enum": ["restart", "shutdown", "factory_reset"],
+                    }
+                },
+                "required": ["action"],
+            },
+        },
+    },
 ]
 
 
@@ -225,6 +384,7 @@ def default_config():
         "apiKey": "",
         "endpoint": "",
         "permissions": dict(DEFAULT_PERMISSIONS),
+        "alwaysAllowedTools": [],
         "voice": "sweet_female",
         "speakResponses": True,
         "updatedAt": 0,
@@ -250,6 +410,11 @@ def load_config():
             if isinstance(supplied.get(name), bool):
                 permissions[name] = supplied[name]
     config["permissions"] = permissions
+    allowed_tools = config.get("alwaysAllowedTools")
+    config["alwaysAllowedTools"] = (
+        [str(name) for name in allowed_tools if str(name) in TOOL_PERMISSION]
+        if isinstance(allowed_tools, list) else []
+    )
     return config
 
 
@@ -270,6 +435,7 @@ def public_config(config):
             "••••" + config["apiKey"][-4:] if len(config.get("apiKey", "")) >= 4 else ""
         ),
         "permissions": config["permissions"],
+        "alwaysAllowedTools": config.get("alwaysAllowedTools", []),
         "permissionLabels": PERMISSION_LABELS,
         "voice": config.get("voice", "sweet_female"),
         "voiceChoices": [
@@ -318,7 +484,7 @@ def update_config(payload):
     if api_key and (len(api_key) < 8 or len(api_key) > 512 or any(c in api_key for c in "\r\n\0")):
         raise ValueError("API Key 格式不正确")
 
-    permissions = dict(DEFAULT_PERMISSIONS)
+    permissions = dict(existing.get("permissions", DEFAULT_PERMISSIONS))
     supplied_permissions = payload.get("permissions")
     if isinstance(supplied_permissions, dict):
         for name in permissions:
@@ -329,12 +495,17 @@ def update_config(payload):
     if voice not in VOICE_CHOICES:
         raise ValueError("不支持的 Orbit 声音")
 
+    allowed_tools = [
+        name for name in existing.get("alwaysAllowedTools", [])
+        if permissions.get(TOOL_PERMISSION.get(name, ""), True)
+    ]
     config = {
         "provider": provider,
         "model": model,
         "apiKey": api_key,
         "endpoint": endpoint,
         "permissions": permissions,
+        "alwaysAllowedTools": allowed_tools,
         "voice": voice,
         "speakResponses": payload.get(
             "speakResponses", existing.get("speakResponses", True)
@@ -364,6 +535,20 @@ def clean_path(value):
     return pathlib.Path(value)
 
 
+def run_helper(command, timeout=30):
+    completed = subprocess.run(
+        command, capture_output=True, text=True, timeout=timeout
+    )
+    output = completed.stdout.strip()
+    try:
+        result = json.loads(output) if output else {}
+    except json.JSONDecodeError:
+        result = {"output": output}
+    if completed.returncode != 0:
+        raise RuntimeError(completed.stderr.strip() or output or "系统操作失败")
+    return result
+
+
 def execute_tool(config, name, arguments):
     if name == "open_app":
         require_permission(config, "apps")
@@ -378,6 +563,16 @@ def execute_tool(config, name, arguments):
     if name == "recenter":
         require_permission(config, "settings")
         return write_ui_command("recenter")
+    if name == "ui_action":
+        require_permission(config, "apps")
+        action = str(arguments.get("action", ""))
+        allowed = {
+            "home", "task_switcher", "close_active",
+            "minimize_active", "toggle_keyboard", "lock",
+        }
+        if action not in allowed:
+            raise ValueError("未知界面操作")
+        return write_ui_command("ui_action", uiAction=action)
     if name == "system_status":
         require_permission(config, "screen")
         uptime = pathlib.Path("/proc/uptime")
@@ -389,6 +584,57 @@ def execute_tool(config, name, arguments):
             "worldLayer": "system",
             "displayMode": "single-frame mirrored to both eye displays",
         }
+    if name == "ui_state":
+        require_permission(config, "screen")
+        if not UI_STATE_PATH.exists():
+            return {"available": False, "message": "桌面状态尚未上报"}
+        state = json.loads(UI_STATE_PATH.read_text(encoding="utf-8"))
+        state["available"] = True
+        return state
+    if name == "capture_screen":
+        require_permission(config, "screen")
+        capture_dir = STATE_DIR / "screen"
+        capture_dir.mkdir(parents=True, exist_ok=True)
+        os.chmod(capture_dir, 0o700)
+        capture_env = dict(os.environ)
+        capture_env["YUNSH_SCREENSHOT_DIR"] = str(capture_dir)
+        captured = subprocess.run(
+            ["/usr/bin/yunsh-screenshotd", "full"],
+            capture_output=True, text=True, timeout=30, env=capture_env,
+        )
+        if captured.returncode != 0:
+            raise RuntimeError(captured.stderr.strip() or "屏幕捕获失败")
+        path = captured.stdout.strip().splitlines()[-1]
+        result = {"path": path, "ocrAvailable": False, "text": ""}
+        if shutil.which("tesseract"):
+            ocr = subprocess.run(
+                ["tesseract", path, "stdout", "-l", "chi_sim+eng"],
+                capture_output=True, text=True, timeout=45,
+            )
+            if ocr.returncode == 0:
+                result.update({
+                    "ocrAvailable": True,
+                    "text": ocr.stdout[-MAX_TOOL_OUTPUT:],
+                })
+        captures = sorted(
+            capture_dir.glob("Screenshot_*.png"),
+            key=lambda item: item.stat().st_mtime,
+            reverse=True,
+        )
+        for old_capture in captures[3:]:
+            try:
+                old_capture.unlink()
+            except OSError:
+                pass
+        return result
+    if name in {"start_screen_recording", "stop_screen_recording", "recording_status"}:
+        require_permission(config, "screen")
+        operation = {
+            "start_screen_recording": "start",
+            "stop_screen_recording": "stop",
+            "recording_status": "status",
+        }[name]
+        return run_helper(["/usr/bin/yunsh-recordingd", operation], timeout=40)
     if name == "list_directory":
         require_permission(config, "files")
         path = clean_path(arguments.get("path", ""))
@@ -441,6 +687,57 @@ def execute_tool(config, name, arguments):
             "stdout": completed.stdout[-MAX_TOOL_OUTPUT:],
             "stderr": completed.stderr[-MAX_TOOL_OUTPUT:],
         }
+    if name == "update_plan":
+        require_permission(config, "memory")
+        objective = str(arguments.get("objective", "")).strip()[:1000]
+        steps = arguments.get("steps")
+        if not objective or not isinstance(steps, list) or len(steps) > 30:
+            raise ValueError("任务计划无效")
+        normalized = []
+        in_progress = 0
+        for item in steps:
+            step = str(item.get("step", "")).strip()[:500]
+            status = str(item.get("status", "pending"))
+            if not step or status not in {"pending", "in_progress", "completed"}:
+                raise ValueError("任务计划步骤无效")
+            in_progress += status == "in_progress"
+            normalized.append({"step": step, "status": status})
+        if in_progress > 1:
+            raise ValueError("同时只能有一个进行中的步骤")
+        record = {
+            "objective": objective,
+            "steps": normalized,
+            "updatedAt": time.time(),
+        }
+        atomic_write(
+            STATE_DIR / "current-plan.json",
+            json.dumps(record, ensure_ascii=False).encode("utf-8"),
+            0o600,
+        )
+        return record
+    if name == "remember":
+        require_permission(config, "memory")
+        text = str(arguments.get("text", "")).strip()
+        if not text or len(text) > 4000:
+            raise ValueError("记忆内容无效")
+        memory_dir = STATE_DIR / "memory"
+        memory_dir.mkdir(parents=True, exist_ok=True)
+        entry = json.dumps(
+            {"text": text, "createdAt": time.time()}, ensure_ascii=False
+        ) + "\n"
+        with open(memory_dir / "orbit-memory.jsonl", "a", encoding="utf-8") as handle:
+            handle.write(entry)
+        return {"saved": True}
+    if name == "wait":
+        seconds = min(15.0, max(0.2, float(arguments.get("seconds", 1))))
+        time.sleep(seconds)
+        return {"waitedSeconds": seconds}
+    if name == "power_action":
+        require_permission(config, "settings")
+        action = str(arguments.get("action", ""))
+        if action not in {"restart", "shutdown", "factory_reset"}:
+            raise ValueError("未知电源操作")
+        return write_ui_command("confirm_system_action", systemAction=action)
     raise ValueError("Orbit 不支持该工具")
 
 
@@ -463,6 +760,19 @@ def voice_status():
         "naturalVoiceReady": shutil.which("edge-tts") is not None and shutil.which("mpv") is not None,
         "offlineVoiceReady": shutil.which("espeak-ng") is not None,
     }
+
+
+def grant_capability(payload):
+    name = str(payload.get("name", ""))
+    if name not in {"voice_listen"}:
+        raise ValueError("未知权限")
+    config = load_config()
+    require_permission(config, TOOL_PERMISSION[name])
+    allowed = set(config.get("alwaysAllowedTools", []))
+    allowed.add(name)
+    config["alwaysAllowedTools"] = sorted(allowed)
+    save_config(config)
+    return {"granted": name}
 
 
 def speak_text(payload):
@@ -581,6 +891,12 @@ def upstream_request(config, messages):
         "tool_choice": "auto",
         "stream": False,
     }
+    if config["provider"] == "deepseek":
+        # DeepSeek thinking-mode tool calls require reasoning_content to be
+        # preserved between tool rounds; continue_agent appends the complete
+        # assistant message, including that field, without stripping it.
+        body["thinking"] = {"type": "enabled"}
+        body["reasoning_effort"] = "max"
     request = urllib.request.Request(
         provider_endpoint(config),
         data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
@@ -611,8 +927,13 @@ def upstream_request(config, messages):
 
 SYSTEM_PROMPT = """你是 Orbit，YUNSH OS 的系统级 AI Agent。
 你不是普通聊天 App，而是桌面、设备互联和持续存在虚拟世界的系统入口。
-你可以像 Codex 或 OpenClaw 一样理解任务、使用工具、检查结果并继续执行。
+你像 Codex 一样工作：先理解目标；复杂任务先用 update_plan 建立可核对的计划；
+然后连续使用工具推进，读取工具结果，必要时等待、观察界面或截图验证，遇到失败先诊断并重试。
+不要在仍有安全可行的下一步时提前停下，也不要仅凭工具已调用就声称成功。
 用户当前授予的权限决定哪些工具能够执行。需要操作时优先调用工具，不要假装执行。
+一次只发起一个工具调用，以便权限确认和执行状态始终清晰。
+截图、录屏、文件修改、Shell、记忆等能力在首次使用时会由系统请求确认；
+关机、重启和破坏性命令永远需要新确认。拒绝后尊重用户决定并提供安全替代方案。
 YUNSH 世界是系统层，不要称其为普通 App。当前显示硬件把一个完整画面同步到左右屏，
 不把 SBS 当作默认模式。用简洁自然的中文回复，明确说明执行结果和失败原因。"""
 
@@ -631,47 +952,181 @@ def sanitize_history(history):
     return cleaned
 
 
+def tool_approval(config, name, arguments):
+    permission = TOOL_PERMISSION.get(name)
+    if permission:
+        require_permission(config, permission)
+    command = str(arguments.get("command", "")) if name == "run_command" else ""
+    destructive_shell = bool(re.search(
+        r"(^|[;&|]\s*)(rm|dd|mkfs|shutdown|reboot|poweroff)\b|"
+        r"\bsystemctl\s+(reboot|poweroff)\b|git\s+reset\s+--hard",
+        command,
+        re.IGNORECASE,
+    ))
+    always = name in ALWAYS_CONFIRM_TOOLS or destructive_shell
+    allowed = name in config.get("alwaysAllowedTools", [])
+    if not always and allowed:
+        return None
+    summaries = {
+        "open_app": f"允许 Orbit 打开 {arguments.get('app_id', '系统面板')}",
+        "open_world": "允许 Orbit 进入 YUNSH META Universe",
+        "recenter": "允许 Orbit 调整当前观看方向",
+        "ui_action": f"允许 Orbit 操作界面：{arguments.get('action', '')}",
+        "system_status": "允许 Orbit 读取设备状态",
+        "ui_state": "允许 Orbit 查看当前界面与窗口状态",
+        "capture_screen": "允许 Orbit 截取并识别当前屏幕",
+        "start_screen_recording": "允许 Orbit 开始录制屏幕",
+        "stop_screen_recording": "允许 Orbit 停止并保存录屏",
+        "recording_status": "允许 Orbit 查看录屏状态",
+        "list_directory": f"允许 Orbit 查看目录：{arguments.get('path', '')}",
+        "read_file": f"允许 Orbit 读取文件：{arguments.get('path', '')}",
+        "write_file": f"允许 Orbit 修改文件：{arguments.get('path', '')}",
+        "run_command": f"允许 Orbit 执行命令：{command[:180]}",
+        "update_plan": "允许 Orbit 保存当前任务计划",
+        "remember": "允许 Orbit保存一条长期记忆",
+        "wait": "允许 Orbit 等待后台任务完成",
+        "power_action": (
+            "允许 Orbit 请求重启系统"
+            if arguments.get("action") == "restart"
+            else ("允许 Orbit 请求恢复出厂设置"
+                  if arguments.get("action") == "factory_reset"
+                  else "允许 Orbit 请求关闭系统")
+        ),
+    }
+    return {
+        "summary": summaries.get(name, f"允许 Orbit 使用 {name}"),
+        "permission": permission or "system",
+        "permissionLabel": PERMISSION_LABELS.get(permission, "系统操作"),
+        "alwaysConfirm": always,
+    }
+
+
+def save_pending(state, approval):
+    request_id = secrets.token_urlsafe(18)
+    state["createdAt"] = time.time()
+    with PENDING_LOCK:
+        now = time.time()
+        for key in list(PENDING_APPROVALS):
+            if now - PENDING_APPROVALS[key].get("createdAt", now) > 600:
+                PENDING_APPROVALS.pop(key, None)
+        PENDING_APPROVALS[request_id] = state
+    return {
+        "reply": "需要你的确认后我才能继续。",
+        "tools": state["executed"],
+        "usage": state.get("usage", {}),
+        "approval": {"requestId": request_id, **approval},
+    }
+
+
+def continue_agent(state, approved_call_id=None, approved=False):
+    config = state["config"]
+    messages = state["messages"]
+    executed = state["executed"]
+    usage = state.get("usage", {})
+    pending = state.get("pending", [])
+    rounds = int(state.get("rounds", 0))
+    while rounds < MAX_TOOL_ROUNDS:
+        if not pending:
+            assistant, usage = upstream_request(config, messages)
+            pending = list(assistant.get("tool_calls") or [])
+            if not pending:
+                return {
+                    "reply": assistant.get("content") or "任务已完成。",
+                    "tools": executed,
+                    "usage": usage,
+                }
+            messages.append(assistant)
+            rounds += 1
+        call = pending.pop(0)
+        function = call.get("function") or {}
+        name = str(function.get("name", ""))
+        call_id = call.get("id", secrets.token_hex(4))
+        try:
+            arguments = json.loads(function.get("arguments") or "{}")
+        except json.JSONDecodeError:
+            arguments = {}
+        if call_id == approved_call_id:
+            if approved:
+                approval = None
+            else:
+                result = {"error": "用户拒绝了这项操作"}
+                executed.append({"name": name, "success": False, "denied": True})
+                messages.append({
+                    "role": "tool", "tool_call_id": call_id,
+                    "content": json.dumps(result, ensure_ascii=False),
+                })
+                continue
+        else:
+            approval = tool_approval(config, name, arguments)
+        if approval:
+            return save_pending({
+                "config": config,
+                "messages": messages,
+                "executed": executed,
+                "usage": usage,
+                "pending": [call] + pending,
+                "rounds": rounds,
+            }, approval)
+        try:
+            result = execute_tool(config, name, arguments)
+            success = True
+        except Exception as exc:
+            result = {"error": str(exc)}
+            success = False
+        executed.append({"name": name, "success": success})
+        messages.append({
+            "role": "tool",
+            "tool_call_id": call_id,
+            "content": json.dumps(result, ensure_ascii=False)[:MAX_TOOL_OUTPUT],
+        })
+    return {
+        "reply": "本轮已达到安全执行上限。我已保留完成的结果，可以继续完成剩余步骤。",
+        "tools": executed,
+        "usage": usage,
+    }
+
+
 def chat(payload):
-    config = load_config()
     message = str(payload.get("message", "")).strip()
     if not message or len(message) > 32000:
         raise ValueError("请输入有效内容")
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.extend(sanitize_history(payload.get("history")))
     messages.append({"role": "user", "content": message})
-    executed = []
-    usage = {}
-    for _round in range(MAX_TOOL_ROUNDS):
-        assistant, usage = upstream_request(config, messages)
-        tool_calls = assistant.get("tool_calls") or []
-        if not tool_calls:
-            return {
-                "reply": assistant.get("content") or "任务已完成。",
-                "tools": executed,
-                "usage": usage,
-            }
-        messages.append(assistant)
-        for call in tool_calls:
-            function = call.get("function") or {}
-            name = str(function.get("name", ""))
-            try:
-                arguments = json.loads(function.get("arguments") or "{}")
-                result = execute_tool(config, name, arguments)
-                success = True
-            except Exception as exc:
-                result = {"error": str(exc)}
-                success = False
-            executed.append({"name": name, "success": success})
-            messages.append({
-                "role": "tool",
-                "tool_call_id": call.get("id", secrets.token_hex(4)),
-                "content": json.dumps(result, ensure_ascii=False)[:MAX_TOOL_OUTPUT],
-            })
-    return {
-        "reply": "已达到本次任务的工具调用上限。我保留了已完成的操作，请继续告诉我下一步。",
-        "tools": executed,
-        "usage": usage,
-    }
+    return continue_agent({
+        "config": load_config(),
+        "messages": messages,
+        "executed": [],
+        "usage": {},
+        "pending": [],
+        "rounds": 0,
+    })
+
+
+def approve(payload):
+    request_id = str(payload.get("requestId", ""))
+    decision = str(payload.get("decision", "deny"))
+    with PENDING_LOCK:
+        state = PENDING_APPROVALS.pop(request_id, None)
+    if not state:
+        raise ValueError("这项确认已失效，请重新发起任务")
+    call = state.get("pending", [{}])[0]
+    function = call.get("function") or {}
+    name = str(function.get("name", ""))
+    if decision == "always":
+        if name in ALWAYS_CONFIRM_TOOLS:
+            raise ValueError("破坏性操作不能设为始终允许")
+        config = load_config()
+        allowed = set(config.get("alwaysAllowedTools", []))
+        allowed.add(name)
+        config["alwaysAllowedTools"] = sorted(allowed)
+        save_config(config)
+        state["config"] = config
+    return continue_agent(
+        state,
+        approved_call_id=call.get("id"),
+        approved=decision in {"once", "always"},
+    )
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -704,6 +1159,8 @@ class Handler(BaseHTTPRequestHandler):
                     "running": True,
                     "name": "Orbit",
                     "scope": "system",
+                    "agentMode": "plan-act-observe-verify",
+                    "approvalMode": "first-use-and-always-for-destructive",
                     "config": public_config(config),
                 })
                 return
@@ -729,10 +1186,27 @@ class Handler(BaseHTTPRequestHandler):
                 result = update_config(payload)
             elif self.path == "/v1/chat":
                 result = chat(payload)
+            elif self.path == "/v1/approve":
+                result = approve(payload)
             elif self.path == "/v1/voice/speak":
                 result = speak_text(payload)
             elif self.path == "/v1/voice/listen":
-                result = listen_once()
+                config = load_config()
+                require_permission(config, "microphone")
+                if (
+                    "voice_listen" not in config.get("alwaysAllowedTools", [])
+                    and payload.get("approved") is not True
+                ):
+                    result = {
+                        "approvalRequired": True,
+                        "permission": "microphone",
+                        "permissionLabel": PERMISSION_LABELS["microphone"],
+                        "summary": "允许 Orbit 使用麦克风聆听 8 秒并在本机识别语音",
+                    }
+                else:
+                    result = listen_once()
+            elif self.path == "/v1/permissions/grant":
+                result = grant_capability(payload)
             else:
                 self.send_json(404, {"success": False, "error": "Not found"})
                 return

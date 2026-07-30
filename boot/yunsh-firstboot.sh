@@ -32,6 +32,14 @@ pct() { CUR=$((CUR+1)); local P=$((CUR*100/TOTAL)); [ "$P" -gt "$1" ] && P=$1
     else echo "  [$P%] $2"; fi
 }
 
+# The Linux service account exists before any package transaction or desktop
+# startup. Activation later creates a separate YUNSH-local profile and never
+# renames or removes this account.
+if ! id -u yunsh >/dev/null 2>&1; then
+    useradd -m -s /bin/bash -G sudo,adm,dialout yunsh 2>/dev/null || true
+    echo "yunsh:yunsh123" | chpasswd 2>/dev/null || true
+fi
+
 # ───── Wait for network (up to about 120s) ──
 echo -n "  [+] Waiting for network"
 WAIT=0
@@ -161,6 +169,10 @@ install_apt 32 "Network & BT" network-manager wpasupplicant bluez
 install_apt 38 "System tools" openssh-server avahi-daemon avahi-utils openssl i2c-tools curl wget git unzip python3-pil
 install_apt 44 "Chinese fonts" fonts-noto-cjk
 install_apt 50 "Audio" pulseaudio alsa-utils
+install_apt 53 "Screen capture and recording" ffmpeg tesseract-ocr tesseract-ocr-chi-sim
+# Prefer the native Wayland recorder when the Debian release provides it;
+# ffmpeg remains the required framebuffer/X11 fallback.
+apt-get install -yqq --no-install-recommends wf-recorder 2>/dev/null || true
 # Raspberry Pi 5 uses the BCM2712 VideoCore VII through the DRM/KMS + V3D
 # stack. Keep both EGL/OpenGL (Qt Quick/Weston) and Vulkan (Waydroid and
 # future spatial compositor work) in the first-boot transaction, rather than
@@ -196,10 +208,7 @@ systemctl enable yunsh-os yunsh-local-api yunsh-network yunsh-bluetooth yunsh-up
     fstrim.timer 2>/dev/null || true
 
 pct 86 "Creating default user..."
-if ! id yunsh &>/dev/null; then
-    useradd -m -s /bin/bash -G sudo,adm,dialout yunsh 2>/dev/null || true
-    echo "yunsh:yunsh123" | chpasswd 2>/dev/null || true
-fi
+usermod -a -G sudo,adm,dialout yunsh 2>/dev/null || true
 ssh-keygen -A 2>/dev/null || true
 echo "yunsh-v1" > /etc/hostname
 hostname yunsh-v1 2>/dev/null || true
@@ -218,7 +227,7 @@ pct 98 "Cleaning up..."
 rm -f /etc/yunsh/.firstboot_partial 2>/dev/null || true
 
 pct 100 "Setup complete! Rebooting..."
-CORE_PACKAGES="qml-qt6 libqt6opengl6 qml6-module-qtqml qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtwebengine qt6-wayland weston network-manager bluez python3-pil python3-dbus python3-gi unzip libegl1 libgl1-mesa-dri mesa-vulkan-drivers"
+CORE_PACKAGES="qml-qt6 libqt6opengl6 qml6-module-qtqml qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtwebengine qt6-wayland weston network-manager bluez python3-pil python3-dbus python3-gi unzip libegl1 libgl1-mesa-dri mesa-vulkan-drivers ffmpeg"
 CORE_MISSING=""
 for package in $CORE_PACKAGES; do
     dpkg-query -W -f='${Status}' "$package" 2>/dev/null |

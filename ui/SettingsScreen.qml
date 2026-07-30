@@ -19,6 +19,7 @@ Rectangle {
     signal openBluetoothSettings()
     signal openSystemInfo()
     signal openComfortDna()
+    signal requestFactoryReset()
 
     property string osVersionName: "YUNSH OS v2.0.1"
     property string selectedLanguageDisplay: "简体中文 · 拼音"
@@ -82,6 +83,51 @@ Rectangle {
         xhr.open("POST", "http://127.0.0.1:8591/api/update-config", true);
         xhr.setRequestHeader("Content-Type", "application/json");
         xhr.send(JSON.stringify(cmd));
+    }
+
+    function changeBootPassword() {
+        passwordError = ""
+        if (newPasswordField.text.length < 4) {
+            passwordError = "新密码至少需要 4 个字符"
+            return
+        }
+        if (newPasswordField.text !== confirmPasswordField.text) {
+            passwordError = "两次输入的新密码不一致"
+            return
+        }
+        passwordBusy = true
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/account-password", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 15000
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return
+            passwordBusy = false
+            try {
+                var body = JSON.parse(xhr.responseText || "{}")
+                if (!body.success) {
+                    passwordError = body.error || "密码修改失败"
+                    return
+                }
+                currentPasswordField.text = ""
+                newPasswordField.text = ""
+                confirmPasswordField.text = ""
+                passwordDialog.visible = false
+                passwordSuccess.visible = true
+                passwordSuccessTimer.restart()
+            } catch (_error) {
+                passwordError = "系统服务返回异常"
+            }
+        }
+        xhr.ontimeout = function() {
+            passwordBusy = false
+            passwordError = "修改超时，请重试"
+        }
+        xhr.send(JSON.stringify({
+            currentPassword: currentPasswordField.text,
+            newPassword: newPasswordField.text
+        }))
     }
     
     // Header
@@ -235,6 +281,20 @@ Rectangle {
                 subtitle: selectedLanguageDisplay + " · 在激活流程中设置"
                 showArrow: false
             }
+
+            GlassCard {
+                width: parent.width; height: 60
+                iconSource: "/usr/share/yunsh/icons/settings.svg"
+                iconSize: 18
+                title: "开机密码"
+                subtitle: "修改后同步更新 Linux 用户 yunsh 的密码"
+                showArrow: true
+                onClicked: {
+                    passwordError = ""
+                    passwordDialog.visible = true
+                    currentPasswordField.forceActiveFocus()
+                }
+            }
             
             GlassCard {
                 width: parent.width; height: 60
@@ -356,11 +416,133 @@ Rectangle {
                 subtitle: "清除数据，保留系统文件"
                 showArrow: true
                 titleColor: "#FF5252"
-                onClicked: factoryResetDialog.visible = true
+                onClicked: settingsScreen.requestFactoryReset()
             }
         }
         
         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+    }
+
+    property bool passwordBusy: false
+    property string passwordError: ""
+
+    Rectangle {
+        id: passwordDialog
+        anchors.fill: parent
+        color: Qt.rgba(0, 0, 0, 0.62)
+        visible: false
+        z: 220
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: if (!passwordBusy) passwordDialog.visible = false
+        }
+
+        Rectangle {
+            anchors.centerIn: parent
+            width: 440
+            height: 390
+            radius: 32
+            color: "#F5F8FA"
+            border.width: 1
+            border.color: "#FFFFFF"
+
+            MouseArea { anchors.fill: parent }
+
+            Column {
+                anchors.fill: parent
+                anchors.margins: 28
+                spacing: 13
+
+                Text {
+                    text: "修改开机密码"
+                    color: "#111820"
+                    font.pixelSize: 22
+                    font.weight: Font.DemiBold
+                }
+                Text {
+                    width: parent.width
+                    text: "新密码会同时成为 Linux 用户 yunsh 的密码。若激活时跳过了密码，当前密码为设备默认密码。"
+                    color: "#60707C"
+                    font.pixelSize: 13
+                    wrapMode: Text.Wrap
+                }
+                TextField {
+                    id: currentPasswordField
+                    width: parent.width
+                    height: 48
+                    placeholderText: "当前开机密码"
+                    echoMode: TextInput.Password
+                    enabled: !passwordBusy
+                }
+                TextField {
+                    id: newPasswordField
+                    width: parent.width
+                    height: 48
+                    placeholderText: "新密码（至少 4 个字符）"
+                    echoMode: TextInput.Password
+                    enabled: !passwordBusy
+                }
+                TextField {
+                    id: confirmPasswordField
+                    width: parent.width
+                    height: 48
+                    placeholderText: "再次输入新密码"
+                    echoMode: TextInput.Password
+                    enabled: !passwordBusy
+                    onAccepted: changeBootPassword()
+                }
+                Text {
+                    width: parent.width
+                    text: passwordError
+                    visible: passwordError.length > 0
+                    color: "#D93025"
+                    font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                }
+                Row {
+                    anchors.right: parent.right
+                    spacing: 10
+                    Button {
+                        text: "取消"
+                        enabled: !passwordBusy
+                        onClicked: passwordDialog.visible = false
+                    }
+                    Button {
+                        text: passwordBusy ? "正在修改…" : "确认修改"
+                        enabled: !passwordBusy
+                        onClicked: changeBootPassword()
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        id: passwordSuccess
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 28
+        width: 300
+        height: 48
+        radius: 24
+        color: "#F4FFF7"
+        border.width: 1
+        border.color: "#A7E6B5"
+        visible: false
+        z: 230
+        Text {
+            anchors.centerIn: parent
+            text: "密码已同步更新"
+            color: "#167A32"
+            font.pixelSize: 14
+            font.weight: Font.DemiBold
+        }
+        Timer {
+            id: passwordSuccessTimer
+            interval: 2400
+            onTriggered: passwordSuccess.visible = false
+        }
     }
 
     // ════════════════════════════════════════════════════

@@ -1,0 +1,119 @@
+#!/bin/bash
+# YUNSH OS screen-recording controller.
+
+set -u
+
+VIDEO_DIR="${YUNSH_RECORDING_DIR:-/home/yunsh/Videos/Screen Recordings}"
+PID_FILE="${YUNSH_RECORDING_PID:-/run/yunsh-recording.pid}"
+STATE_FILE="${YUNSH_RECORDING_STATE:-/run/yunsh-recording.json}"
+XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/yunsh-runtime}"
+WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
+export XDG_RUNTIME_DIR WAYLAND_DISPLAY
+
+json_string() {
+    python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"
+}
+
+active_pid() {
+    [ -r "${PID_FILE}" ] || return 1
+    local pid
+    pid="$(cat "${PID_FILE}" 2>/dev/null || true)"
+    case "${pid}" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    kill -0 "${pid}" 2>/dev/null || return 1
+    printf '%s\n' "${pid}"
+}
+
+status() {
+    local pid path started
+    if pid="$(active_pid)"; then
+        path="$(python3 -c 'import json; print(json.load(open("'"${STATE_FILE}"'")).get("path",""))' 2>/dev/null || true)"
+        started="$(python3 -c 'import json; print(json.load(open("'"${STATE_FILE}"'")).get("startedAt",0))' 2>/dev/null || printf '0')"
+        printf '{"status":"ok","recording":true,"pid":%s,"path":%s,"startedAt":%s}\n' \
+            "${pid}" "$(json_string "${path}")" "${started:-0}"
+    else
+        rm -f "${PID_FILE}"
+        printf '{"status":"ok","recording":false}\n'
+    fi
+}
+
+start_recording() {
+    if active_pid >/dev/null; then
+        status
+        return 0
+    fi
+    install -d -m 0755 -o yunsh -g yunsh "${VIDEO_DIR}" 2>/dev/null ||
+        mkdir -p "${VIDEO_DIR}" || {
+            printf '{"status":"error","message":"Cannot create recording directory"}\n'
+            return 1
+        }
+    local timestamp output pid engine
+    timestamp="$(date +%Y-%m-%d_%H-%M-%S)"
+    output="${VIDEO_DIR}/Screen Recording ${timestamp}.mp4"
+    engine=""
+
+    if command -v wf-recorder >/dev/null 2>&1; then
+        wf-recorder --codec libx264 --file="${output}" \
+            >/tmp/yunsh-recording.log 2>&1 &
+        engine="wf-recorder"
+    elif command -v ffmpeg >/dev/null 2>&1 && [ -n "${DISPLAY:-}" ]; then
+        ffmpeg -nostdin -loglevel warning -f x11grab -framerate 30 \
+            -i "${DISPLAY}" -c:v libx264 -preset veryfast -pix_fmt yuv420p \
+            "${output}" >/tmp/yunsh-recording.log 2>&1 &
+        engine="ffmpeg-x11"
+    elif command -v ffmpeg >/dev/null 2>&1 && [ -c /dev/fb0 ]; then
+        ffmpeg -nostdin -loglevel warning -f fbdev -framerate 24 \
+            -i /dev/fb0 -c:v libx264 -preset veryfast -pix_fmt yuv420p \
+            "${output}" >/tmp/yunsh-recording.log 2>&1 &
+        engine="ffmpeg-fbdev"
+    else
+        printf '{"status":"error","message":"No supported screen recorder is available"}\n'
+        return 1
+    fi
+    pid=$!
+    sleep 0.25
+    if ! kill -0 "${pid}" 2>/dev/null; then
+        printf '{"status":"error","message":"Recorder failed to start"}\n'
+        return 1
+    fi
+    printf '%s\n' "${pid}" > "${PID_FILE}"
+    python3 - "${STATE_FILE}" "${output}" "${engine}" <<'PY'
+import json, os, sys, time
+path, output, engine = sys.argv[1:]
+temporary = path + ".tmp"
+with open(temporary, "w", encoding="utf-8") as handle:
+    json.dump({"path": output, "engine": engine, "startedAt": time.time()}, handle)
+os.replace(temporary, path)
+PY
+    printf '{"status":"ok","recording":true,"path":%s,"engine":%s}\n' \
+        "$(json_string "${output}")" "$(json_string "${engine}")"
+}
+
+stop_recording() {
+    local pid path
+    if ! pid="$(active_pid)"; then
+        printf '{"status":"ok","recording":false,"message":"No active recording"}\n'
+        return 0
+    fi
+    path="$(python3 -c 'import json; print(json.load(open("'"${STATE_FILE}"'")).get("path",""))' 2>/dev/null || true)"
+    kill -INT "${pid}" 2>/dev/null || true
+    local count=0
+    while kill -0 "${pid}" 2>/dev/null && [ "${count}" -lt 50 ]; do
+        sleep 0.1
+        count=$((count + 1))
+    done
+    kill -TERM "${pid}" 2>/dev/null || true
+    rm -f "${PID_FILE}"
+    printf '{"status":"ok","recording":false,"path":%s}\n' "$(json_string "${path}")"
+}
+
+case "${1:-status}" in
+    start) start_recording ;;
+    stop) stop_recording ;;
+    status) status ;;
+    *)
+        printf '{"status":"error","message":"Usage: yunsh-recordingd [start|stop|status]"}\n'
+        exit 2
+        ;;
+esac

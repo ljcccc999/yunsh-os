@@ -1,0 +1,19 @@
+#!/bin/bash
+# Optional screenshot/OCR/recording runtime preparation. Never blocks desktop.
+
+set -euo pipefail
+
+STATE_DIR=/var/lib/yunsh/media
+MARKER="${STATE_DIR}/.ready"
+[ -f /etc/yunsh/.packages_installed ] || exit 0
+[ -f "${MARKER}" ] && exit 0
+
+install -d -m 0755 "${STATE_DIR}"
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y --no-install-recommends \
+    ffmpeg tesseract-ocr tesseract-ocr-chi-sim
+apt-get install -y --no-install-recommends wf-recorder 2>/dev/null || true
+command -v ffmpeg >/dev/null
+touch "${MARKER}"
+chmod 0644 "${MARKER}"

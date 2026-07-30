@@ -1,5 +1,5 @@
 // YUNSH OS v1.0 - Home Screen (visionOS Ultimate)
-// Dynamic app pages (iOS-style), glass clock widget, floating dock
+// Dynamic visionOS-style circular app pages.
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
@@ -8,7 +8,6 @@ Item {
     id: homeScreen
     anchors.fill: parent
     
-    property bool showDock: true
     property bool showStatusBar: true
     property bool stereoEnabled: false
     property bool headTrackingConnected: false
@@ -27,7 +26,6 @@ Item {
     signal openSpatialDisplay()
     signal openSpaceCapsule()
     signal openScreenRelay()
-    signal openAppLibrary()
     signal showControlCenter()
     signal takeScreenshot()
 
@@ -44,9 +42,9 @@ Item {
         { name: "iPhone 投屏", icon: "screen-relay.svg", color: "#00D4FF", action: "screenrelay" }
     ]
 
-    readonly property int columns: 4
-    readonly property int rows: 2
-    readonly property int appsPerPage: columns * rows
+    readonly property var rowPattern: [4, 5, 4]
+    readonly property var rowOffsets: [0, 4, 9]
+    readonly property int appsPerPage: 13
 
     function appCount() { return appList.length }
     function pageCount() { return Math.ceil(appList.length / appsPerPage) }
@@ -99,7 +97,8 @@ Item {
     Item {
         id: mainContent
         anchors.top: statusBar.bottom
-        anchors.bottom: dockArea.top
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 34
         anchors.left: parent.left
         anchors.right: parent.right
 
@@ -270,25 +269,52 @@ Item {
                             property int startIdx: pageIndex * appsPerPage
                             property int endIdx: Math.min(startIdx + appsPerPage, appList.length)
 
-                            Grid {
+                            Column {
                                 anchors.centerIn: parent
-                                spacing: 28
-                                columns: homeScreen.columns
+                                spacing: 18
 
                                 Repeater {
-                                    model: endIdx - startIdx
+                                    model: 3
 
-                                    AppIcon {
-                                        appName: appList[startIdx + index].name
-                                        appIcon: "/usr/share/yunsh/icons/" + appList[startIdx + index].icon
-                                        iconColor: {
-                                            var c = appList[startIdx + index].color
-                                            var r = parseInt(c.substring(1,3), 16)
-                                            var g = parseInt(c.substring(3,5), 16)
-                                            var b = parseInt(c.substring(5,7), 16)
-                                            return Qt.rgba(r/255, g/255, b/255, 0.5)
+                                    Item {
+                                        id: appRow
+                                        required property int index
+                                        property int rowStart: rowOffsets[index]
+                                        property int remaining: Math.max(
+                                            0, endIdx - startIdx - rowStart)
+                                        property int rowCount: Math.min(
+                                            rowPattern[index], remaining)
+                                        width: Math.max(1, appItems.width)
+                                        height: 100
+                                        visible: rowCount > 0
+
+                                        Row {
+                                            id: appItems
+                                            anchors.centerIn: parent
+                                            spacing: 30
+
+                                            Repeater {
+                                                model: appRow.rowCount
+
+                                                AppIcon {
+                                                    required property int index
+                                                    property int appIndex: startIdx
+                                                        + appRow.rowStart + index
+                                                    appName: appList[appIndex].name
+                                                    appIcon: "/usr/share/yunsh/icons/"
+                                                        + appList[appIndex].icon
+                                                    iconColor: {
+                                                        var c = appList[appIndex].color
+                                                        var r = parseInt(c.substring(1,3), 16)
+                                                        var g = parseInt(c.substring(3,5), 16)
+                                                        var b = parseInt(c.substring(5,7), 16)
+                                                        return Qt.rgba(r/255, g/255, b/255, 0.5)
+                                                    }
+                                                    onClicked: handleAppAction(
+                                                        appList[appIndex].action)
+                                                }
+                                            }
                                         }
-                                        onClicked: handleAppAction(appList[startIdx + index].action)
                                     }
                                 }
                             }
@@ -338,53 +364,4 @@ Item {
         }
     }
 
-    // ===== FLOATING SCREENSHOT BUTTON =====
-    Rectangle {
-        id: screenshotFloatingBtn
-        anchors.right: parent.right; anchors.rightMargin: 24
-        anchors.bottom: dockArea.top; anchors.bottomMargin: 16
-        width: 48; height: 48; radius: 24; z: 50
-        visible: homeScreen.showDock
-        color: mouseArea.containsMouse ? Qt.rgba(0/255, 212/255, 255/255, 0.18) : Qt.rgba(0/255, 212/255, 255/255, 0.08)
-        border.color: mouseArea.containsMouse ? Qt.rgba(0/255, 212/255, 255/255, 0.2) : Qt.rgba(0/255, 212/255, 255/255, 0.06)
-        border.width: 1
-
-        Rectangle {
-            anchors.fill: parent; radius: 24
-            color: "transparent"
-            border.color: Qt.rgba(0/255, 212/255, 255/255, 0.05); border.width: 2
-        }
-
-        Image {
-            anchors.centerIn: parent
-            source: "/usr/share/yunsh/icons/screenshot.svg"
-            width: 22; height: 22
-            sourceSize.width: 48; sourceSize.height: 48
-            fillMode: Image.PreserveAspectFit
-        }
-
-        MouseArea {
-            id: mouseArea; anchors.fill: parent; hoverEnabled: true
-            onClicked: homeScreen.takeScreenshot()
-        }
-
-        Behavior on color { ColorAnimation { duration: 120 } }
-    }
-
-    // ===== DOCK =====
-    Item {
-        id: dockArea
-        anchors.bottom: parent.bottom; anchors.bottomMargin: 8
-        anchors.left: parent.left; anchors.leftMargin: 40
-        anchors.right: parent.right; anchors.rightMargin: 40
-        height: 80; visible: showDock; z: 100
-
-        AppDock {
-            anchors.fill: parent
-            onAppLaunched: function(appId) {
-                handleAppAction(appId)
-            }
-            onOpenAppLibrary: homeScreen.openAppLibrary()
-        }
-    }
 }

@@ -34,8 +34,13 @@ portable Raspberry Pi 5 environment.
 - Window pin and follow modes for view-relative display behavior.
 - SpaceCapsule export and restore, plus encrypted YUNSH Drop discovery, sender delivery, and receiver approval on the local network.
 - YUNSH Link import for forwarding `.yunshspace` files through the iOS share sheet to WeChat, Files, AirDrop, or another installed app.
+- YUNSH Flow for user-selected photo/file transfer and explicit clipboard send
+  or receive between iPhone and YUNSH OS. Retrieved files use the iOS share
+  sheet for AirDrop, WeChat, Files, or another app.
 - 30 Hz head-pose sampling with adjustable smoothing, yaw wrap handling, roll compensation, and one-action recentering.
-- Home workspace, task switcher, Control Center, and a glass virtual keyboard.
+- A Dock-free Home workspace with circular liquid-glass application icons,
+  visionOS-style 4–5–4 honeycomb placement, automatic 13-app pages, a task
+  switcher, and a glass virtual keyboard.
 - Optional Comfort DNA onboarding with steady, balanced, and responsive local comfort profiles.
 - Focus mode, reduced motion, reduced transparency, and increased contrast.
 - AR-visible white liquid-glass application surfaces over an optical-black transparent canvas.
@@ -60,11 +65,18 @@ then a model, then enter their own API key. DeepSeek, Kimi, and a custom
 OpenAI-compatible endpoint are supported. The credential is encrypted using a
 device-local key and is never returned in full by the local API.
 
-Orbit's application, file, shell, settings, network, screen, memory, and world
-permissions are enabled by default for the full system-agent experience and
-can be disabled individually. The runtime can open system surfaces, enter the
-world layer, recenter the view, inspect status, work with files, and execute
-commands. Its API listens on device loopback only.
+Orbit uses a plan–act–observe–verify loop for multi-step work. It can maintain
+an explicit task plan, open and manage system surfaces, enter the world layer,
+inspect the live shell state, capture and OCR the display, control screen
+recording, work with files, keep approved memory, execute commands, and verify
+results before replying. DeepSeek runs with thinking mode and maximum reasoning
+effort. The runtime API listens on device loopback only.
+
+Capability switches remain available in Orbit settings, while sensitive tools
+request **Allow Once**, **Always Allow**, or **Deny** on first use. Power,
+factory reset, destructive shell commands, and similar high-risk actions
+cannot be permanently pre-approved. Restart, shutdown, and factory reset also
+pass through the shell's two-stage confirmation before execution.
 
 Orbit supports a default sweet female voice and an optional male voice. Voice
 components prepare in the background after the desktop is available. Speech
@@ -72,11 +84,19 @@ recognition activates only when a USB or Bluetooth microphone is detected;
 the current glasses hardware is not described as having an integrated
 microphone.
 
+The same Orbit conversation and configuration surface is available in a
+standalone Orbit iPhone app. Pairing is established by YUNSH Link, then Orbit
+reaches the on-device runtime through an authenticated TLS bridge on local
+Wi-Fi or an iPhone hotspot. Chat, tool approvals, provider/model selection, and
+API-key setup target the same Orbit instance shown in the glasses; the iPhone
+app does not retain the API key.
+
 ### Built-in applications
 
 - Web browser powered by Qt WebEngine.
 - Persistent PTY terminal.
-- Screenshot capture with in-context preview and photo library.
+- Full and region screenshot capture, screen recording with a persistent red
+  indicator, in-context preview, and photo/video storage.
 - SpaceCapsule workspace manager.
 - iPhone Screen Relay as a movable, resizable, pinnable spatial window, using an explicitly started ReplayKit broadcast over encrypted local Wi-Fi.
 - Settings, system information, update center, network, and Bluetooth management.
@@ -85,19 +105,30 @@ microphone.
 
 ### Device services
 
-- Multilingual Hello welcome followed by a touch-first activation flow.
+- Multilingual Hello welcome followed by a touch-first activation flow and an
+  optional local YUNSH profile. The display name stays local; its boot password
+  is securely hashed for the profile and synchronized to the fixed Linux
+  `yunsh` maintenance account.
+- Settings can verify and change the boot password later; a successful change
+  updates both the local YUNSH credential and Linux user `yunsh`.
 - Separate, skippable glasses and iPhone pairing pages with visible progress.
 - Case-insensitive one-time phone pairing keys; no QR code or camera is required.
 - Optional, skippable Comfort DNA setup.
 - Optional, skippable Orbit setup with provider, model, API key, and voice selection.
 - Wi-Fi and Bluetooth management.
 - OTA update service and factory-reset workflow.
-- Power, input, splash-screen, and screenshot services.
+- Power, input, splash-screen, screenshot, recording, lock, and destructive
+  action confirmation services.
 - Optional 3DoF input through a Bluetooth-connected motion controller or compatible orientation source.
 
 ### YUNSH Link connection modes
 
 YUNSH Link is the companion application for the YUNSH display and YUNSH OS. It uses one of two mutually exclusive Bluetooth connection modes, selected for the active experience.
+
+After YUNSH Link pairs the phone, the standalone Orbit app can reuse that
+device-bound pairing to discover the system over the encrypted local link.
+Actions still run on YUNSH OS under the same permission and destructive-action
+confirmation rules as the glasses interface.
 
 | Mode | iPhone connection | System behavior |
 | --- | --- | --- |
@@ -107,6 +138,12 @@ YUNSH Link is the companion application for the YUNSH display and YUNSH OS. It u
 Only one mode is active at a time. In YUNSH OS Mode, the iPhone does not also connect directly to the glasses; the Raspberry Pi is the single connection and telemetry hub. The encrypted BLE characteristics are additionally protected by a short-lived, single-use YUNSH pairing key shown on the display. Key entry is case-insensitive.
 
 Screen Relay uses Apple's public ReplayKit broadcast UI and always requires an explicit iPhone confirmation. Video frames use encrypted local Wi-Fi or the iPhone hotspot; Bluetooth remains the pairing, command, and telemetry path. YUNSH Link cannot silently capture iOS or split unrelated iOS apps into separate windows.
+
+YUNSH Flow follows the same transport boundary: content uses paired TLS local
+network transfer, while Bluetooth remains for discovery and compact control.
+Outdoors, the Raspberry Pi or future compute module can reconnect to a saved
+iPhone Personal Hotspot; iOS still requires the user to enable that hotspot.
+Clipboard access is initiated by an explicit button and never polled silently.
 
 ## Architecture
 
@@ -154,13 +191,21 @@ Compare the result with the matching `.sha256` asset published with the release.
 
 ## First boot
 
-The initial setup downloads the required desktop packages, including the Raspberry Pi 5 DRM/KMS, EGL, OpenGL, and Vulkan runtime, and then reboots once into the activation flow. Connect Ethernet before the first power-on and keep the device online until setup finishes. A temporary network failure retries automatically without marking the setup complete. Activation starts with an animated multilingual Hello screen, then guides language, Wi-Fi, optional glasses pairing, optional YUNSH Link phone pairing, account setup, optional Orbit provider/model/key/voice configuration, and optional Comfort DNA. Device pairing, Orbit, and Comfort DNA can be skipped. Completing or skipping activation creates a persistent activation marker, so later boots open the desktop directly.
+The initial setup creates the fixed Linux `yunsh` service account before any
+package transaction, downloads the required desktop and media packages,
+including the Raspberry Pi 5 DRM/KMS, EGL, OpenGL, Vulkan, FFmpeg, and OCR
+runtime, then reboots once into activation. Connect Ethernet before first
+power-on. Activation starts with multilingual Hello, then guides language,
+Wi-Fi, optional glasses and YUNSH Link pairing, a local account, optional Orbit
+provider/model/key/voice configuration, and optional Comfort DNA. Completing
+or skipping activation creates a persistent activation marker, so later boots
+open the desktop directly.
 
 Factory reset clears user data, saved Wi-Fi networks, Bluetooth pairings, and the activation marker. It preserves YUNSH OS, installed desktop dependencies, and the current system version, then returns to activation on the next boot.
 
 ## Motion tracking
 
-YUNSH OS supports optional Bluetooth-connected motion tracking for spatial interaction. The head-tracking bridge provides a consistent interface for compatible motion sources and for the built-in development simulator. After tracking is available, each floating window can be placed directly in a front, left-angle, right-angle, or distance layout from its title bar. The current direction can be recentered from the always-available virtual Recenter button, Control Center, or YUNSH Link on iPhone. A keyboard shortcut remains only as a development fallback.
+YUNSH OS supports optional Bluetooth-connected motion tracking for spatial interaction. The head-tracking bridge provides a consistent interface for compatible motion sources and for the built-in development simulator. After tracking is available, each floating window can be placed directly in a front, left-angle, right-angle, or distance layout from its title bar. The current direction can be recentered from the always-available standalone Recenter button or YUNSH Link on iPhone. A keyboard shortcut remains only as a development fallback.
 
 ```text
 Bluetooth motion controller → head-tracking bridge → YUNSH OS workspace
