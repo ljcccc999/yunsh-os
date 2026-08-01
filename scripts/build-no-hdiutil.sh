@@ -144,11 +144,6 @@ ${KMS_OVERLAY}
 disable_splash=1
 display_auto_detect=1
 hdmi_force_hotplug=1
-# Safe fallback for small 1080p IPS panels whose EDID is incomplete during
-# early Pi 5 KMS handoff.  The kernel command line below mirrors this for
-# DRM/KMS, which is what Weston/Qt uses after firmware boot.
-hdmi_group=2
-hdmi_mode=82
 framebuffer_depth=32
 disable_overscan=1
 [all]
@@ -173,7 +168,7 @@ case " ${CMDLINE} " in
     *" console=tty1 "*) ;;
     *) CMDLINE="${CMDLINE} console=tty1" ;;
 esac
-echo "${CMDLINE} consoleblank=0 loglevel=3 vt.global_cursor_default=1 cma=256M psi=1 systemd.show_status=auto video=HDMI-A-1:1920x1080@60D video=HDMI-A-2:1920x1080@60D" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
+echo "${CMDLINE} consoleblank=0 loglevel=3 vt.global_cursor_default=1 cma=256M psi=1 systemd.show_status=auto" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
 mdel -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null || true
 mcopy -i "${BOOT_IMG}" "${BUILD_DIR}/yunsh-cmdline-new.txt" ::/cmdline.txt
 echo "  ✓ cmdline.txt modified"
