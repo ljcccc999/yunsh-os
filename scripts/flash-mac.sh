@@ -258,6 +258,13 @@ fi
 printf '\n正在同步写入...\n'
 sync
 
+# Writing a new partition map can make macOS Disk Arbitration notice the
+# volumes again. Unmount once more before raw verification so filesystem
+# metadata cannot be changed while the image bytes are being read back.
+printf '正在准备安全读回校验...\n'
+sudo -n diskutil unmountDisk "$DISK_DEVICE" >/dev/null ||
+    fail "写入完成，但无法在校验前卸载 ${DISK_DEVICE}。请关闭正在使用 SD 卡的程序后重试。"
+
 if [ $((UNCOMPRESSED_BYTES % 4194304)) -eq 0 ]; then
     VERIFY_BLOCKS=$((UNCOMPRESSED_BYTES / 4194304))
     VERIFY_BS="4m"
@@ -271,16 +278,24 @@ else
     VERIFY_BS="512"
 fi
 
-printf '正在逐字节读回校验（约需数分钟）...\n'
-DEVICE_RAW_SHA="$(
+read_device_sha() {
     sudo -n dd if="$RAW_DEVICE" bs="$VERIFY_BS" count="$VERIFY_BLOCKS" 2>/dev/null |
         shasum -a 256 |
         awk '{print tolower($1)}'
-)"
+}
+
+printf '正在逐字节读回校验（约需数分钟）...\n'
+DEVICE_RAW_SHA="$(read_device_sha)"
 
 if [ "$DEVICE_RAW_SHA" != "$SOURCE_RAW_SHA" ]; then
+    printf '%s⚠️  首次读回不一致，正在进行第二次独立读回诊断…%s\n' \
+        "$YELLOW" "$RESET"
+    DEVICE_RAW_SHA_RETRY="$(read_device_sha)"
     diskutil eject "$DISK_DEVICE" >/dev/null 2>&1 || true
-    fail "写后校验失败。请不要使用这张卡，并重新烧录。\n期望：${SOURCE_RAW_SHA}\n读回：${DEVICE_RAW_SHA}"
+    if [ "$DEVICE_RAW_SHA_RETRY" != "$DEVICE_RAW_SHA" ]; then
+        fail "两次读回结果不同，SD 卡、读卡器或连接不稳定。请勿使用本次烧录结果。\n期望：${SOURCE_RAW_SHA}\n首次：${DEVICE_RAW_SHA}\n再次：${DEVICE_RAW_SHA_RETRY}"
+    fi
+    fail "两次读回结果稳定，但与镜像不同。可能是写入失败或磁盘内容被系统改写；不能仅据此断定 SD 卡损坏。\n期望：${SOURCE_RAW_SHA}\n读回：${DEVICE_RAW_SHA}"
 fi
 
 diskutil eject "$DISK_DEVICE" >/dev/null ||

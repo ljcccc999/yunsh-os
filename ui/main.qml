@@ -1,14 +1,17 @@
-// YUNSH OS v2.0.1 - Main QML Entry Point
+// YUNSH OS v3.0.0 - Main QML Entry Point
 // Apple-style glass system + Task Switcher + Home Indicator
 
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Window 2.15
 
 ApplicationWindow {
     id: yunshOS
     visible: true
-    width: 1920
-    height: 1080
+    // Follow the mode selected by KMS/EDID. Hard-coding 1920x1080 makes
+    // small IPS panels and non-1080p HDMI displays appear connected but black.
+    width: Screen.width > 0 ? Screen.width : 1920
+    height: Screen.height > 0 ? Screen.height : 1080
 
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
     color: "#000000"
@@ -52,18 +55,21 @@ ApplicationWindow {
     property int autoLockSeconds: 120
     property string pendingSystemAction: ""
     property int systemActionConfirmStage: 0
+    property string factoryResetPassword: ""
+    property string factoryResetPasswordError: ""
+    property bool factoryResetPasswordBusy: false
     property string activeAppId: ""
     property string androidTarget: "appstore"
     property string lastUiCommandId: ""
 
     property var openApps: []
     property var appInfo: ({
-        "settings": { name: "设置", icon: "/usr/share/yunsh/icons/settings.svg", color: "#00D4FF" },
-        "browser": { name: "Browser", icon: "/usr/share/yunsh/icons/browser.svg", color: "#4CAF50" },
-        "terminal": { name: "终端", icon: "/usr/share/yunsh/icons/terminal.svg", color: "#00D4FF" },
-        "photos": { name: "相册", icon: "/usr/share/yunsh/icons/photos.svg", color: "#FFC107" },
-        "appstore": { name: "Android Apps", icon: "/usr/share/yunsh/icons/appstore.svg", color: "#FF9800" },
-        "files": { name: "文件", icon: "/usr/share/yunsh/icons/files.svg", color: "#2196F3" },
+        "settings": { name: "设置", icon: "/usr/share/yunsh/icons/settings.svg", color: "#4E8FEA" },
+        "browser": { name: "Browser", icon: "/usr/share/yunsh/icons/browser.svg", color: "#5477D6" },
+        "terminal": { name: "终端", icon: "/usr/share/yunsh/icons/terminal.svg", color: "#526F9E" },
+        "photos": { name: "相册", icon: "/usr/share/yunsh/icons/photos.svg", color: "#C78A62" },
+        "appstore": { name: "F-Droid", icon: "/usr/share/yunsh/icons/appstore.svg", color: "#6E8F5B" },
+        "files": { name: "文件", icon: "/usr/share/yunsh/icons/files.svg", color: "#5A8CC7" },
         "update": { name: "系统更新", icon: "/usr/share/yunsh/icons/update.svg", color: "#00D4FF" },
         "about": { name: "关于", icon: "/usr/share/yunsh/icons/about.svg", color: "#607D8B" },
         "network": { name: "Wi-Fi", icon: "/usr/share/yunsh/icons/wifi.svg", color: "#0096FF" },
@@ -105,7 +111,7 @@ ApplicationWindow {
     }
 
     function closeWindowById(appId) {
-        if (appId === "appstore" || appId === "files") {
+        if (appId === "appstore" || appId === "files" || appId.indexOf("android:") === 0) {
             androidWindow.visible = false
             return
         }
@@ -132,6 +138,7 @@ ApplicationWindow {
             case "appstore":
             case "files": return androidWindow
         }
+        if (appId.indexOf("android:") === 0) return androidWindow
         return null
     }
 
@@ -176,6 +183,7 @@ ApplicationWindow {
             onOpenAbout: switchTo(systemInfoWindow, "systeminfo")
             onOpenAppStore: launchApp("appstore")
             onOpenFileManager: launchApp("files")
+            onOpenAndroidApp: function(packageName) { launchApp("android:" + packageName) }
             onOpenBrowser: switchTo(browserWindow, "browser")
             onOpenWorld: yunshOS.openWorld()
             onOpenSystemUpdateUI: switchTo(updateWindow, "update")
@@ -188,7 +196,6 @@ ApplicationWindow {
             onOpenScreenRelay: switchTo(screenRelayWindow, "screenrelay")
             onShowControlCenter: controlCenter.show()
             onTakeScreenshot: takeScreenshot()
-            onOpenAppLibrary: showTaskSwitcher()
         }
 
         // ===== IPHONE SCREEN RELAY =====
@@ -634,19 +641,18 @@ ApplicationWindow {
             anchors.fill: parent; visible: false; z: 200
             onRegionSelected: function(x, y, w, h) {
                 screenshotOverlay.visible = false
-                // Grab the full window and crop to region
-                yunshOS.grabToImage(function(result) {
+                rootContainer.grabToImage(function(result) {
                     var fullPath = "/tmp/yunsh-screenshot-region-full-" + Date.now() + ".png"
-                    if (result.saveToFile(fullPath)) {
-                        var xhr = new XMLHttpRequest()
-                        xhr.open("POST", "http://127.0.0.1:8590/launch", true)
-                        xhr.setRequestHeader("Content-Type", "application/json")
-                        xhr.send(JSON.stringify({
-                            action: "crop",
-                            source: fullPath,
-                            x: x, y: y, w: w, h: h
-                        }))
+                    if (!result.saveToFile(fullPath)) {
+                        yunshOS.showToast("区域截图失败")
+                        return
                     }
+                    appDaemonRequest({
+                        action: "crop", source: fullPath, x: x, y: y, w: w, h: h
+                    }, function(response) {
+                        yunshOS.showToast(response.status === "ok"
+                            ? "区域截图已保存" : "截图失败：" + (response.message || "未知错误"))
+                    })
                 })
             }
             onCancelled: screenshotOverlay.visible = false
@@ -778,7 +784,8 @@ ApplicationWindow {
             Rectangle {
                 anchors.centerIn: parent
                 width: 500
-                height: yunshOS.pendingSystemAction === "factory_reset" ? 310 : 270
+                height: yunshOS.pendingSystemAction === "factory_reset"
+                    ? (yunshOS.systemActionConfirmStage === 1 ? 390 : 310) : 270
                 radius: 32
                 color: "#F8FDFF"
                 border.width: 1
@@ -791,8 +798,11 @@ ApplicationWindow {
 
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: yunshOS.systemActionConfirmStage === 1
-                            ? "确认系统操作" : "最后一次确认"
+                        text: yunshOS.pendingSystemAction === "factory_reset"
+                                && yunshOS.systemActionConfirmStage === 1
+                            ? "验证本机密码"
+                            : (yunshOS.systemActionConfirmStage === 1
+                                ? "确认系统操作" : "最后一次确认")
                         color: "#111820"
                         font.pixelSize: 23
                         font.weight: Font.DemiBold
@@ -804,7 +814,7 @@ ApplicationWindow {
                         text: {
                             if (yunshOS.pendingSystemAction === "factory_reset")
                                 return yunshOS.systemActionConfirmStage === 1
-                                    ? "恢复出厂设置会保留 YUNSH OS，但清除账户、配对信息、Orbit API Key、用户文件、截图和个性化设置。"
+                                    ? "请先输入当前本机密码。验证后仍需最后确认；恢复完成后，本机密码会重置为 yunsh123。"
                                     : "此操作无法撤销。设备完成清理后会自动重启并重新进入激活流程。"
                             if (yunshOS.pendingSystemAction === "restart")
                                 return yunshOS.systemActionConfirmStage === 1
@@ -817,6 +827,38 @@ ApplicationWindow {
                         color: "#52616C"
                         font.pixelSize: 14
                         lineHeight: 1.35
+                    }
+                    Rectangle {
+                        visible: yunshOS.pendingSystemAction === "factory_reset"
+                            && yunshOS.systemActionConfirmStage === 1
+                        width: parent.width
+                        height: visible ? 54 : 0
+                        radius: 18
+                        color: Qt.rgba(1, 1, 1, 0.64)
+                        border.width: 1
+                        border.color: factoryResetField.activeFocus ? "#00D4FF" : "#D7E7ED"
+                        TextField {
+                            id: factoryResetField
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            placeholderText: "输入当前本机密码"
+                            echoMode: TextInput.Password
+                            color: "#111820"
+                            enabled: !yunshOS.factoryResetPasswordBusy
+                            background: Item {}
+                            onTextChanged: yunshOS.factoryResetPassword = text
+                            onAccepted: yunshOS.verifyFactoryResetPassword()
+                        }
+                    }
+                    Text {
+                        visible: yunshOS.pendingSystemAction === "factory_reset"
+                            && yunshOS.systemActionConfirmStage === 1
+                            && yunshOS.factoryResetPasswordError.length > 0
+                        width: parent.width
+                        horizontalAlignment: Text.AlignHCenter
+                        text: yunshOS.factoryResetPasswordError
+                        color: "#C72732"
+                        font.pixelSize: 12
                     }
                     Item { width: 1; height: 6 }
                     Row {
@@ -844,11 +886,16 @@ ApplicationWindow {
                                 : (yunshOS.systemActionConfirmStage === 1 ? "#00D4FF" : "#E43A45")
                             Text {
                                 anchors.centerIn: parent
-                                text: yunshOS.systemActionConfirmStage === 1
-                                    ? "继续" : (yunshOS.pendingSystemAction === "factory_reset"
+                                text: yunshOS.pendingSystemAction === "factory_reset"
+                                        && yunshOS.systemActionConfirmStage === 1
+                                    ? (yunshOS.factoryResetPasswordBusy ? "正在验证…" : "验证密码")
+                                    : (yunshOS.systemActionConfirmStage === 1
+                                        ? (yunshOS.pendingSystemAction === "restart" ? "重新启动" : "关机")
+                                        : (yunshOS.pendingSystemAction === "factory_reset"
                                         ? "抹掉并恢复" : (yunshOS.pendingSystemAction === "restart"
-                                            ? "立即重启" : "立即关机"))
-                                color: yunshOS.systemActionConfirmStage === 1 ? "#00191F" : "#FFFFFF"
+                                            ? "立即重启" : "立即关机")))
+                                color: yunshOS.systemActionConfirmStage === 1
+                                    && yunshOS.pendingSystemAction !== "factory_reset" ? "#00191F" : "#FFFFFF"
                                 font.pixelSize: 14
                                 font.weight: Font.DemiBold
                             }
@@ -856,8 +903,9 @@ ApplicationWindow {
                                 id: confirmSystemMouse
                                 anchors.fill: parent
                                 onClicked: {
-                                    if (yunshOS.systemActionConfirmStage === 1)
-                                        yunshOS.systemActionConfirmStage = 2
+                                    if (yunshOS.pendingSystemAction === "factory_reset"
+                                            && yunshOS.systemActionConfirmStage === 1)
+                                        yunshOS.verifyFactoryResetPassword()
                                     else
                                         yunshOS.executeConfirmedSystemAction()
                                 }
@@ -876,10 +924,18 @@ ApplicationWindow {
             z: 7000
             visible: !firstBoot || activationDone
             orbitConfigured: orbitPanel.configured
+            orbitBusy: orbitPanel.computerOperationActive || orbitPanel.voiceConversationActive
+            orbitAwaitingApproval: orbitPanel.computerApprovalPending
+                || (orbitPanel.pendingApprovalId === "voice" && orbitPanel.voiceConversationActive)
+            orbitApprovalCanAlways: !orbitPanel.pendingApprovalAlwaysConfirm
+            orbitVoiceActive: orbitPanel.voiceConversationActive
+            orbitActivityText: orbitPanel.statusText
+            reduceMotion: yunshOS.reduceMotion
             recordingActive: yunshOS.recordingActive
             onOpenSystemMenu: controlCenter.show()
             onOpenWorld: yunshOS.openWorld()
             onOpenOrbit: orbitPanel.openPanel()
+            onOrbitApprovalDecision: function(decision) { orbitPanel.respondToApproval(decision) }
         }
 
         OrbitPanel {
@@ -966,10 +1022,14 @@ ApplicationWindow {
 
     function takeScreenshot() {
         console.log("Screenshot triggered - full screen capture")
-        yunshOS.grabToImage(function(result) {
+        rootContainer.grabToImage(function(result) {
             var filename = "/home/yunsh/Pictures/Screenshots/Screenshot_" + Date.now() + ".png"
-            result.saveToFile(filename)
-            console.log("Full screenshot saved to " + filename)
+            if (result.saveToFile(filename)) {
+                console.log("Full screenshot saved to " + filename)
+                yunshOS.showToast("截图已保存")
+            } else {
+                yunshOS.showToast("截图失败")
+            }
         })
     }
 
@@ -1019,11 +1079,54 @@ ApplicationWindow {
             return
         pendingSystemAction = action
         systemActionConfirmStage = 1
+        factoryResetPassword = ""
+        factoryResetPasswordError = ""
+        factoryResetPasswordBusy = false
     }
 
     function cancelSystemAction() {
         pendingSystemAction = ""
         systemActionConfirmStage = 0
+        factoryResetPassword = ""
+        factoryResetPasswordError = ""
+        factoryResetPasswordBusy = false
+    }
+
+    function verifyFactoryResetPassword() {
+        if (pendingSystemAction !== "factory_reset" || systemActionConfirmStage !== 1)
+            return
+        if (!factoryResetPassword.length) {
+            factoryResetPasswordError = "请输入当前本机密码"
+            return
+        }
+        factoryResetPasswordBusy = true
+        factoryResetPasswordError = ""
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/verify-boot-password", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 15000
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return
+            factoryResetPasswordBusy = false
+            try {
+                var result = JSON.parse(xhr.responseText || "{}")
+                if (result.success) {
+                    factoryResetPassword = ""
+                    factoryResetField.text = ""
+                    systemActionConfirmStage = 2
+                } else {
+                    factoryResetPasswordError = result.error || "本机密码不正确"
+                }
+            } catch (_error) {
+                factoryResetPasswordError = "无法验证本机密码"
+            }
+        }
+        xhr.ontimeout = function() {
+            factoryResetPasswordBusy = false
+            factoryResetPasswordError = "验证超时，请重试"
+        }
+        xhr.send(JSON.stringify({password: factoryResetPassword}))
     }
 
     function executeConfirmedSystemAction() {
@@ -1464,14 +1567,20 @@ ApplicationWindow {
         var info = appInfo[appId]
         if (!info) return
 
-        // Show Android window
-        var otherAndroidId = appId === "appstore" ? "files" : "appstore"
-        var filteredApps = []
-        for (var i = 0; i < openApps.length; i++) {
-            if (openApps[i].appId !== otherAndroidId)
-                filteredApps.push(openApps[i])
+        // Android remains one compositor surface, but every installed app gets
+        // its own desktop icon and title. Keep just that one Android surface
+        // in the task switcher when changing between Android applications.
+        var isAndroidApp = appId === "appstore" || appId === "files"
+            || appId.indexOf("android:") === 0
+        if (isAndroidApp) {
+            var filteredApps = []
+            for (var i = 0; i < openApps.length; i++) {
+                if (openApps[i].appId.indexOf("android:") !== 0
+                        && openApps[i].appId !== "appstore" && openApps[i].appId !== "files")
+                    filteredApps.push(openApps[i])
+            }
+            openApps = filteredApps
         }
-        openApps = filteredApps
         yunshOS.androidTarget = appId
         androidWindow.appTitle = info.name
         var w = androidWindow
@@ -1500,6 +1609,46 @@ ApplicationWindow {
         } catch(e) {
             console.log("App daemon not available on port 8590 — window shown regardless")
         }
+    }
+
+    function refreshAndroidDesktopApps() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8590/launch", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 5000
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return
+            try {
+                var data = JSON.parse(xhr.responseText)
+                if (!data.apps || !Array.isArray(data.apps))
+                    return
+                var nextInfo = appInfo
+                for (var i = 0; i < data.apps.length; ++i) {
+                    var app = data.apps[i]
+                    if (!app.package || app.package === "org.fdroid.fdroid")
+                        continue
+                    nextInfo["android:" + app.package] = {
+                        name: app.name || app.package,
+                        icon: "/usr/share/yunsh/icons/android-app.svg",
+                        color: "#00D4FF"
+                    }
+                }
+                appInfo = nextInfo
+                homeScreen.setAndroidApps(data.apps)
+            } catch (error) {
+                console.log("Android desktop app refresh unavailable")
+            }
+        }
+        xhr.send(JSON.stringify({action: "android_apps"}))
+    }
+
+    Timer {
+        interval: 12000
+        running: true
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: refreshAndroidDesktopApps()
     }
 
     // ─── Head Tracking Polling ────────────────────────
@@ -1594,7 +1743,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        console.log("YUNSH OS UI v2.0.1")
+        console.log("YUNSH OS UI v3.0.0")
         checkFirstBoot()
         showFullScreen()
         applyWindowPreferences()

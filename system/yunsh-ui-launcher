@@ -10,6 +10,10 @@ export QTWEBENGINE_CHROMIUM_FLAGS="${QTWEBENGINE_CHROMIUM_FLAGS:---no-sandbox --
 export QML_XHR_ALLOW_FILE_READ=1
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/yunsh-runtime}"
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
+LOG_DIR="/var/log"
+UI_LOG="${LOG_DIR}/yunsh-ui.log"
+WESTON_LOG="${LOG_DIR}/yunsh-weston.log"
+RECOVERY_QML="/usr/share/yunsh/ui/RecoveryScreen.qml"
 
 install -d -m 0700 "$XDG_RUNTIME_DIR"
 install -d -o yunsh -g yunsh \
@@ -46,9 +50,15 @@ if ! command -v weston >/dev/null 2>&1; then
     exit 1
 fi
 if [ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]; then
-    weston --backend=drm-backend.so --shell=kiosk-shell.so \
-        --socket="$WAYLAND_DISPLAY" --idle-time=0 \
-        >>/var/log/yunsh-weston.log 2>&1 &
+    # Weston versions shipped by Debian/Raspberry Pi OS do not all accept
+    # --continue-without-input. Passing an unsupported option makes Weston
+    # quit before it creates its Wayland socket, leaving the display black.
+    WESTON_ARGS="--backend=drm-backend.so --shell=kiosk-shell.so --socket=$WAYLAND_DISPLAY --idle-time=0"
+    if weston --help 2>&1 | grep -q -- '--continue-without-input'; then
+        WESTON_ARGS="$WESTON_ARGS --continue-without-input"
+    fi
+    # shellcheck disable=SC2086
+    weston $WESTON_ARGS >>"$WESTON_LOG" 2>&1 &
     for _ in $(seq 1 50); do
         [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && break
         sleep 0.1
@@ -59,16 +69,31 @@ fi
     exit 1
 }
 
+# Do not leave a connected display on a featureless black surface when the
+# shell has a QML error.  A minimal, independent QML screen makes the failure
+# self-describing on the device and preserves the detailed logs for support.
+failure_count=0
 while true; do
     if [ -f /etc/yunsh/.activated ]; then
-        "$QML_RUNNER" main.qml --activated 2>>/var/log/yunsh-ui.log
+        "$QML_RUNNER" main.qml -- --activated 2>>"$UI_LOG"
+        QML_EXIT=$?
     else
-        "$QML_RUNNER" main.qml --firstboot 2>>/var/log/yunsh-ui.log
+        "$QML_RUNNER" main.qml -- --firstboot 2>>"$UI_LOG"
         QML_EXIT=$?
         if [ "$QML_EXIT" -eq 42 ]; then
             touch /etc/yunsh/.activated
             sync
+            failure_count=0
+            continue
         fi
+    fi
+    failure_count=$((failure_count + 1))
+    printf '%s YUNSH UI exited with status %s (attempt %s)\n' \
+        "$(date -Iseconds)" "$QML_EXIT" "$failure_count" >>"$UI_LOG"
+
+    if [ "$failure_count" -ge 3 ] && [ -f "$RECOVERY_QML" ]; then
+        "$QML_RUNNER" "$RECOVERY_QML" "$QML_EXIT" 2>>"$UI_LOG" || true
+        failure_count=0
     fi
     sleep 2
 done

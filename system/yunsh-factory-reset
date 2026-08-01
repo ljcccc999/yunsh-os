@@ -19,23 +19,23 @@ echo "✓ 激活状态已重置"
 # /etc/yunsh/update.conf — preserved (OTA settings kept)
 
 # ─── Delete user-installed app data (iOS style: apps + their data) ───
-rm -rf /home/*/.local/share 2>/dev/null || true
-rm -rf /home/*/.config 2>/dev/null || true
+rm -rf /home/yunsh/.local/share 2>/dev/null || true
+rm -rf /home/yunsh/.config 2>/dev/null || true
 echo "✓ 用户应用数据已清除"
 
 # ─── Delete screenshots & user files ───
-rm -rf /home/*/Pictures 2>/dev/null || true
-rm -rf /home/*/Videos 2>/dev/null || true
-rm -rf /home/*/Documents 2>/dev/null || true
-rm -rf /home/*/Desktop 2>/dev/null || true
-rm -rf /home/*/Downloads 2>/dev/null || true
+rm -rf /home/yunsh/Pictures 2>/dev/null || true
+rm -rf /home/yunsh/Videos 2>/dev/null || true
+rm -rf /home/yunsh/Documents 2>/dev/null || true
+rm -rf /home/yunsh/Desktop 2>/dev/null || true
+rm -rf /home/yunsh/Downloads 2>/dev/null || true
 echo "✓ 用户文件（截图/文档）已清除"
 
 # Keep the built-in yunsh account. Removing it would require first-boot setup
 # to run again, which factory reset must never do.
 install -d -o yunsh -g yunsh /home/yunsh 2>/dev/null || true
 echo "yunsh:yunsh123" | chpasswd 2>/dev/null || true
-echo "✓ 系统账号已保留"
+echo "✓ 系统账号已保留；本机密码已重置"
 
 # ─── Reset user settings (language, Wi-Fi, Bluetooth) ───
 # Only remove user-preference files, keep system config

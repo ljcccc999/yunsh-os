@@ -20,7 +20,7 @@ Item {
     /* ---- Data model ---- */
     property var updateHistory: [
         {
-            version: "2.0.1",
+            version: "2.0.2",
             date: "2026-07-29",
             changelog: "系统世界与 Orbit 更新。\n• YUNSH META Universe 升级为系统级持续世界层，不再作为普通 App\n• Orbit 系统级 Agent 每次开机自动启动，可选 DeepSeek、Kimi 或兼容提供商与模型\n• 用户 API Key 设备级加密保存，系统权限默认开启且可随时关闭\n• 激活时可配置或跳过 Orbit，默认甜美女声并提供男声选项\n• USB/蓝牙麦克风语音识别与自然语音组件在桌面后后台准备\n• 全局 YUNSH / METAVERSE / Orbit 菜单栏与液态玻璃系统图标\n• 当前眼镜默认输出单个完整画面，由显示驱动同步到左右屏；高级 SBS 仅为未来驱动保留",
             build: "build 2026.0729"

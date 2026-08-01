@@ -1,4 +1,4 @@
-// YUNSH OS v2.0.1 - touch-first activation experience.
+// YUNSH OS v3.0.0 - touch-first activation experience.
 // Physical keyboard input is never required.
 
 import QtQuick 2.15
@@ -353,7 +353,7 @@ Rectangle {
                 // Version
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "v2.0.1"
+                    text: "v3.0.0"
                     color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
                     font.pixelSize: 11
                 }
@@ -1257,11 +1257,9 @@ Rectangle {
                 anchors.margins: 28
                 spacing: 8
 
-                Image {
+                OrbitGlyph {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    source: "/usr/share/yunsh/icons/orbit.png"
                     width: 54; height: 54
-                    fillMode: Image.PreserveAspectFit
                 }
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -1406,6 +1404,7 @@ Rectangle {
     // STEP 8: Initializing...
     // ════════════════════════════════════════════════════
     Item {
+        id: initializingStep
         anchors.fill: parent
         visible: currentStep === 8
 
@@ -1471,7 +1470,7 @@ Rectangle {
 
                     SequentialAnimation on opacity {
                         loops: Animation.Infinite
-                        running: progressValue < 100
+                        running: initializingStep.progressValue < 100
                         OpacityAnimator { from: 0.5; to: 1.0; duration: 800 }
                         OpacityAnimator { from: 1.0; to: 0.5; duration: 800 }
                     }
@@ -1499,7 +1498,7 @@ Rectangle {
                     color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
 
                     Rectangle {
-                        width: parent.width * (progressValue / 100)
+                        width: parent.width * (initializingStep.progressValue / 100)
                         height: parent.height; radius: 3
                         color: "#00D4FF"
 
@@ -1511,8 +1510,11 @@ Rectangle {
 
                 // Status text
                 Text {
+                    id: activationStatusText
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: statusMessages[Math.min(Math.floor(_timerCount / 20), statusMessages.length - 1)]
+                    text: activationStatusText.statusMessages[Math.min(
+                        Math.floor(initializingStep._timerCount / 20),
+                        activationStatusText.statusMessages.length - 1)]
                     color: Qt.rgba(255/255, 255/255, 255/255, 0.2)
                     font.pixelSize: 11
 

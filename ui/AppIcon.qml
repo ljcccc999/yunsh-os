@@ -8,7 +8,7 @@ Item {
     id: appIcon
 
     property string appName: ""
-    property string appIcon: ""
+    property string iconSource: ""
     property string appPackage: ""
     property bool isSystemApp: false
     property color iconColor: Qt.rgba(20/255, 20/255, 35/255, 0.5)
@@ -34,8 +34,8 @@ Item {
             Rectangle {
                 anchors.centerIn: parent
                 width: 72; height: 72; radius: 36
-                color: "transparent"
-                border.color: Qt.rgba(0/255, 212/255, 255/255, 0.06)
+                color: Qt.rgba(1, 1, 1, 0.16)
+                border.color: Qt.rgba(1, 1, 1, 0.38)
                 border.width: 1
             }
 
@@ -48,23 +48,23 @@ Item {
                 radius: 32
                 anchors.verticalCenterOffset: appIcon.hovered && !appIcon.pressedState ? -5 : 0
                 scale: appIcon.pressedState ? 0.96 : (appIcon.hovered ? 1.14 : 1.0)
-                color: appIcon.iconColor
-                border.color: Qt.rgba(255/255, 255/255, 255/255, 0.72)
+                color: Qt.rgba(0.93, 0.97, 1, 0.84)
+                border.color: Qt.rgba(255/255, 255/255, 255/255, 0.96)
                 border.width: 1
 
                 // White liquid-glass material that stays visible optically.
                 Rectangle {
                     anchors.fill: parent; radius: 32
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.70)
+                    color: Qt.rgba(255/255, 255/255, 255/255, 0.40)
                 }
-
-                // Top highlight (visionOS edge light)
                 Rectangle {
-                    anchors.top: parent.top; anchors.topMargin: 2
-                    anchors.left: parent.left; anchors.leftMargin: 8
-                    anchors.right: parent.right; anchors.rightMargin: 8
-                    height: 2; radius: 1
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.92)
+                    anchors.top: parent.top
+                    anchors.topMargin: 5
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: parent.width * 0.62
+                    height: 9
+                    radius: height / 2
+                    color: Qt.rgba(1, 1, 1, 0.34)
                 }
 
                 // Shadow at bottom
@@ -79,7 +79,7 @@ Item {
                 // Icon image
                 Image {
                     id: iconImg
-                    source: appIcon
+                    source: appIcon.iconSource
                     width: 36
                     height: 36
                     anchors.centerIn: parent
@@ -105,15 +105,6 @@ Item {
                 }
             }
 
-            // Drop shadow for depth
-            layer.enabled: true
-            layer.effect: DropShadowEffect {
-                radius: 16
-                samples: 32
-                color: Qt.rgba(0/255, 0/255, 0/255, 0.3)
-                horizontalOffset: 0
-                verticalOffset: 4
-            }
         }
 
         // App name
@@ -125,7 +116,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             anchors.horizontalCenter: parent.horizontalCenter
             elide: Text.ElideRight
-            maximumLineWidth: 72
+            width: 72
             lineHeight: 1.2
             opacity: 0.85
         }

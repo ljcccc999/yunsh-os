@@ -339,7 +339,7 @@ class Handler(BaseHTTPRequestHandler):
                     "success": True,
                     "name": socket.gethostname(),
                     "product": "YUNSH OS",
-                    "version": "2.0.1",
+                    "version": "2.0.2",
                     "deviceId": fingerprint[:16],
                     "fingerprint": fingerprint,
                 },
@@ -526,7 +526,7 @@ def advertise(fingerprint):
         str(PORT),
         f"id={fingerprint[:16]}",
         f"fp={fingerprint}",
-        "version=2.0.1",
+        "version=2.0.2",
         "transport=tls",
     ]
     try:

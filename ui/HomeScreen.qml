@@ -26,25 +26,46 @@ Item {
     signal openSpatialDisplay()
     signal openSpaceCapsule()
     signal openScreenRelay()
+    signal openAndroidApp(string packageName)
     signal showControlCenter()
     signal takeScreenshot()
 
     // ─── App Model (dynamic, auto-paginates) ────────────
-    property var appList: [
-        { name: "设置", icon: "settings.svg",        color: "#00D4FF",   action: "settings" },
-        { name: "Browser", icon: "browser.svg",        color: "#4CAF50",   action: "browser" },
-        { name: "Android Apps", icon: "appstore.svg", color: "#FF9800",   action: "appstore" },
-        { name: "文件", icon: "files.svg",             color: "#2196F3",   action: "files" },
-        { name: "终端", icon: "terminal.svg",          color: "#00D4FF",   action: "terminal" },
-        { name: "相册", icon: "photos.svg",            color: "#FFC107",   action: "photos" },
-        { name: "空间显示", icon: "display.svg",       color: "#00D4FF",   action: "display" },
-        { name: "空间胶囊", icon: "capsule.svg",        color: "#00D4FF",   action: "spacecapsule" },
-        { name: "iPhone 投屏", icon: "screen-relay.svg", color: "#00D4FF", action: "screenrelay" }
+    property var coreAppList: [
+        { name: "设置", icon: "settings.svg",          color: "#4E8FEA",   action: "settings" },
+        { name: "Browser", icon: "browser.svg",        color: "#5477D6",   action: "browser" },
+        { name: "F-Droid", icon: "appstore.svg",       color: "#6E8F5B",   action: "appstore" },
+        { name: "文件", icon: "files.svg",             color: "#5A8CC7",   action: "files" },
+        { name: "终端", icon: "terminal.svg",          color: "#526F9E",   action: "terminal" },
+        { name: "相册", icon: "photos.svg",            color: "#C78A62",   action: "photos" },
+        { name: "空间显示", icon: "display.svg",       color: "#6678B8",   action: "display" },
+        { name: "空间胶囊", icon: "capsule.svg",        color: "#8C76B0",   action: "spacecapsule" },
+        { name: "iPhone 投屏", icon: "screen-relay.svg", color: "#4D93A6", action: "screenrelay" }
     ]
+    property var androidApps: []
+    property var appList: coreAppList.concat(androidApps)
 
-    readonly property var rowPattern: [4, 5, 4]
-    readonly property var rowOffsets: [0, 4, 9]
-    readonly property int appsPerPage: 13
+    function setAndroidApps(apps) {
+        var next = []
+        for (var i = 0; i < apps.length; ++i) {
+            var app = apps[i]
+            if (!app || !app.package || app.package === "org.fdroid.fdroid")
+                continue
+            next.push({
+                name: app.name || app.package,
+                icon: "android-app.svg",
+                color: "#7C77A8",
+                action: "android:" + app.package
+            })
+        }
+        androidApps = next
+    }
+
+    // A calm, evenly spaced spatial grid. The visual rhythm is inspired by
+    // modern spatial operating systems while retaining YUNSH iconography.
+    readonly property var rowPattern: [4, 4, 4]
+    readonly property var rowOffsets: [0, 4, 8]
+    readonly property int appsPerPage: 12
 
     function appCount() { return appList.length }
     function pageCount() { return Math.ceil(appList.length / appsPerPage) }
@@ -60,7 +81,11 @@ Item {
             case "display":     homeScreen.openSpatialDisplay(); break
             case "spacecapsule": homeScreen.openSpaceCapsule(); break
             case "screenrelay": homeScreen.openScreenRelay(); break
-            default:            console.log("Unknown app:", action)
+            default:
+                if (action.indexOf("android:") === 0)
+                    homeScreen.openAndroidApp(action.substring(8))
+                else
+                    console.log("Unknown app:", action)
         }
     }
 
@@ -108,6 +133,9 @@ Item {
 
             // ── VisionOS Orb Clock ──
             Item {
+                // Global menu bar already owns the YUNSH/METAVERSE entry.
+                // Avoid a second logo-and-clock strip on the desktop.
+                visible: false
                 width: parent.width
                 height: 56
 
@@ -199,6 +227,9 @@ Item {
 
             Rectangle {
                 id: worldEntry
+                // The persistent-world entry lives in the global menu bar.
+                // Keep the home canvas focused on usable app icons.
+                visible: false
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: Math.min(parent.width - 120, 760)
                 height: 82
@@ -213,7 +244,7 @@ Item {
                     spacing: 18
                     Image {
                         source: "/usr/share/yunsh/logo/logo-64.png"
-                        width: 48; height: 48
+                        width: 36; height: 36
                         fillMode: Image.PreserveAspectFit
                     }
                     Column {
@@ -271,7 +302,7 @@ Item {
 
                             Column {
                                 anchors.centerIn: parent
-                                spacing: 18
+                                spacing: 26
 
                                 Repeater {
                                     model: 3
@@ -291,7 +322,7 @@ Item {
                                         Row {
                                             id: appItems
                                             anchors.centerIn: parent
-                                            spacing: 30
+                                            spacing: 42
 
                                             Repeater {
                                                 model: appRow.rowCount
@@ -301,7 +332,7 @@ Item {
                                                     property int appIndex: startIdx
                                                         + appRow.rowStart + index
                                                     appName: appList[appIndex].name
-                                                    appIcon: "/usr/share/yunsh/icons/"
+                                                    iconSource: "/usr/share/yunsh/icons/"
                                                         + appList[appIndex].icon
                                                     iconColor: {
                                                         var c = appList[appIndex].color
@@ -324,7 +355,7 @@ Item {
                                 anchors.bottom: parent.bottom
                                 anchors.bottomMargin: 16
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: "YUNSH OS v2.0.1"
+                                text: "YUNSH OS v3.0.0"
                                 color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
                                 font.pixelSize: 11
                                 visible: pageIndex === 0

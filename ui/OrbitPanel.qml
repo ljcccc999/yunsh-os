@@ -13,6 +13,10 @@ Item {
     property bool showTrigger: false
     property bool settingsVisible: false
     property bool busy: false
+    // The top-right island is reserved for actual system-tool work.
+    property bool computerOperationActive: false
+    property bool computerApprovalPending: false
+    property bool voiceConversationActive: false
     property bool configured: false
     property string configuredProvider: ""
     property string provider: "deepseek"
@@ -29,6 +33,19 @@ Item {
     property string pendingApprovalSummary: ""
     property string pendingApprovalPermission: ""
     property bool pendingApprovalAlwaysConfirm: false
+
+    Timer {
+        id: computerOperationSettleTimer
+        interval: 2200
+        repeat: false
+        onTriggered: orbit.computerOperationActive = false
+    }
+    Timer {
+        id: voiceConversationSettleTimer
+        interval: 2200
+        repeat: false
+        onTriggered: orbit.voiceConversationActive = false
+    }
 
     signal toastRequested(string message)
 
@@ -117,6 +134,18 @@ Item {
         worldPermission.checked = values.world !== false
     }
 
+    function setAllPermissions(allowed) {
+        appsPermission.checked = allowed
+        filesPermission.checked = allowed
+        shellPermission.checked = allowed
+        settingsPermission.checked = allowed
+        networkPermission.checked = allowed
+        screenPermission.checked = allowed
+        microphonePermission.checked = allowed
+        memoryPermission.checked = allowed
+        worldPermission.checked = allowed
+    }
+
     function saveConfiguration() {
         var selectedModel = provider === "compatible"
             ? customModel.text.trim()
@@ -190,11 +219,16 @@ Item {
     }
 
     function handleAgentResponse(status, body) {
+        if (voiceConversationActive)
+            voiceConversationSettleTimer.restart()
         if (status !== 200 || !body.success) {
             appendAssistantReply("没有完成：" + (body.error || "Orbit 运行时不可用"), false)
             return
         }
         if (body.approval) {
+            computerOperationSettleTimer.stop()
+            computerOperationActive = true
+            computerApprovalPending = true
             pendingApprovalId = body.approval.requestId || ""
             pendingApprovalSummary = body.approval.summary || "Orbit 请求一项系统权限"
             pendingApprovalPermission = body.approval.permissionLabel || "系统操作"
@@ -202,7 +236,12 @@ Item {
             statusText = "等待你的授权"
             return
         }
+        if (Array.isArray(body.tools) && body.tools.length > 0) {
+            computerOperationActive = true
+            computerOperationSettleTimer.restart()
+        }
         pendingApprovalId = ""
+        computerApprovalPending = false
         pendingApprovalSummary = ""
         appendAssistantReply(body.reply || "任务已完成。", true)
     }
@@ -226,7 +265,10 @@ Item {
             return
         if (pendingApprovalId === "voice") {
             pendingApprovalId = ""
+            computerApprovalPending = false
             if (decision === "deny") {
+                voiceConversationSettleTimer.stop()
+                voiceConversationActive = false
                 statusText = configured
                     ? "系统级 · " + providerDisplayName() + " · " + modelName
                     : "系统级 · 等待配置 API"
@@ -249,8 +291,11 @@ Item {
             return
         }
         busy = true
+        computerOperationActive = true
+        computerOperationSettleTimer.stop()
         var requestId = pendingApprovalId
         pendingApprovalId = ""
+        computerApprovalPending = false
         request("POST", "/v1/approve", {
             requestId: requestId,
             decision: decision
@@ -264,6 +309,8 @@ Item {
         if (busy)
             return
         busy = true
+        voiceConversationSettleTimer.stop()
+        voiceConversationActive = true
         statusText = "正在聆听…"
         request("POST", "/v1/voice/listen", {approved: approved === true}, function(status, body) {
             busy = false
@@ -283,6 +330,8 @@ Item {
             promptField.text = body.text || ""
             if (promptField.text.length)
                 sendMessage()
+            else
+                voiceConversationSettleTimer.restart()
         })
     }
 
@@ -298,7 +347,7 @@ Item {
         height: expanded ? 0 : 48
         radius: 24
         z: 2
-        color: triggerMouse.pressed ? "#E9FBFF" : "#FFFFFF"
+        color: triggerMouse.pressed ? Qt.rgba(0.88, 0.98, 1, 0.86) : Qt.rgba(1, 1, 1, 0.72)
         border.width: 1
         border.color: "#BDEFFF"
         opacity: expanded ? 0 : 0.94
@@ -308,22 +357,13 @@ Item {
         Row {
             anchors.centerIn: parent
             spacing: 9
-            Image {
-                source: "/usr/share/yunsh/icons/orbit.png"
-                width: 27; height: 27
-                fillMode: Image.PreserveAspectFit
-            }
+            OrbitGlyph { width: 30; height: 30 }
             Text {
                 text: "Orbit"
                 color: "#101820"
                 font.pixelSize: 15
                 font.weight: Font.DemiBold
                 font.letterSpacing: -0.2
-            }
-            Rectangle {
-                width: 7; height: 7; radius: 4
-                color: configured ? "#34C759" : "#FF9F0A"
-                anchors.verticalCenter: parent.verticalCenter
             }
         }
 
@@ -356,7 +396,7 @@ Item {
         clip: true
         opacity: expanded ? 0.97 : 0
         scale: expanded ? 1 : 0.94
-        color: "#F7FCFF"
+        color: Qt.rgba(0.94, 0.98, 1, 0.78)
         border.width: 1
         border.color: "#FFFFFF"
 
@@ -378,11 +418,7 @@ Item {
                 Layout.fillWidth: true
                 spacing: 12
 
-                Image {
-                    source: "/usr/share/yunsh/icons/orbit.png"
-                    width: 48; height: 48
-                    fillMode: Image.PreserveAspectFit
-                }
+                OrbitGlyph { width: 48; height: 48 }
 
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -454,7 +490,9 @@ Item {
                                 width: Math.min(messageText.implicitWidth + 34, messageList.width * 0.82)
                                 height: messageText.implicitHeight + 24
                                 radius: 18
-                                color: role === "user" ? "#00D4FF" : "#FFFFFF"
+                                color: role === "user"
+                                    ? Qt.rgba(0/255, 212/255, 255/255, 0.54)
+                                    : Qt.rgba(1, 1, 1, 0.66)
                                 border.width: role === "user" ? 0 : 1
                                 border.color: "#DDECF1"
                                 Text {
@@ -531,7 +569,7 @@ Item {
                         Layout.fillWidth: true
                         height: 54
                         radius: 27
-                        color: "#FFFFFF"
+                        color: Qt.rgba(1, 1, 1, 0.66)
                         border.width: 1
                         border.color: promptField.activeFocus ? "#00D4FF" : "#D7E7ED"
 
@@ -554,7 +592,9 @@ Item {
                             anchors.leftMargin: 6
                             anchors.verticalCenter: parent.verticalCenter
                             width: 42; height: 42; radius: 21
-                            color: micMouse.pressed ? "#DDF8FF" : "#F0FAFD"
+                            color: micMouse.pressed
+                                ? Qt.rgba(0.86, 0.97, 1, 0.92)
+                                : Qt.rgba(1, 1, 1, 0.58)
                             Text {
                                 anchors.centerIn: parent
                                 text: "●"
@@ -574,7 +614,8 @@ Item {
                             anchors.rightMargin: 6
                             anchors.verticalCenter: parent.verticalCenter
                             width: 42; height: 42; radius: 21
-                            color: busy ? "#B8D9E0" : "#00D4FF"
+                            color: busy ? Qt.rgba(0.55, 0.80, 0.86, 0.62)
+                                : Qt.rgba(0/255, 212/255, 255/255, 0.66)
                             Text {
                                 anchors.centerIn: parent
                                 text: "↑"
@@ -681,6 +722,25 @@ Item {
                             font.pixelSize: 16
                             font.weight: Font.DemiBold
                             topPadding: 8
+                        }
+
+                        Row {
+                            width: parent.width
+                            spacing: 10
+                            Button {
+                                text: "全部允许"
+                                onClicked: orbit.setAllPermissions(true)
+                            }
+                            Button {
+                                text: "全部关闭"
+                                onClicked: orbit.setAllPermissions(false)
+                            }
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "破坏性操作仍需本机确认"
+                                color: "#61707C"
+                                font.pixelSize: 11
+                            }
                         }
 
                         Grid {

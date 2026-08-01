@@ -272,15 +272,15 @@ Item {
 
         // Loading state
         onLoadingChanged: function(loadRequest) {
-            isLoading = loadRequest.status === WebEngineLoadRequest.LoadStartedStatus
-            if (loadRequest.status === WebEngineLoadRequest.LoadSucceededStatus) {
-                isLoading = false
-                loadProgress = 100
+            browserScreen.isLoading = loadRequest.status === WebEngineView.LoadStartedStatus
+            if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                browserScreen.isLoading = false
+                browserScreen.loadProgress = 100
                 pageTitle = webView.title
                 urlInput.text = webView.url.toString()
                 browserScreen._pendingDomain = ""
-            } else if (loadRequest.status === WebEngineLoadRequest.LoadFailedStatus) {
-                isLoading = false
+            } else if (loadRequest.status === WebEngineView.LoadFailedStatus) {
+                browserScreen.isLoading = false
                 console.log("Page load failed:", loadRequest.errorString)
 
                 // Auto fallback: https → http
@@ -294,7 +294,7 @@ Item {
         }
 
         onLoadProgressChanged: {
-            loadProgress = webView.loadProgress
+            browserScreen.loadProgress = webView.loadProgress
         }
 
         // Secure connection indicator

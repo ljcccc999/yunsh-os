@@ -8,7 +8,7 @@ BUILD_DIR="${YUNSH_DIR}/build"
 OUTPUT_DIR="${YUNSH_DIR}/output"
 VERSION_CONF="${BUILD_DIR}/yunsh-version.conf"
 if [ ! -f "${VERSION_CONF}" ]; then
-    printf 'VERSION=v2.0.1\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
+    printf 'VERSION=v3.0.0\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
 fi
 VERSION="$(awk -F= '$1 == "VERSION" { print $2; exit }' "${VERSION_CONF}")"
 BUILD_ID="${YUNSH_BUILD_ID:-$(date +%Y.%m.%d)}"
@@ -300,9 +300,9 @@ fi
 /usr/bin/yunsh-disk-helper 2>/dev/null || true
 while true; do
     if [ -f /etc/yunsh/.activated ]; then
-        $QML_RUNNER main.qml --activated 2>>/var/log/yunsh-ui.log
+        $QML_RUNNER main.qml -- --activated 2>>/var/log/yunsh-ui.log
     else
-        $QML_RUNNER main.qml --firstboot 2>>/var/log/yunsh-ui.log
+        $QML_RUNNER main.qml -- --firstboot 2>>/var/log/yunsh-ui.log
         QML_EXIT=$?
         [ $QML_EXIT -eq 42 ] && touch /etc/yunsh/.activated 2>/dev/null && sync
     fi

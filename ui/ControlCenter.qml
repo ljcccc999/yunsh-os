@@ -15,6 +15,10 @@ Item {
     property string currentTime: "00:00"
     property int brightnessLevel: 72
     property int volumeLevel: 55
+    property bool glassesConnected: false
+    property bool iPhoneConnected: false
+    property int glassesBattery: -1
+    property int hostBattery: -1
     property bool focusMode: false
     property bool stereoEnabled: false
     property bool reduceMotion: false
@@ -83,6 +87,45 @@ Item {
             }
         }
         bluetoothRequest.send()
+
+        var glassesRequest = new XMLHttpRequest()
+        glassesRequest.open("GET", "http://127.0.0.1:8591/api/glasses-status", true)
+        glassesRequest.onreadystatechange = function() {
+            if (glassesRequest.readyState === XMLHttpRequest.DONE && glassesRequest.status === 200) {
+                try {
+                    var glasses = JSON.parse(glassesRequest.responseText)
+                    glassesConnected = glasses.connected === true
+                    glassesBattery = glasses.battery === null || glasses.battery === undefined
+                        ? -1 : Math.max(0, Math.min(100, Number(glasses.battery)))
+                    if (glasses.brightness !== null && glasses.brightness !== undefined)
+                        brightnessLevel = Math.max(0, Math.min(100, Number(glasses.brightness)))
+                } catch (_error) {}
+            }
+        }
+        glassesRequest.send()
+
+        var linkRequest = new XMLHttpRequest()
+        linkRequest.open("GET", "http://127.0.0.1:8591/api/link-status", true)
+        linkRequest.onreadystatechange = function() {
+            if (linkRequest.readyState === XMLHttpRequest.DONE && linkRequest.status === 200) {
+                try { iPhoneConnected = JSON.parse(linkRequest.responseText).connected === true }
+                catch (_error) {}
+            }
+        }
+        linkRequest.send()
+
+        var powerRequest = new XMLHttpRequest()
+        powerRequest.open("GET", "http://127.0.0.1:8591/api/power-status", true)
+        powerRequest.onreadystatechange = function() {
+            if (powerRequest.readyState === XMLHttpRequest.DONE && powerRequest.status === 200) {
+                try {
+                    var power = JSON.parse(powerRequest.responseText)
+                    hostBattery = power.available && power.battery !== null && power.battery !== undefined
+                        ? Math.max(0, Math.min(100, Number(power.battery))) : -1
+                } catch (_error) {}
+            }
+        }
+        powerRequest.send()
     }
 
     function applyWifiPower() {
@@ -178,7 +221,7 @@ Item {
         width: Math.min(520, parent.width - 36)
         height: Math.min(790, parent.height - 86)
         radius: 32
-        color: Qt.rgba(248/255, 253/255, 1, 0.92)
+        color: Qt.rgba(248/255, 253/255, 1, 0.72)
         border.width: 1
         border.color: "#FFFFFF"
         clip: true
@@ -263,18 +306,18 @@ Item {
 
                     Repeater {
                         model: [
-                            {label: "Wi-Fi", symbol: "⌁", action: "wifi"},
-                            {label: "蓝牙", symbol: "ᛒ", action: "bluetooth"},
-                            {label: "键盘", symbol: "⌨", action: "keyboard"},
-                            {label: "全屏截图", symbol: "▣", action: "screenshot"},
-                            {label: "区域截图", symbol: "⌗", action: "region"},
-                            {label: recording ? "停止录屏" : "录屏", symbol: recording ? "■" : "●", action: "record"},
-                            {label: "专注", symbol: "◉", action: "focus"},
-                            {label: "显示", symbol: "◐", action: "display"},
-                            {label: "相册", symbol: "▧", action: "photos"},
-                            {label: "设置", symbol: "⚙", action: "settings"},
-                            {label: "系统更新", symbol: "↻", action: "update"},
-                            {label: "锁定", symbol: "⌾", action: "lock"}
+                            {label: "Wi-Fi", icon: "wifi.svg", action: "wifi"},
+                            {label: "蓝牙", icon: "bluetooth.svg", action: "bluetooth"},
+                            {label: "键盘", icon: "keyboard.svg", action: "keyboard"},
+                            {label: "全屏截图", icon: "screenshot.svg", action: "screenshot"},
+                            {label: "区域截图", icon: "screenshot.svg", action: "region"},
+                            {label: recording ? "停止录屏" : "录屏", icon: "screen-relay.svg", action: "record"},
+                            {label: "专注", icon: "metaverse.svg", action: "focus"},
+                            {label: "显示", icon: "display.svg", action: "display"},
+                            {label: "相册", icon: "photos.svg", action: "photos"},
+                            {label: "设置", icon: "settings.svg", action: "settings"},
+                            {label: "系统更新", icon: "update.svg", action: "update"},
+                            {label: "锁定", icon: "keyboard.svg", action: "lock"}
                         ]
 
                         Rectangle {
@@ -284,7 +327,7 @@ Item {
                             radius: 20
                             property bool active: root.tileActive(modelData.action)
                             color: tileMouse.pressed ? "#DDF7FD"
-                                : (active ? "#E1F9FF" : "#FFFFFF")
+                                : (active ? Qt.rgba(214/255, 249/255, 1, 0.72) : Qt.rgba(1, 1, 1, 0.60))
                             border.width: 1
                             border.color: active ? "#8DEAFF" : "#DDEBF0"
                             scale: tileMouse.pressed ? 0.96
@@ -293,13 +336,23 @@ Item {
                             Column {
                                 anchors.centerIn: parent
                                 spacing: 5
-                                Text {
+                                Rectangle {
                                     anchors.horizontalCenter: parent.horizontalCenter
-                                    text: modelData.symbol
-                                    color: modelData.action === "record" && recording
-                                        ? "#E43A45" : (parent.parent.active ? "#00A9CC" : "#17212A")
-                                    font.pixelSize: 23
-                                    font.weight: Font.Medium
+                                    width: 38
+                                    height: 38
+                                    radius: 19
+                                    color: parent.parent.active
+                                        ? Qt.rgba(0/255, 212/255, 255/255, 0.16)
+                                        : Qt.rgba(1, 1, 1, 0.48)
+                                    border.width: 1
+                                    border.color: Qt.rgba(1, 1, 1, 0.72)
+                                    Image {
+                                        anchors.centerIn: parent
+                                        source: "/usr/share/yunsh/icons/" + modelData.icon
+                                        width: 21
+                                        height: 21
+                                        fillMode: Image.PreserveAspectFit
+                                    }
                                 }
                                 Text {
                                     anchors.horizontalCenter: parent.horizontalCenter
@@ -327,9 +380,59 @@ Item {
 
                 Rectangle {
                     width: parent.width
+                    height: 98
+                    radius: 24
+                    color: Qt.rgba(1, 1, 1, 0.64)
+                    border.width: 1
+                    border.color: "#DDEBF0"
+
+                    Row {
+                        anchors.fill: parent
+                        anchors.margins: 16
+                        spacing: 14
+                        Rectangle {
+                            width: 48; height: 64; radius: 16
+                            color: Qt.rgba(0/255, 212/255, 255/255, 0.12)
+                            border.width: 1
+                            border.color: Qt.rgba(0/255, 212/255, 255/255, 0.35)
+                            Image {
+                                anchors.centerIn: parent
+                                source: "/usr/share/yunsh/icons/screen-relay.svg"
+                                width: 26; height: 26
+                                fillMode: Image.PreserveAspectFit
+                            }
+                        }
+                        Column {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - 190
+                            spacing: 4
+                            Text { text: "YUNSH Link"; color: "#17212A"; font.pixelSize: 14; font.weight: Font.DemiBold }
+                            Text {
+                                text: iPhoneConnected ? "iPhone 已连接 · 可远程控制" : "iPhone 未连接 · 可稍后配对"
+                                color: iPhoneConnected ? "#087F5B" : "#61707C"
+                                font.pixelSize: 11
+                                elide: Text.ElideRight
+                                width: parent.width
+                            }
+                            Text {
+                                text: glassesConnected ? "眼镜已连接" : "眼镜未连接"
+                                color: "#61707C"; font.pixelSize: 10
+                            }
+                        }
+                        Column {
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: 5
+                            Text { text: glassesBattery >= 0 ? "眼镜 " + glassesBattery + "%" : "眼镜 —"; color: "#26333D"; font.pixelSize: 11; font.weight: Font.Medium }
+                            Text { text: hostBattery >= 0 ? "主机 " + hostBattery + "%" : "主机 —"; color: "#61707C"; font.pixelSize: 11 }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    width: parent.width
                     height: 118
                     radius: 24
-                    color: "#FFFFFF"
+                    color: Qt.rgba(1, 1, 1, 0.64)
                     border.width: 1
                     border.color: "#DDEBF0"
 
@@ -382,7 +485,7 @@ Item {
                             width: (content.width - 10) / 2
                             height: 48
                             radius: 18
-                            color: detailMouse.pressed ? "#DDF7FD" : "#FFFFFF"
+                            color: detailMouse.pressed ? "#DDF7FD" : Qt.rgba(1, 1, 1, 0.60)
                             border.width: 1
                             border.color: "#DDEBF0"
                             Text {
@@ -428,7 +531,7 @@ Item {
                             radius: 18
                             color: powerMouse.pressed
                                 ? (modelData.danger ? "#FFE0E2" : "#E7F4F7")
-                                : "#FFFFFF"
+                                : Qt.rgba(1, 1, 1, 0.60)
                             border.width: 1
                             border.color: modelData.danger ? "#FFB8BE" : "#DDEBF0"
                             Text {

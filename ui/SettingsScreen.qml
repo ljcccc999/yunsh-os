@@ -21,7 +21,7 @@ Rectangle {
     signal openComfortDna()
     signal requestFactoryReset()
 
-    property string osVersionName: "YUNSH OS v2.0.1"
+    property string osVersionName: "YUNSH OS v3.0.0"
     property string selectedLanguageDisplay: "简体中文 · 拼音"
     property int autoLockSeconds: 120
     signal requestAutoLockSeconds(int seconds)
@@ -40,48 +40,36 @@ Rectangle {
 
     function loadVersionConfig() {
         var xhr = new XMLHttpRequest()
-        xhr.open("GET", "file:///etc/yunsh/version.conf", true)
+        xhr.open("POST", "http://127.0.0.1:8590/launch", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 3000
         xhr.onreadystatechange = function() {
-            if (xhr.readyState === XMLHttpRequest.DONE) {
-                if (xhr.status === 0 || xhr.status === 200) {
-                    var text = xhr.responseText
-                    var lines = text.split('\n')
-                    for (var i = 0; i < lines.length; i++) {
-                        var line = lines[i].trim()
-                        if (line.indexOf('VERSION=') === 0) {
-                            osVersionName = "YUNSH OS " + line.substring(8)
-                        }
-                    }
-                }
-            }
+            if (xhr.readyState !== XMLHttpRequest.DONE || xhr.status !== 200)
+                return
+            try {
+                var values = JSON.parse(xhr.responseText || "{}")
+                if (values.version)
+                    osVersionName = "YUNSH OS " + values.version
+            } catch (_error) {}
         }
-        xhr.send()
+        xhr.send(JSON.stringify({action: "system_settings"}))
     }
 
     function loadLanguageConfig() {
         var xhr = new XMLHttpRequest()
-        xhr.open("GET", "file:///etc/yunsh/language.conf", true)
+        xhr.open("POST", "http://127.0.0.1:8590/launch", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 3000
         xhr.onreadystatechange = function() {
-            if (xhr.readyState !== XMLHttpRequest.DONE ||
-                    (xhr.status !== 0 && xhr.status !== 200))
+            if (xhr.readyState !== XMLHttpRequest.DONE || xhr.status !== 200)
                 return
-            var language = "简体中文"
-            var keyboard = "拼音"
-            var lines = xhr.responseText.split('\n')
-            for (var i = 0; i < lines.length; i++) {
-                var separator = lines[i].indexOf('=')
-                if (separator < 0)
-                    continue
-                var key = lines[i].substring(0, separator).trim()
-                var value = lines[i].substring(separator + 1).trim()
-                if (key === "language" && value.length > 0)
-                    language = value
-                else if (key === "keyboard" && value.length > 0)
-                    keyboard = value
-            }
-            selectedLanguageDisplay = language + " · " + keyboard
+            try {
+                var values = JSON.parse(xhr.responseText || "{}")
+                selectedLanguageDisplay = (values.language || "简体中文")
+                    + " · " + (values.keyboard || "拼音")
+            } catch (_error) {}
         }
-        xhr.send()
+        xhr.send(JSON.stringify({action: "system_settings"}))
     }
 
     Component.onCompleted: {
@@ -248,7 +236,7 @@ Rectangle {
             
             GlassCard {
                 width: parent.width; height: 60
-                iconSource: "/usr/share/yunsh/icons/settings.svg"
+                iconSource: "/usr/share/yunsh/icons/display.svg"
                 iconSize: 18
                 title: "空间显示"
                 subtitle: "当前双屏镜像、高级 SBS、3DoF 与舒适度"
@@ -258,7 +246,7 @@ Rectangle {
 
             GlassCard {
                 width: parent.width; height: 60
-                iconSource: "/usr/share/yunsh/icons/settings.svg"
+                iconSource: "/usr/share/yunsh/icons/capsule.svg"
                 iconSize: 18
                 title: "Comfort DNA"
                 subtitle: "调整头追平滑、视野与动效舒适起点"
@@ -268,7 +256,7 @@ Rectangle {
             
             GlassCard {
                 width: parent.width; height: 60
-                iconSource: "/usr/share/yunsh/icons/settings.svg"
+                iconSource: "/usr/share/yunsh/icons/sound.svg"
                 iconSize: 18
                 title: "声音"
                 subtitle: "音量, 输入输出"
@@ -289,7 +277,7 @@ Rectangle {
             
             GlassCard {
                 width: parent.width; height: 60
-                iconSource: "/usr/share/yunsh/icons/settings.svg"
+                iconSource: "/usr/share/yunsh/icons/language.svg"
                 iconSize: 18
                 title: "语言与输入"
                 subtitle: selectedLanguageDisplay + " · 在激活流程中设置"
@@ -298,7 +286,7 @@ Rectangle {
 
             GlassCard {
                 width: parent.width; height: 60
-                iconSource: "/usr/share/yunsh/icons/settings.svg"
+                iconSource: "/usr/share/yunsh/icons/lock.svg"
                 iconSize: 18
                 title: "本机锁定密码"
                 subtitle: "仅修改 Linux 用户 yunsh 的本机密码"
@@ -312,7 +300,7 @@ Rectangle {
 
             GlassCard {
                 width: parent.width; height: 60
-                iconSource: "/usr/share/yunsh/icons/settings.svg"
+                iconSource: "/usr/share/yunsh/icons/clock.svg"
                 iconSize: 18
                 title: "自动熄屏与锁定"
                 subtitle: autoLockLabel() + " · 点击切换"
@@ -322,7 +310,7 @@ Rectangle {
             
             GlassCard {
                 width: parent.width; height: 60
-                iconSource: "/usr/share/yunsh/icons/settings.svg"
+                iconSource: "/usr/share/yunsh/icons/clock.svg"
                 iconSize: 18
                 title: "日期与时间"
                 subtitle: "由网络自动同步 · Asia/Shanghai"
@@ -434,7 +422,7 @@ Rectangle {
             
             GlassCard {
                 width: parent.width; height: 60
-                iconSource: "/usr/share/yunsh/icons/settings.svg"
+                iconSource: "/usr/share/yunsh/icons/factory-reset.svg"
                 iconSize: 18
                 title: "恢复出厂设置"
                 subtitle: "清除数据，保留系统文件"

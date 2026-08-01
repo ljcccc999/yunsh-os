@@ -1,5 +1,7 @@
 import QtQuick 2.15
 
+// Lightweight shadow surface for normal child use. Do not use this component
+// as `layer.effect`: a Rectangle effect replaces the source texture.
 Rectangle {
     property var source
     property real samples: 32

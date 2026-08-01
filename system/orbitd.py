@@ -903,7 +903,7 @@ def upstream_request(config, messages):
         headers={
             "Authorization": f"Bearer {config['apiKey']}",
             "Content-Type": "application/json",
-            "User-Agent": "Orbit-YUNSH-OS/2.0.1",
+            "User-Agent": "Orbit-YUNSH-OS/2.0.2",
         },
         method="POST",
     )
@@ -1130,7 +1130,7 @@ def approve(payload):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "Orbit/2.0.1"
+    server_version = "Orbit/2.0.2"
 
     def send_json(self, status, payload):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")

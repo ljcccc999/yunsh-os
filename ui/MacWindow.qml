@@ -8,7 +8,8 @@ Rectangle {
     id: macWindow
     width: 880
     height: 640
-    radius: 16
+    // Apple-style large continuous corner; all window surfaces inherit it.
+    radius: 28
 
     // === Public API ===
     property string appTitle: ""
@@ -169,6 +170,16 @@ Rectangle {
         macWindow.entranceScale = 0.92
         macWindow.opacity = 0
         closeAnimCallback = callback || function(){}
+    }
+
+    // Re-opening a window while its exit is in flight must continue from the
+    // current presentation state instead of waiting for a stale timer.
+    function cancelCloseAnimation() {
+        if (!isClosing) return
+        isClosing = false
+        closeAnimCallback = function(){}
+        entranceScale = 1.0
+        opacity = 1.0
     }
 
     property var closeAnimCallback: function(){}
@@ -560,7 +571,7 @@ Rectangle {
             anchors.fill: parent
             z: -1
             drag.target: macWindow
-            drag.axis: Drag.XAndY
+            drag.axis: Drag.XAndYAxis
             cursorShape: Qt.OpenHandCursor
             onPressed: {
                 macWindow.z = 1000

@@ -17,6 +17,7 @@ Item {
     property real cardHeight: 440
     property int currentIndex: 0
     property bool reduceMotion: false
+    property bool paused: false
 
     signal switchToApp(string appId)
     signal closeApp(string appId)
@@ -101,19 +102,21 @@ Item {
                 model: openApps
 
                 // === Individual App Card ===
-                Item {
-                    width: taskSwitcher.cardWidth
-                    height: taskSwitcher.cardHeight
+                    Item {
+                        width: taskSwitcher.cardWidth
+                        height: taskSwitcher.cardHeight
 
-                    property bool isClosing: false
-                    property var appData: modelData
+                        property bool isClosing: false
+                        property var appData: modelData
 
                     // Glass card
                     Rectangle {
                         id: appCard
+                        property alias closeAnimation: closeAnim
                         anchors.centerIn: parent
                         width: taskSwitcher.cardWidth - 20
                         height: taskSwitcher.cardHeight - 20
+                        clip: true
 
                         radius: 32
                         color: Qt.rgba(14/255, 14/255, 32/255, 0.65)
@@ -404,6 +407,10 @@ Item {
 
     // === Show / Hide animations ===
     function show() {
+        // Interrupt a closing switcher at its current presentation value.
+        // The property Behaviors then settle it naturally to the open state.
+        animateOut.stop()
+        paused = false
         visible = true
         backdrop.opacity = 1.0
         cardsFlick.opacity = 1.0
@@ -414,6 +421,7 @@ Item {
     }
 
     function hide() {
+        if (paused) return
         backdrop.opacity = 0.0
         cardsFlick.opacity = 0.0
         switcherHeader.opacity = 0.0
@@ -422,6 +430,33 @@ Item {
         switcherHomeIndicator.opacity = 0.0
 
         animateOut.start()
+    }
+
+    // Exposed for gesture/input bridges: a background transition can be
+    // paused and resumed without resetting cards or scroll position.
+    function pauseTransitions() {
+        paused = true
+        animateOut.pause()
+        for (var i = 0; i < cardsRepeater.count; ++i) {
+            var card = cardsRepeater.itemAt(i)
+            if (card && card.children.length) {
+                // The close animation is a child of the card's app surface.
+                var surface = card.children[0]
+                if (surface && surface.closeAnimation) surface.closeAnimation.pause()
+            }
+        }
+    }
+
+    function resumeTransitions() {
+        paused = false
+        animateOut.resume()
+        for (var i = 0; i < cardsRepeater.count; ++i) {
+            var card = cardsRepeater.itemAt(i)
+            if (card && card.children.length) {
+                var surface = card.children[0]
+                if (surface && surface.closeAnimation) surface.closeAnimation.resume()
+            }
+        }
     }
 
     SequentialAnimation {

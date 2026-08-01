@@ -116,7 +116,7 @@ Rectangle {
             id: folderModel
             folder: photosDir
             nameFilters: ["*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp"]
-            sortField: FolderListModel.ModifiedTime
+            sortField: FolderListModel.Time
             sortReversed: true
         }
 

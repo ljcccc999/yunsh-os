@@ -31,7 +31,7 @@ Item {
         Rectangle {
             anchors.fill: parent; anchors.margins: -1
             color: "transparent"
-            border.color: Qt.rgba(255, 255, 255, 0.3); border.width: 1; border.style: Qt.DashLine
+            border.color: Qt.rgba(255, 255, 255, 0.3); border.width: 1
         }
         
         // Size indicator

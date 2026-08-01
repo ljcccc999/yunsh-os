@@ -125,7 +125,7 @@ GlassPanel {
             // OS version
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "YUNSH OS v2.0.1"
+                text: "YUNSH OS v3.0.0"
                 color: "#8888A0"
                 font.pixelSize: 15
                 font.weight: Font.Medium
@@ -147,7 +147,7 @@ GlassPanel {
                 model: [
                     { label: "设备名称", value: "YUNSH V1" },
                     { label: "型号", value: "YS-V1-001" },
-                    { label: "系统版本", value: "YUNSH OS 2.0.1" },
+                    { label: "系统版本", value: "YUNSH OS 2.0.2" },
                     { label: "内核版本", value: "Linux 6.6.58" },
                     { label: "处理器", value: "BCM2712 (Cortex-A76)" },
                     { label: "内存", value: "4GB LPDDR4" },

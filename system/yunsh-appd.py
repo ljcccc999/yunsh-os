@@ -68,6 +68,12 @@ class AppHandler(BaseHTTPRequestHandler):
             result = self.android_retry()
         elif action == "install_apk":
             result = self.install_apk(req.get("path", ""))
+        elif action == "android_apps":
+            result = self.android_apps()
+        elif action == "system_settings":
+            result = self.system_settings()
+        elif action == "system_info":
+            result = self.system_info()
         elif action == "delete_screenshot":
             result = self.delete_screenshot(req.get("path", ""))
         elif action == "screen_recording":
@@ -309,6 +315,111 @@ class AppHandler(BaseHTTPRequestHandler):
         except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
             return {"status": "error", "message": str(exc)}
 
+    def android_apps(self):
+        try:
+            result = subprocess.run(
+                ["/usr/bin/yunsh-android", "list-apps-json"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            data = json.loads(result.stdout or "{}")
+            apps = data.get("apps", [])
+            if not isinstance(apps, list):
+                apps = []
+            data["apps"] = apps[:48]
+            data["status"] = "ok" if result.returncode == 0 else "error"
+            return data
+        except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+            return {"status": "error", "ready": False, "apps": [], "message": str(exc)}
+
+    def system_settings(self):
+        def read_values(path):
+            values = {}
+            try:
+                with open(path, encoding="utf-8") as handle:
+                    for raw in handle:
+                        if "=" not in raw:
+                            continue
+                        key, value = raw.split("=", 1)
+                        values[key.strip()] = value.strip()
+            except OSError:
+                pass
+            return values
+
+        version = read_values("/etc/yunsh/version.conf").get("VERSION", "v2.0.2")
+        language = read_values("/etc/yunsh/language.conf")
+        return {
+            "status": "ok",
+            "version": version,
+            "language": language.get("language", "简体中文"),
+            "keyboard": language.get("keyboard", "拼音"),
+        }
+
+    def system_info(self):
+        def read_text(path):
+            try:
+                with open(path, encoding="utf-8", errors="replace") as handle:
+                    return handle.read()
+            except OSError:
+                return ""
+
+        def read_values(path):
+            values = {}
+            for raw in read_text(path).splitlines():
+                if "=" in raw:
+                    key, value = raw.split("=", 1)
+                    values[key.strip()] = value.strip()
+            return values
+
+        def human_size(value):
+            units = ("B", "KB", "MB", "GB", "TB")
+            size = float(max(0, value))
+            index = 0
+            while size >= 1024 and index < len(units) - 1:
+                size /= 1024
+                index += 1
+            return f"{size:.1f} {units[index]}" if index else f"{int(size)} {units[index]}"
+
+        version = read_values("/etc/yunsh/version.conf")
+        mem_total = mem_available = 0
+        for raw in read_text("/proc/meminfo").splitlines():
+            key, _, value = raw.partition(":")
+            fields = value.split()
+            if key == "MemTotal" and fields:
+                mem_total = int(fields[0]) * 1024
+            elif key == "MemAvailable" and fields:
+                mem_available = int(fields[0]) * 1024
+        try:
+            disk = os.statvfs("/")
+            storage_total = disk.f_blocks * disk.f_frsize
+            storage_free = disk.f_bavail * disk.f_frsize
+        except OSError:
+            storage_total = storage_free = 0
+        cpu_name = ""
+        for raw in read_text("/proc/cpuinfo").splitlines():
+            key, separator, value = raw.partition(":")
+            label = key.strip()
+            if separator and (label.lower() in {"model name", "hardware"} or label == "Processor"):
+                cpu_name = value.strip()
+                if cpu_name:
+                    break
+        model = read_text("/proc/device-tree/model").replace("\x00", "").strip()
+        return {
+            "status": "ok",
+            "version": version.get("VERSION", "v2.0.2"),
+            "build": version.get("BUILD", ""),
+            "model": model or "Raspberry Pi",
+            "cpu": f"{cpu_name or 'ARM processor'} × {os.cpu_count() or 1}",
+            "memoryTotal": human_size(mem_total),
+            "memoryUsed": human_size(max(0, mem_total - mem_available)),
+            "memoryPct": (max(0, mem_total - mem_available) / mem_total) if mem_total else 0,
+            "storageTotal": human_size(storage_total),
+            "storageUsed": human_size(max(0, storage_total - storage_free)),
+            "storagePct": (max(0, storage_total - storage_free) / storage_total) if storage_total else 0,
+            "kernel": os.uname().release,
+        }
+
     def delete_screenshot(self, requested_path):
         try:
             value = str(requested_path)
@@ -328,6 +439,24 @@ class AppHandler(BaseHTTPRequestHandler):
             return {"status": "error", "message": str(exc)}
 
     def launch_app(self, app_id):
+        if app_id.startswith("android:"):
+            import re
+            package = app_id.split(":", 1)[1]
+            if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+", package):
+                return {"status": "error", "message": "Invalid Android package"}
+            try:
+                status = self.android_status()
+                if not status.get("ready"):
+                    self.android_retry()
+                    return {"status": "preparing", "message": status.get("message", "Android is being prepared")}
+                subprocess.Popen(
+                    ["/usr/bin/yunsh-android", "launch-package", package],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                return {"status": "ok", "message": "Launching Android app"}
+            except OSError as exc:
+                return {"status": "error", "message": str(exc)}
         if app_id not in APP_MAP:
             return {"status": "error", "message": f"Unknown app: {app_id}"}
 

@@ -242,6 +242,16 @@ launch_files() {
         exec waydroid show-full-ui
 }
 
+launch_package() {
+    local package="${1:-}"
+    [[ "$package" =~ ^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$ ]] || {
+        echo "A valid Android package is required" >&2
+        return 2
+    }
+    ensure_runtime || return 1
+    exec waydroid app launch "$package"
+}
+
 case "${1:-status}" in
     setup) setup_runtime ;;
     retry) trigger_setup_retry ;;
@@ -250,6 +260,7 @@ case "${1:-status}" in
     install-store) install_store ;;
     launch-store) launch_store ;;
     launch-files) launch_files ;;
+    launch-package) launch_package "${2:-}" ;;
     install-apk)
         [ -n "${2:-}" ] && valid_apk "$2" || {
             echo "A valid APK path is required" >&2
@@ -257,13 +268,44 @@ case "${1:-status}" in
         }
         ensure_runtime && waydroid app install "$2"
         ;;
+    list-apps-json)
+        # Discover only launchable third-party packages. This keeps untrusted
+        # Android command lines out of the QML shell.
+        # Discovery is deliberately passive: the desktop may poll it, so it
+        # must never download, initialise, or start a Waydroid session.
+        command -v waydroid >/dev/null 2>&1 &&
+            [ -f "$WAYDROID_DATA_DIR/waydroid.cfg" ] &&
+            waydroid status 2>/dev/null | grep -q "Session:.*RUNNING" || {
+            printf '{"ready":false,"apps":[]}\n'
+            exit 0
+        }
+        waydroid app list 2>/dev/null | python3 -c '
+import json, re, sys
+package_re = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+$")
+apps, seen, name = [], set(), ""
+def add(package, label):
+    if (not package_re.fullmatch(package) or package in seen or
+            package.startswith(("android.", "com.android.", "com.google.android."))):
+        return
+    seen.add(package)
+    apps.append({"package": package, "name": (label or package.rsplit(".", 1)[-1]).strip()[:64]})
+for raw in sys.stdin:
+    line = raw.strip()
+    if line.lower().startswith("name:"):
+        name = line.split(":", 1)[1].strip()
+    elif line.lower().startswith("packagename:"):
+        add(line.split(":", 1)[1].strip(), name); name = ""
+    elif package_re.fullmatch(line):
+        add(line, "")
+print(json.dumps({"ready": True, "apps": apps[:48]}, ensure_ascii=False))'
+        ;;
     status)
         ensure_runtime >/dev/null &&
             waydroid app list 2>/dev/null |
             grep -Eq 'com\.tencent\.android\.qqdownloader|org\.fdroid\.fdroid'
         ;;
     *)
-        echo "Usage: yunsh-android {setup|retry|status-json|ensure|install-store|launch-store|launch-files|install-apk PATH|status}" >&2
+        echo "Usage: yunsh-android {setup|retry|status-json|ensure|install-store|launch-store|launch-files|launch-package PACKAGE|install-apk PATH|list-apps-json|status}" >&2
         exit 2
         ;;
 esac

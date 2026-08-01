@@ -37,18 +37,6 @@ Item {
     signal spacePressed()
     signal dismissKeyboard()
 
-    // ─── Auto-show when text input gets focus ──
-    Connections {
-        target: keyboardPanel.parent
-        onActiveFocusItemChanged: {
-            var item = keyboardPanel.parent.activeFocusItem
-            if (item && (item instanceof TextInput || item instanceof TextField)) {
-                targetItem = item
-                if (!keyboardPanel.visible) show()
-            }
-        }
-    }
-
     onVisibleChanged: { if (!visible) targetItem = null }
 
     // ─── Floating panel ────────────────────────
@@ -124,7 +112,7 @@ Item {
             height: 40  // top strip for drag
             cursorShape: Qt.OpenHandCursor
             drag.target: keyboardPanel
-            drag.axis: Drag.XAndY
+            drag.axis: Drag.XAndYAxis
             drag.minimumX: 20; drag.maximumX: 1920 - keyboardPanel.panelWidth - 20
             drag.minimumY: 20; drag.maximumY: 1000
             onPressed: { keyboardPanel.animating = false; keyboardPanel.z = 201 }
