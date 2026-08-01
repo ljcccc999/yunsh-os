@@ -21,6 +21,10 @@ system world, an optical-display-ready desktop, the system-level Orbit agent,
 connected-device services, and Bluetooth-connected motion tracking in one
 portable Raspberry Pi 5 environment.
 
+The current local release line is **v3.0.0**, with a circular liquid-glass
+Orbit identity, direct in-island tool approvals, voice speaking-wave feedback,
+interruptible window transitions, and a verified Raspberry Pi image.
+
 ## Experience
 
 ### Spatial workspace
