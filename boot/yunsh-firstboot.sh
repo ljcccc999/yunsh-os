@@ -6,8 +6,11 @@
 export DEBIAN_FRONTEND=noninteractive
 export DEBCONF_NONINTERACTIVE_SEEN=true
 
-# Redirect ALL output to tty1 so Tim can see progress on HDMI
-exec > /dev/tty1 2>&1
+# Keep a persistent log as well as the HDMI console.  On a fresh image the
+# desktop packages are deliberately installed online; a missing network must
+# be diagnosable on-device rather than looking like a blank desktop.
+mkdir -p /var/log
+exec > >(tee -a /var/log/yunsh-firstboot.log /dev/tty1) 2>&1
 
 # The image base may move between Debian releases. Never mix a hard-coded
 # distribution suite into APT/network checks.
