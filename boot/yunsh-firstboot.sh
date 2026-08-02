@@ -10,7 +10,7 @@ export DEBCONF_NONINTERACTIVE_SEEN=true
 # desktop packages are deliberately installed online; a missing network must
 # be diagnosable on-device rather than looking like a blank desktop.
 mkdir -p /var/log
-exec > >(tee -a /var/log/yunsh-firstboot.log /dev/tty1) 2>&1
+exec > >(tee -a /var/log/yunsh-firstboot.log /dev/tty1 /dev/console) 2>&1
 
 # The image base may move between Debian releases. Never mix a hard-coded
 # distribution suite into APT/network checks.

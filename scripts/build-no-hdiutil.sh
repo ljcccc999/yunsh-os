@@ -168,7 +168,10 @@ case " ${CMDLINE} " in
     *" console=tty1 "*) ;;
     *) CMDLINE="${CMDLINE} console=tty1" ;;
 esac
-echo "${CMDLINE} consoleblank=0 loglevel=3 vt.global_cursor_default=1 cma=256M psi=1 systemd.show_status=auto" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
+# Never hide the userspace hand-off on a fresh image.  A Pi that reaches
+# init-bottom but cannot start systemd must show its last service, not appear
+# frozen on an otherwise healthy rootfs.
+echo "${CMDLINE} consoleblank=0 loglevel=4 vt.global_cursor_default=1 cma=256M psi=1 systemd.show_status=1 systemd.log_target=console systemd.log_level=info systemd.default_standard_output=journal+console" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
 mdel -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null || true
 mcopy -i "${BOOT_IMG}" "${BUILD_DIR}/yunsh-cmdline-new.txt" ::/cmdline.txt
 echo "  ✓ cmdline.txt modified"
@@ -377,12 +380,8 @@ TimeoutStartSec=0
 Restart=on-failure
 RestartSec=30
 StandardInput=tty
-StandardOutput=tty
-StandardError=tty
-TTYPath=/dev/tty1
-TTYReset=yes
-TTYVHangup=yes
-TTYVTDisallocate=no
+StandardOutput=journal+console
+StandardError=journal+console
 [Install]
 WantedBy=multi-user.target
 FBSVC
