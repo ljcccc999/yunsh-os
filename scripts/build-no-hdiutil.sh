@@ -74,6 +74,30 @@ if ! cp -c "${RPI_IMAGE}" "${OUTPUT_FILE}" 2>/dev/null; then
 fi
 echo "  ✓ ${OUTPUT_FILE}"
 
+# Ship enough writable root space for the complete desktop.  The stock image
+# relies on initramfs + systemd-growfs during the first boot; that job has an
+# infinite timeout and is the source of the apparent post-initramfs hang.
+MIN_IMAGE_BYTES=$((8 * 1024 * 1024 * 1024))
+CURRENT_IMAGE_BYTES=$(stat -f%z "${OUTPUT_FILE}" 2>/dev/null || stat -c%s "${OUTPUT_FILE}")
+if [ "${CURRENT_IMAGE_BYTES}" -lt "${MIN_IMAGE_BYTES}" ]; then
+    echo "  → Expanding image to 8 GiB for first-boot desktop installation"
+    truncate -s "${MIN_IMAGE_BYTES}" "${OUTPUT_FILE}"
+    python3 - "${OUTPUT_FILE}" <<'PY'
+import struct, sys
+with open(sys.argv[1], 'r+b') as fh:
+    mbr = bytearray(fh.read(512))
+    root_start = struct.unpack_from('<I', mbr, 470)[0]
+    sectors = (fh.seek(0, 2) // 512) - root_start
+    if not 0 < sectors <= 0xFFFFFFFF:
+        raise SystemExit('invalid expanded root partition size')
+    struct.pack_into('<I', mbr, 474, sectors)
+    fh.seek(0)
+    fh.write(mbr)
+PY
+    ROOT_END=$((MIN_IMAGE_BYTES / 512 - 1))
+    ROOT_SIZE=$((ROOT_END - ROOT_START + 1))
+fi
+
 # ─── Step 4: Generate splash screens ──────────────
 echo ""
 echo "=== Generating boot splash screen ==="
@@ -163,6 +187,7 @@ CMDLINE=$(cat "${BUILD_DIR}/yunsh-cmdline-new.txt")
 # but no visible first-boot error when the online package install failed.
 CMDLINE=$(printf '%s\n' "${CMDLINE}" | sed -E \
     -e 's/(^| )(quiet|splash|logo\.nologo|consoleblank=[^ ]+|loglevel=[^ ]+|systemd\.show_status=[^ ]+|systemd\.log_target=[^ ]+|vt\.global_cursor_default=[^ ]+|cma=[^ ]+)( |$)/ /g' \
+    -e 's/(^| )resize( |$)/ /g' \
     -e 's/  +/ /g')
 case " ${CMDLINE} " in
     *" console=tty1 "*) ;;
@@ -724,6 +749,9 @@ for service in yunsh-os yunsh-firstboot yunsh-local-api yunsh-spaced yunsh-scree
 done
 # Network: disable dhcpcd, enable NetworkManager + fstrim
 echo "rm /etc/systemd/system/multi-user.target.wants/dhcpcd.service" >> "${DEBUGFS_SCRIPT}"
+# The filesystem is grown while building the image, so do not run the stock
+# first-boot rpi-resize job (which delegates to a no-timeout growfs service).
+echo "rm /etc/systemd/system/sysinit.target.wants/rpi-resize.service" >> "${DEBUGFS_SCRIPT}"
 
 # Keep the stock tty1 getty. The first-boot service owns tty1 while installing,
 # avoiding a race with auto-login before the yunsh user has been created.
@@ -765,6 +793,11 @@ rm -f "${ROOT_PARTITION_IMG}"
 dd if="${OUTPUT_FILE}" of="${ROOT_PARTITION_IMG}" bs=512 \
    skip=$ROOT_START count=$ROOT_SIZE 2>/dev/null
 echo "  ✓ root partition extracted ($((ROOT_SIZE * 512 / 1024 / 1024)) MB)"
+
+# Grow ext4 now, before any YUNSH files are injected.  This makes the SD card
+# immediately usable and removes the fragile first-boot growfs dependency.
+"${E2FSCK}" -fy "${ROOT_PARTITION_IMG}" >/dev/null
+"${E2FSPROGS}/sbin/resize2fs" "${ROOT_PARTITION_IMG}" >/dev/null
 
 echo ""
 echo "=== Running debugfs injection ==="
