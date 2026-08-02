@@ -77,10 +77,11 @@ echo "  ✓ ${OUTPUT_FILE}"
 # Ship enough writable root space for the complete desktop.  The stock image
 # relies on initramfs + systemd-growfs during the first boot; that job has an
 # infinite timeout and is the source of the apparent post-initramfs hang.
-MIN_IMAGE_BYTES=$((8 * 1024 * 1024 * 1024))
+# Six GiB remains below the actual capacity of a nominal 8 GB SD card.
+MIN_IMAGE_BYTES=$((6 * 1024 * 1024 * 1024))
 CURRENT_IMAGE_BYTES=$(stat -f%z "${OUTPUT_FILE}" 2>/dev/null || stat -c%s "${OUTPUT_FILE}")
 if [ "${CURRENT_IMAGE_BYTES}" -lt "${MIN_IMAGE_BYTES}" ]; then
-    echo "  → Expanding image to 8 GiB for first-boot desktop installation"
+    echo "  → Expanding image to 6 GiB for first-boot desktop installation"
     truncate -s "${MIN_IMAGE_BYTES}" "${OUTPUT_FILE}"
     python3 - "${OUTPUT_FILE}" <<'PY'
 import struct, sys
