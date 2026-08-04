@@ -384,19 +384,35 @@ Item {
     }
 
     Rectangle {
-        id: panel
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: 24
-        width: Math.min(760, parent.width - 60)
-        height: expanded ? Math.min(660, parent.height - 96) : 0
+        anchors.verticalCenter: parent.verticalCenter
+        width: Math.min(644, parent.width - 76)
+        height: expanded ? Math.min(624, parent.height - 96) : 0
+        radius: 42
+        color: Qt.rgba(0, 0, 0, 0.10)
+        opacity: expanded ? 0.62 : 0
+        z: 2
+        Behavior on height { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: 200 } }
+    }
+
+    Rectangle {
+        id: panel
+        anchors.centerIn: parent
+        width: Math.min(620, parent.width - 100)
+        height: expanded ? Math.min(600, parent.height - 120) : 0
         radius: 34
         z: 3
         visible: height > 0
         clip: true
         opacity: expanded ? 0.97 : 0
         scale: expanded ? 1 : 0.94
-        color: Qt.rgba(0.94, 0.98, 1, 0.78)
+        color: "transparent"
+        gradient: Gradient {
+            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.86) }
+            GradientStop { position: 0.52; color: Qt.rgba(0.96, 0.99, 1, 0.72) }
+            GradientStop { position: 1.0; color: Qt.rgba(0.90, 0.97, 1, 0.66) }
+        }
         border.width: 1
         border.color: "#FFFFFF"
 
@@ -404,9 +420,19 @@ Item {
             anchors.fill: parent
             radius: parent.radius
             color: "transparent"
-            border.width: 2
-            border.color: "#D7F6FF"
+            border.width: 1.5
+            border.color: Qt.rgba(1, 1, 1, 0.92)
             anchors.margins: 2
+        }
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.margins: 12
+            height: 1
+            radius: 0.5
+            color: Qt.rgba(1, 1, 1, 0.96)
         }
 
         ColumnLayout {

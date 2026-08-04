@@ -292,23 +292,35 @@ Rectangle {
         anchors.fill: parent
         visible: currentStep === 0
 
-        // Central glass card
+        // White floating glass: the black canvas stays transparent on the
+        // glasses, while the welcome surface remains bright and legible.
+        Rectangle {
+            anchors.centerIn: parent
+            anchors.verticalCenterOffset: 14
+            width: 536; height: 468
+            radius: 38
+            color: Qt.rgba(0.20, 0.62, 0.78, 0.13)
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.10)
+        }
+
         Rectangle {
             anchors.centerIn: parent
             width: 520; height: 460
-            radius: 32
-            color: Qt.rgba(15/255, 15/255, 32/255, 0.45)
-            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
+            radius: 36
+            color: Qt.rgba(1, 1, 1, 0.88)
+            border.color: Qt.rgba(1, 1, 1, 0.96)
             border.width: 1
 
             // Top highlight glow
             Rectangle {
                 anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
                 height: parent.height * 0.4
-                radius: 32
+                radius: 36
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: Qt.rgba(0/255, 212/255, 255/255, 0.04) }
-                    GradientStop { position: 1.0; color: "transparent" }
+                    GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.76) }
+                    GradientStop { position: 0.58; color: Qt.rgba(0.88, 0.97, 1, 0.42) }
+                    GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.0) }
                 }
             }
 
@@ -329,7 +341,7 @@ Rectangle {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: helloWords[helloIndex]
-                    color: "#FFFFFF"
+                    color: "#10202A"
                     font.pixelSize: 48
                     font.weight: Font.Light
                 }
@@ -337,7 +349,7 @@ Rectangle {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "Hello  Bonjour  こんにちは  안녕하세요"
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.3)
+                    color: Qt.rgba(16/255, 32/255, 42/255, 0.42)
                     font.pixelSize: 11
                     font.letterSpacing: 2
                 }
@@ -345,7 +357,7 @@ Rectangle {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "欢迎使用 YUNSH OS"
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.6)
+                    color: Qt.rgba(16/255, 32/255, 42/255, 0.68)
                     font.pixelSize: 16
                     font.weight: Font.Medium
                 }
@@ -354,7 +366,7 @@ Rectangle {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "v3.0.0"
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
+                    color: Qt.rgba(16/255, 32/255, 42/255, 0.28)
                     font.pixelSize: 11
                 }
 
@@ -386,7 +398,7 @@ Rectangle {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "全程可使用触控、眼镜指针或 YUNSH Link 操作"
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.32)
+                    color: Qt.rgba(16/255, 32/255, 42/255, 0.48)
                     font.pixelSize: 10
                 }
             }

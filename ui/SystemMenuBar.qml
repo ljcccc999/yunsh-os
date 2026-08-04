@@ -195,8 +195,15 @@ Rectangle {
             height: 24
             spacing: 3
             opacity: orbitVoiceActive ? 1 : 0
-            scaleY: orbitVoiceActive ? 1 : 0.05
-            transformOrigin: Item.Bottom
+            // Item has a uniform `scale` property only. Keep the intended
+            // vertical wave reveal with a Scale transform; `scaleY` would
+            // prevent main.qml from loading on Qt 6.
+            transform: Scale {
+                origin.x: parent.width / 2
+                origin.y: parent.height
+                yScale: orbitVoiceActive ? 1 : 0.05
+                Behavior on yScale { NumberAnimation { duration: menuBar.reduceMotion ? 80 : 280; easing.type: Easing.OutCubic } }
+            }
             z: 3
             Repeater {
                 model: 5
@@ -215,7 +222,6 @@ Rectangle {
                 }
             }
             Behavior on opacity { NumberAnimation { duration: menuBar.reduceMotion ? 80 : 180; easing.type: Easing.OutCubic } }
-            Behavior on scaleY { NumberAnimation { duration: menuBar.reduceMotion ? 80 : 280; easing.type: Easing.OutCubic } }
         }
         Text {
             anchors.left: parent.left

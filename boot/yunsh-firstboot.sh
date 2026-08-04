@@ -11,6 +11,9 @@ export DEBCONF_NONINTERACTIVE_SEEN=true
 # be diagnosable on-device rather than looking like a blank desktop.
 mkdir -p /var/log
 exec > >(tee -a /var/log/yunsh-firstboot.log /dev/tty1 /dev/console) 2>&1
+trap 'rc=$?; echo "[TRACE] firstboot exit rc=${rc} line=${LINENO}" | tee -a /var/log/yunsh-firstboot.log' EXIT
+trap 'echo "[TRACE] firstboot signal TERM line=${LINENO}" | tee -a /var/log/yunsh-firstboot.log; exit 143' TERM
+trap 'echo "[TRACE] firstboot signal INT line=${LINENO}" | tee -a /var/log/yunsh-firstboot.log; exit 130' INT
 
 # The image base may move between Debian releases. Never mix a hard-coded
 # distribution suite into APT/network checks.
@@ -70,17 +73,78 @@ while ! network_ready; do
 done
 echo " [OK]"
 
+# Package post-install scripts may try to start LXC/Waydroid, Weston, or
+# hardware services while dpkg is still unpacking.  On a first boot that can
+# deadlock the transaction (especially in a Pi emulator with no GPU/zram).
+# Temporarily block service starts; systemd will start the enabled units after
+# the package transaction and the reboot.
+APT_POLICY_RC=0
+APT_POLICY_BACKUP="/var/lib/yunsh/policy-rc.d.firstboot"
+apt_services_off() {
+    mkdir -p /var/lib/yunsh
+    if [ -e /usr/sbin/policy-rc.d ]; then
+        cp -a /usr/sbin/policy-rc.d "$APT_POLICY_BACKUP" 2>/dev/null || true
+    fi
+    cat > /usr/sbin/policy-rc.d <<'POLICY'
+#!/bin/sh
+exit 101
+POLICY
+    chmod 0755 /usr/sbin/policy-rc.d
+    APT_POLICY_RC=1
+}
+apt_services_on() {
+    [ "$APT_POLICY_RC" -eq 1 ] || return 0
+    if [ -e "$APT_POLICY_BACKUP" ]; then
+        mv -f "$APT_POLICY_BACKUP" /usr/sbin/policy-rc.d
+    else
+        rm -f /usr/sbin/policy-rc.d
+    fi
+    APT_POLICY_RC=0
+}
+apt_services_off
+
+# Debian images may start apt-daily/cloud-init package jobs in parallel with
+# firstboot. Stop the scheduled jobs and wait for any transient dpkg/debconf
+# lock before taking ownership of the package database.
+systemctl stop apt-daily.service apt-daily-upgrade.service unattended-upgrades.service 2>/dev/null || true
+for lock in /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/debconf/config.dat; do
+    WAIT_LOCK=0
+    while command -v fuser >/dev/null 2>&1 && fuser "$lock" >/dev/null 2>&1; do
+        WAIT_LOCK=$((WAIT_LOCK + 1))
+        [ "$WAIT_LOCK" -ge 60 ] && break
+        sleep 1
+    done
+done
+
+apt_repair() {
+    # A power loss or a terminated firstboot can leave packages unpacked but
+    # not configured.  Repair that state before retrying the next package
+    # group; otherwise every later apt invocation fails immediately and the
+    # desktop marker is never written.
+    dpkg --configure -a >>/var/log/yunsh-apt.log 2>&1 || true
+    apt-get -f install -yqq --no-install-recommends >>/var/log/yunsh-apt.log 2>&1 || true
+}
+
 install_apt() {
     local step="$1" name="$2"; shift 2
     pct "$step" "Installing: $name"
-    apt-get install -yqq --no-install-recommends "$@" 2>/dev/null || {
-        sleep 5
-        apt-get install -yqq --no-install-recommends "$@" 2>/dev/null || {
-            sleep 10
-            apt-get install -yqq --no-install-recommends "$@" 2>/dev/null || true
-        }
-    }
-    apt-get clean -qq 2>/dev/null || true
+    local attempt=1
+    local installed=1
+    while [ "$attempt" -le 3 ]; do
+        if apt-get install -yqq --no-install-recommends "$@" >>/var/log/yunsh-apt.log 2>&1; then
+            installed=0
+            break
+        fi
+        echo "  [WARN] Package group failed (attempt $attempt/3): $name" | tee -a /var/log/yunsh-apt.log
+        apt_repair
+        sleep $((attempt * 5))
+        attempt=$((attempt + 1))
+    done
+    if [ "$installed" -ne 0 ]; then
+        echo "  [ERROR] Package group did not complete: $name" | tee -a /var/log/yunsh-apt.log
+        FIRSTBOOT_APT_FAILED=1
+    fi
+    apt-get clean -qq >>/var/log/yunsh-apt.log 2>&1 || true
 }
 
 # ───── Firewall & SSH Security Setup ────────────
@@ -167,15 +231,24 @@ apt-get update -qq 2>/dev/null || { sleep 10; apt-get update -qq 2>/dev/null || 
 install_apt 8 "Qt6 framework" qt6-base-dev qt6-declarative-dev libqt6svg6 qt6-svg-plugins libqt6opengl6 qt6-base-dev-tools qt6-qmltooling-plugins qml-qt6 qmlscene-qt6 qml6-module-qtqml qml6-module-qtqml-workerscript qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-window qml6-module-qtquick-virtualkeyboard qml6-module-qt-labs-qmlmodels qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtquick-templates
 install_apt 14 "Python environment" python3-cryptography python3-pip python3-smbus2
 install_apt 20 "WebEngine" qt6-webengine-dev libqt6webenginequick6 qml6-module-qtwebengine
-install_apt 24 "Android display and container runtime" lxc python3-dbus python3-gi weston libwayland-client0 qml6-module-qtwayland-compositor qt6-wayland
+# Keep LXC/Waydroid out of the boot-critical transaction.  Its postinst can
+# require kernel cgroup/namespaces that are unavailable in emulators and it
+# is already prepared asynchronously by yunsh-android-setup.service.
+install_apt 24 "Android display runtime" python3-dbus python3-gi weston libwayland-client0 qml6-module-qtwayland-compositor qt6-wayland
 install_apt 32 "Network & BT" network-manager wpasupplicant bluez
 install_apt 38 "System tools" openssh-server avahi-daemon avahi-utils openssl i2c-tools curl wget git unzip python3-pil
 install_apt 44 "Chinese fonts" fonts-noto-cjk
-install_apt 50 "Audio" pulseaudio alsa-utils
-install_apt 53 "Screen capture and recording" ffmpeg tesseract-ocr tesseract-ocr-chi-sim
-# Prefer the native Wayland recorder when the Debian release provides it;
-# ffmpeg remains the required framebuffer/X11 fallback.
-apt-get install -yqq --no-install-recommends wf-recorder 2>/dev/null || true
+# Audio packages are optional for the first desktop frame and can trigger
+# debconf contention on a fresh image. Prepare them asynchronously after
+# firstboot, alongside the media runtime.
+echo "[TRACE] before audio scheduling line=${LINENO}"
+pct 50 "Scheduling audio runtime..."
+echo "[TRACE] after audio scheduling line=${LINENO}"
+# Screen capture, recording, and OCR are optional and can contend with
+# cloud-init's debconf database on a fresh image. Prepare all of them
+# asynchronously with yunsh-media-setup.service after the desktop marker.
+pct 53 "Scheduling screen capture and recording..."
+# wf-recorder is also installed asynchronously by yunsh-media-setup.service.
 # Raspberry Pi 5 uses the BCM2712 VideoCore VII through the DRM/KMS + V3D
 # stack. Keep both EGL/OpenGL (Qt Quick/Weston) and Vulkan (Waydroid and
 # future spatial compositor work) in the first-boot transaction, rather than
@@ -187,6 +260,7 @@ install_apt 56 "Pi 5 graphics runtime" mesa-utils libgl1-mesa-dri libegl1 mesa-v
 # startup. yunsh-android-setup.service prepares it in the background and
 # retries safely after this first-boot transaction has completed.
 pct 58 "Scheduling Android runtime setup..."
+apt_services_on
 mkdir -p /var/lib/yunsh
 printf '{"state":"pending","progress":0,"message":"Android setup is queued"}\n' \
     > /var/lib/yunsh/android-setup.json
@@ -226,11 +300,13 @@ pct 92 "Preparing Android application store..."
     exit 1
 }
 
-pct 98 "Cleaning up..."
-rm -f /etc/yunsh/.firstboot_partial 2>/dev/null || true
+# Package groups have already completed with retries above. Do not run an
+# unbounded final apt repair here: a background debconf lock could otherwise
+# prevent the desktop marker from ever being written. The exact core package
+# status check below is the authoritative gate.
 
-pct 100 "Setup complete! Rebooting..."
-CORE_PACKAGES="qml-qt6 qt6-svg-plugins libqt6opengl6 qml6-module-qtqml qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtwebengine qt6-wayland weston network-manager bluez python3-pil python3-dbus python3-gi unzip libegl1 libgl1-mesa-dri mesa-vulkan-drivers ffmpeg"
+pct 98 "Cleaning up..."
+CORE_PACKAGES="qml-qt6 qt6-svg-plugins libqt6opengl6 qml6-module-qtqml qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtwebengine qt6-wayland weston network-manager bluez python3-pil python3-dbus python3-gi unzip libegl1 libgl1-mesa-dri mesa-vulkan-drivers"
 CORE_MISSING=""
 for package in $CORE_PACKAGES; do
     dpkg-query -W -f='${Status}' "$package" 2>/dev/null |
@@ -241,10 +317,12 @@ if { [ ! -x /usr/lib/qt6/bin/qml ] && \
       ! command -v qml >/dev/null 2>&1; } || [ -n "$CORE_MISSING" ]; then
     echo ""
     echo "  [ERROR] Required desktop packages are missing:$CORE_MISSING"
-    echo "  Check the Ethernet connection, then reboot to retry."
-    rm -f /etc/yunsh/.firstboot_partial
+    echo "  DPKG details are in /var/log/yunsh-apt.log; reboot to retry."
     exit 1
 fi
+
+pct 100 "Setup complete! Rebooting..."
+rm -f /etc/yunsh/.firstboot_partial 2>/dev/null || true
 touch /etc/yunsh/.packages_installed
 rm -f /usr/bin/yunsh-firstboot.sh
 sync

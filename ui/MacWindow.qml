@@ -218,18 +218,16 @@ Rectangle {
         id: windowGlass
         anchors.fill: parent
         radius: parent.radius
-        // AR optical displays treat black as transparent. The normal material
-        // is therefore luminous white glass, while reduced-transparency keeps
-        // a dark opaque accessibility fallback so existing light text remains
-        // readable.
+        // AR optical displays treat black as transparent. All app windows use
+        // a bright white liquid-glass base so they remain visible in glasses.
         color: macWindow.reduceTransparency
-            ? Qt.rgba(20/255, 20/255, 30/255, 0.98)
-            : Qt.rgba(245/255, 249/255, 255/255, 0.20)
+            ? Qt.rgba(248/255, 252/255, 255/255, 0.98)
+            : Qt.rgba(248/255, 252/255, 255/255, 0.82)
         opacity: macWindow.focusDimmed ? 0.22 : 1.0
         border.width: macWindow.highContrast ? 2 : 1
         border.color: macWindow.highContrast
             ? Qt.rgba(1, 1, 1, 0.48)
-            : Qt.rgba(1, 1, 1, 0.30)
+            : Qt.rgba(1, 1, 1, 0.92)
 
         Behavior on opacity {
             NumberAnimation {
@@ -242,14 +240,14 @@ Rectangle {
         Rectangle {
             anchors.fill: parent
             radius: parent.radius
-            color: Qt.rgba(255/255, 255/255, 255/255, 0.055)
+            color: Qt.rgba(255/255, 255/255, 255/255, 0.18)
         }
 
         // Secondary frost depth
         Rectangle {
             anchors.fill: parent
             radius: parent.radius
-            color: Qt.rgba(190/255, 225/255, 255/255, 0.035)
+            color: Qt.rgba(190/255, 225/255, 255/255, 0.10)
         }
 
         // Top edge highlight (visionOS light)
