@@ -1,5 +1,5 @@
 #!/bin/bash
-# YUNSH OS v1.0 - Installation Progress Display
+# YUNSH OS - Installation Progress Display
 # Full-screen framebuffer progress with YUNSH branding
 
 export TERM=linux
@@ -16,6 +16,8 @@ WHITE='\e[97m'
 DIM='\e[2m'
 RESET='\e[0m'
 BOLD='\e[1m'
+YUNSH_DISPLAY_VERSION="$(awk -F= '$1 == "VERSION" {print $2; exit}' /etc/yunsh/version.conf 2>/dev/null)"
+[ -n "$YUNSH_DISPLAY_VERSION" ] || YUNSH_DISPLAY_VERSION="current"
 
 # Terminal size
 ROWS=$(tput lines 2>/dev/null || echo 40)
@@ -31,7 +33,6 @@ draw_frame() {
     
     # Center calculations
     local term_width=$COLS
-    local title="YUNSH OS v1.0"
     local subtitle="首次安装 · 请勿断电"
     
     # Top padding
@@ -50,7 +51,8 @@ draw_frame() {
     printf "%*s\e[36m  ╚═══════════════════════════════╝\e[0m\n" $(( (term_width - 35) / 2 )) ""
     
     printf "\n"
-    printf "%*s\e[1m\e[36m  YUNSH OS v1.0  AR Glasses OS\e[0m\n" $(( (term_width - 28) / 2 ))
+    printf "%*s\e[1m\e[36m  YUNSH OS %s  Spatial OS\e[0m\n" \
+        $(( (term_width - 28) / 2 )) "" "$YUNSH_DISPLAY_VERSION"
     printf "\n\n"
     
     # Step counter
@@ -80,9 +82,6 @@ draw_frame() {
     printf "%*s\e[2m  首次安装需要下载并配置系统组件\e[0m\n" $(( (term_width - 26) / 2 )) ""
     printf "%*s\e[2m  请确保网络连接正常，请勿断电\e[0m\n" $(( (term_width - 26) / 2 )) ""
 }
-
-# Calculate total steps (rough estimate)
-TOTAL_STEPS=10
 
 # Export function for use in first-boot script
 export -f draw_frame

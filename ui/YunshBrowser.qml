@@ -373,18 +373,26 @@ Item {
             spacing: 40
 
             // Home
-            Column {
-                spacing: 2; width: 60
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "⌂"; color: "#00D4FF"; font.pixelSize: 16 }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "首页"; color: "#00D4FF"; font.pixelSize: 10 }
+            Item {
+                width: 60; height: 40
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 2
+                    Text { anchors.horizontalCenter: parent.horizontalCenter; text: "⌂"; color: "#00D4FF"; font.pixelSize: 16 }
+                    Text { anchors.horizontalCenter: parent.horizontalCenter; text: "首页"; color: "#00D4FF"; font.pixelSize: 10 }
+                }
                 MouseArea { anchors.fill: parent; onClicked: webView.url = "https://www.bing.com" }
             }
 
             // Copy URL
-            Column {
-                spacing: 2; width: 60
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "📋"; color: "#A0B0C0"; font.pixelSize: 16 }
-                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "复制链接"; color: "#A0B0C0"; font.pixelSize: 10 }
+            Item {
+                width: 60; height: 40
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 2
+                    Text { anchors.horizontalCenter: parent.horizontalCenter; text: "📋"; color: "#A0B0C0"; font.pixelSize: 16 }
+                    Text { anchors.horizontalCenter: parent.horizontalCenter; text: "复制链接"; color: "#A0B0C0"; font.pixelSize: 10 }
+                }
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
@@ -397,19 +405,23 @@ Item {
             }
 
             // Desktop site user-agent toggle
-            Column {
-                spacing: 2; width: 60
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: "🖥"
-                    color: desktopMode ? "#00D4FF" : "#A0B0C0"
-                    font.pixelSize: 16
-                }
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    text: desktopMode ? "桌面版 ✓" : "桌面版"
-                    color: desktopMode ? "#00D4FF" : "#A0B0C0"
-                    font.pixelSize: 10
+            Item {
+                width: 60; height: 40
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 2
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: "🖥"
+                        color: desktopMode ? "#00D4FF" : "#A0B0C0"
+                        font.pixelSize: 16
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: desktopMode ? "桌面版 ✓" : "桌面版"
+                        color: desktopMode ? "#00D4FF" : "#A0B0C0"
+                        font.pixelSize: 10
+                    }
                 }
                 MouseArea {
                     anchors.fill: parent

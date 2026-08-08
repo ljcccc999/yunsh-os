@@ -7,7 +7,6 @@ import QtQuick.Controls 2.15
 
 Rectangle {
     id: glassPanel
-    anchors.fill: parent
     
     // === Customizable Properties ===
     property real glassOpacity: 0.35  // Base opacity (higher = less transparent)

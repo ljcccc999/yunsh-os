@@ -14,6 +14,9 @@ exec > >(tee -a /var/log/yunsh-firstboot.log /dev/tty1 /dev/console) 2>&1
 trap 'rc=$?; echo "[TRACE] firstboot exit rc=${rc} line=${LINENO}" | tee -a /var/log/yunsh-firstboot.log' EXIT
 trap 'echo "[TRACE] firstboot signal TERM line=${LINENO}" | tee -a /var/log/yunsh-firstboot.log; exit 143' TERM
 trap 'echo "[TRACE] firstboot signal INT line=${LINENO}" | tee -a /var/log/yunsh-firstboot.log; exit 130' INT
+# Firstboot writes progress to tty1 but never reads from a terminal. Do not let
+# a getty/console handoff send it SIGHUP and leave the image half-installed.
+trap '' HUP
 
 # The image base may move between Debian releases. Never mix a hard-coded
 # distribution suite into APT/network checks.
@@ -32,7 +35,7 @@ echo "  +------------------------------------------+"
 
 source /usr/bin/yunsh-install-progress.sh 2>/dev/null || true
 
-TOTAL=14; CUR=0
+TOTAL=21; CUR=0
 pct() { CUR=$((CUR+1)); local P=$((CUR*100/TOTAL)); [ "$P" -gt "$1" ] && P=$1
     if type draw_frame &>/dev/null 2>&1; then draw_frame "$P" "$2" "$CUR" "$TOTAL"
     else echo "  [$P%] $2"; fi
@@ -43,7 +46,31 @@ pct() { CUR=$((CUR+1)); local P=$((CUR*100/TOTAL)); [ "$P" -gt "$1" ] && P=$1
 # renames or removes this account.
 if ! id -u yunsh >/dev/null 2>&1; then
     useradd -m -s /bin/bash -G sudo,adm,dialout yunsh 2>/dev/null || true
-    echo "yunsh:yunsh123" | chpasswd 2>/dev/null || true
+fi
+if ! id -u yunsh >/dev/null 2>&1 || ! echo "yunsh:yunsh123" | chpasswd 2>/dev/null; then
+    echo "  [ERROR] Unable to create the Linux service account." >&2
+    exit 1
+fi
+
+# Raspberry Pi OS' stock user wizard races this installer on a fresh image.
+# Besides holding graphical.target, it runs dpkg-reconfigure interactively and
+# locks debconf while Qt is being installed.  The builder masks it, and this
+# runtime guard repairs images made by an older builder or interrupted OTA.
+unit_is_masked() {
+    local unit="$1"
+    local unit_path="/etc/systemd/system/${unit}"
+    [ -L "$unit_path" ] && [ "$(readlink "$unit_path" 2>/dev/null || true)" = "/dev/null" ]
+}
+if ! unit_is_masked userconfig.service; then
+    systemctl stop userconfig.service 2>/dev/null || true
+    systemctl disable userconfig.service 2>/dev/null || true
+    systemctl mask userconfig.service 2>/dev/null || true
+fi
+# NetworkManager owns networking in YUNSH OS.  Do not wait two minutes for the
+# deliberately unused systemd-networkd daemon on every boot.
+if ! unit_is_masked systemd-networkd-wait-online.service; then
+    systemctl disable systemd-networkd-wait-online.service 2>/dev/null || true
+    systemctl mask systemd-networkd-wait-online.service 2>/dev/null || true
 fi
 
 # ───── Wait for network (up to about 120s) ──
@@ -64,7 +91,6 @@ while ! network_ready; do
         echo " [TIMEOUT]"
         echo "  [ERROR] First setup needs an Internet connection."
         echo "  Connect Ethernet, then reboot to retry."
-        rm -f /etc/yunsh/.firstboot_partial
         exit 1
     fi
     [ $((WAIT % 12)) -eq 0 ] && echo -n $'\n  [+] Waiting for network'
@@ -82,11 +108,24 @@ APT_POLICY_RC=0
 APT_POLICY_BACKUP="/var/lib/yunsh/policy-rc.d.firstboot"
 apt_services_off() {
     mkdir -p /var/lib/yunsh
+    # Recover from a power loss or forced termination during an earlier
+    # firstboot. Never preserve our own temporary policy as the administrator's
+    # original policy, or all later service starts remain disabled.
+    if [ -e /usr/sbin/policy-rc.d ] &&
+       grep -q '^# YUNSH_FIRSTBOOT_POLICY$' /usr/sbin/policy-rc.d 2>/dev/null; then
+        if [ -e "$APT_POLICY_BACKUP" ]; then
+            mv -f "$APT_POLICY_BACKUP" /usr/sbin/policy-rc.d
+        else
+            rm -f /usr/sbin/policy-rc.d
+        fi
+    fi
+    rm -f "$APT_POLICY_BACKUP"
     if [ -e /usr/sbin/policy-rc.d ]; then
         cp -a /usr/sbin/policy-rc.d "$APT_POLICY_BACKUP" 2>/dev/null || true
     fi
     cat > /usr/sbin/policy-rc.d <<'POLICY'
 #!/bin/sh
+# YUNSH_FIRSTBOOT_POLICY
 exit 101
 POLICY
     chmod 0755 /usr/sbin/policy-rc.d
@@ -101,6 +140,16 @@ apt_services_on() {
     fi
     APT_POLICY_RC=0
 }
+
+firstboot_exit() {
+    local rc=$?
+    apt_services_on || true
+    echo "[TRACE] firstboot exit rc=${rc} line=${BASH_LINENO[0]:-${LINENO}}" |
+        tee -a /var/log/yunsh-firstboot.log
+    trap - EXIT
+    exit "$rc"
+}
+trap firstboot_exit EXIT
 apt_services_off
 
 # Debian images may start apt-daily/cloud-init package jobs in parallel with
@@ -156,10 +205,13 @@ setup_firewall() {
     # ── Firewall ──
     if [ ! -f "$FIREWALL_DONE" ]; then
         echo "  [+] Installing firewall rules..."
-        # iptables script is copied to boot partition during build
+        # Prefer the rootfs copy; use the boot copy as a recovery source.
         if [ -f "$BOOT_MNT/yunsh-iptables.sh" ]; then
             cp "$BOOT_MNT/yunsh-iptables.sh" /usr/bin/yunsh-iptables.sh
             chmod +x /usr/bin/yunsh-iptables.sh
+        fi
+
+        if [ -x /usr/bin/yunsh-iptables.sh ]; then
 
             cat > /etc/systemd/system/yunsh-firewall.service << 'UNIT'
 [Unit]
@@ -179,13 +231,19 @@ WantedBy=multi-user.target
 UNIT
 
             systemctl daemon-reload
-            systemctl enable yunsh-firewall.service
-            systemctl start yunsh-firewall.service
-            echo "  [OK] Firewall configured and enabled"
+            if systemctl enable yunsh-firewall.service; then
+                if systemctl start yunsh-firewall.service; then
+                    touch "$FIREWALL_DONE"
+                    echo "  [OK] Firewall configured and enabled"
+                else
+                    echo "  [WARN] Firewall will retry at the next boot"
+                fi
+            else
+                echo "  [WARN] Firewall service could not be enabled"
+            fi
         else
             echo "  [WARN] yunsh-iptables.sh not found, firewall not configured"
         fi
-        touch "$FIREWALL_DONE"
     else
         echo "  [SKIP] Firewall already configured"
     fi
@@ -236,7 +294,7 @@ install_apt 20 "WebEngine" qt6-webengine-dev libqt6webenginequick6 qml6-module-q
 # is already prepared asynchronously by yunsh-android-setup.service.
 install_apt 24 "Android display runtime" python3-dbus python3-gi weston libwayland-client0 qml6-module-qtwayland-compositor qt6-wayland
 install_apt 32 "Network & BT" network-manager wpasupplicant bluez
-install_apt 38 "System tools" openssh-server avahi-daemon avahi-utils openssl i2c-tools curl wget git unzip python3-pil
+install_apt 38 "System tools" openssh-server avahi-daemon avahi-utils openssl iptables i2c-tools curl wget git unzip python3-pil psmisc util-linux
 install_apt 44 "Chinese fonts" fonts-noto-cjk
 # Audio packages are optional for the first desktop frame and can trigger
 # debconf contention on a fresh image. Prepare them asynchronously after
@@ -289,6 +347,11 @@ usermod -a -G sudo,adm,dialout yunsh 2>/dev/null || true
 ssh-keygen -A 2>/dev/null || true
 echo "yunsh-v1" > /etc/hostname
 hostname yunsh-v1 2>/dev/null || true
+if grep -qE '^[[:space:]]*127\.0\.1\.1[[:space:]]+' /etc/hosts 2>/dev/null; then
+    sed -i -E 's/^[[:space:]]*127\.0\.1\.1[[:space:]]+.*/127.0.1.1 yunsh-v1/' /etc/hosts
+else
+    printf '\n127.0.1.1 yunsh-v1\n' >> /etc/hosts
+fi
 
 pct 92 "Preparing Android application store..."
 # Installation occurs after Weston is available. A verified F-Droid APK is
@@ -296,7 +359,6 @@ pct 92 "Preparing Android application store..."
 # frequently changing download URL.
 [ -x /usr/bin/yunsh-android ] || {
     echo "  [ERROR] Android application controller is missing."
-    rm -f /etc/yunsh/.firstboot_partial
     exit 1
 }
 
@@ -306,7 +368,7 @@ pct 92 "Preparing Android application store..."
 # status check below is the authoritative gate.
 
 pct 98 "Cleaning up..."
-CORE_PACKAGES="qml-qt6 qt6-svg-plugins libqt6opengl6 qml6-module-qtqml qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtwebengine qt6-wayland weston network-manager bluez python3-pil python3-dbus python3-gi unzip libegl1 libgl1-mesa-dri mesa-vulkan-drivers"
+CORE_PACKAGES="qml-qt6 qt6-svg-plugins libqt6opengl6 qml6-module-qtqml qml6-module-qtqml-workerscript qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-virtualkeyboard qml6-module-qtquick-templates qml6-module-qt-labs-qmlmodels qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtwebengine qt6-wayland weston network-manager wpasupplicant bluez openssh-server avahi-daemon avahi-utils openssl iptables i2c-tools curl wget git unzip python3-pil python3-cryptography python3-smbus2 python3-dbus python3-gi libegl1 libgl1-mesa-dri mesa-vulkan-drivers psmisc util-linux"
 CORE_MISSING=""
 for package in $CORE_PACKAGES; do
     dpkg-query -W -f='${Status}' "$package" 2>/dev/null |

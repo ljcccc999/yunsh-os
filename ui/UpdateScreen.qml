@@ -247,8 +247,8 @@ Item {
                     Image {
                         visible: !isChecking
                         source: "/usr/share/yunsh/icons/arrow.clockwise.svg"
-                        width: 18
-                        height: 18
+                        Layout.preferredWidth: 18
+                        Layout.preferredHeight: 18
                         opacity: 0.8
                         sourceSize.width: 18
                         sourceSize.height: 18
@@ -349,8 +349,8 @@ Item {
 
                             Image {
                                 source: "/usr/share/yunsh/icons/doc.text.svg"
-                                width: 18
-                                height: 18
+                                Layout.preferredWidth: 18
+                                Layout.preferredHeight: 18
                                 opacity: 0.6
                                 sourceSize.width: 18
                                 sourceSize.height: 18
@@ -367,8 +367,8 @@ Item {
 
                             Image {
                                 source: showChangelog ? "/usr/share/yunsh/icons/chevron.up.svg" : "/usr/share/yunsh/icons/chevron.down.svg"
-                                width: 16
-                                height: 16
+                                Layout.preferredWidth: 16
+                                Layout.preferredHeight: 16
                                 opacity: 0.5
                                 sourceSize.width: 16
                                 sourceSize.height: 16
@@ -443,8 +443,8 @@ Item {
 
                         Image {
                             source: "/usr/share/yunsh/icons/keyboard.svg"
-                            width: 18
-                            height: 18
+                            Layout.preferredWidth: 18
+                            Layout.preferredHeight: 18
                             opacity: 0.6
                             sourceSize.width: 18
                             sourceSize.height: 18
@@ -541,7 +541,7 @@ Item {
                     /* Linear progress bar */
                     Rectangle {
                         Layout.fillWidth: true
-                        height: 8
+                        Layout.preferredHeight: 8
                         radius: 4
                         color: Qt.rgba(1, 1, 1, 0.1)
 
@@ -643,8 +643,8 @@ Item {
                     /* iOS-style toggle */
                     Rectangle {
                         id: autoToggle
-                        width: 51
-                        height: 31
+                        Layout.preferredWidth: 51
+                        Layout.preferredHeight: 31
                         radius: 15.5
                         color: autoUpdate
                                ? Qt.rgba(0.345, 0.886, 0.51, 0.6)
@@ -711,8 +711,8 @@ Item {
 
                     Rectangle {
                         id: wifiToggle
-                        width: 51
-                        height: 31
+                        Layout.preferredWidth: 51
+                        Layout.preferredHeight: 31
                         radius: 15.5
                         color: wifiOnly
                                ? Qt.rgba(0.345, 0.886, 0.51, 0.6)
@@ -795,8 +795,8 @@ Item {
 
                     Image {
                         source: "/usr/share/yunsh/icons/chevron.right.svg"
-                        width: 12
-                        height: 12
+                        Layout.preferredWidth: 12
+                        Layout.preferredHeight: 12
                         opacity: 0.4
                         sourceSize.width: 12
                         sourceSize.height: 12

@@ -304,6 +304,7 @@ dtoverlay=vc4-kms-v3d
 disable_splash=1
 dtparam=audio=off
 display_auto_detect=1
+hdmi_drive=2
 hdmi_force_hotplug=1
 framebuffer_depth=32
 framebuffer_ignore_alpha=0

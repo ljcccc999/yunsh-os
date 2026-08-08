@@ -5,6 +5,7 @@ set -u
 cd /usr/share/yunsh/ui || exit 1
 
 export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-wayland}"
+export QT_QUICK_CONTROLS_STYLE="${QT_QUICK_CONTROLS_STYLE:-Basic}"
 export QTWEBENGINE_DISABLE_SANDBOX=1
 export QTWEBENGINE_CHROMIUM_FLAGS="${QTWEBENGINE_CHROMIUM_FLAGS:---no-sandbox --disable-dev-shm-usage}"
 export QML_XHR_ALLOW_FILE_READ=1
@@ -49,6 +50,13 @@ if ! command -v weston >/dev/null 2>&1; then
     echo "YUNSH: Weston is not installed." >&2
     exit 1
 fi
+# A compositor killed during startup can leave its socket behind. Do not treat
+# that dead endpoint as a valid session; otherwise every later QML launch gets
+# "Connection refused" and the device remains on the recovery surface.
+if [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && ! pgrep -x weston >/dev/null 2>&1; then
+    rm -f "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" \
+        "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY.lock"
+fi
 if [ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]; then
     # Weston versions shipped by Debian/Raspberry Pi OS do not all accept
     # --continue-without-input. Passing an unsupported option makes Weston
@@ -59,7 +67,10 @@ if [ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]; then
     fi
     # shellcheck disable=SC2086
     weston $WESTON_ARGS >>"$WESTON_LOG" 2>&1 &
-    for _ in $(seq 1 50); do
+    # Weston may take several seconds to initialize GBM/EGL on a cold Pi boot,
+    # and considerably longer in an ARM64 VM using software rendering. Keep
+    # the compositor child alive while it finishes opening the DRM seat.
+    for _ in $(seq 1 300); do
         [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && break
         sleep 0.1
     done

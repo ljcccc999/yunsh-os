@@ -139,6 +139,16 @@ setup_runtime() {
     write_state "ready" 100 "Android runtime is ready"
 }
 
+setup_runtime_locked() {
+    install -d -m 0755 /run/lock
+    exec 9>/run/lock/yunsh-package-setup.lock
+    if ! flock -w 30 9; then
+        write_state "pending" 0 "Android setup is waiting for the package manager"
+        return 75
+    fi
+    setup_runtime
+}
+
 trigger_setup_retry() {
     write_state "pending" 0 "Android setup retry requested"
     systemctl reset-failed yunsh-android-setup.service >/dev/null 2>&1 || true
@@ -253,7 +263,7 @@ launch_package() {
 }
 
 case "${1:-status}" in
-    setup) setup_runtime ;;
+    setup) setup_runtime_locked ;;
     retry) trigger_setup_retry ;;
     status-json) status_json ;;
     ensure) ensure_runtime ;;

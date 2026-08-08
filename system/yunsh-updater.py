@@ -230,6 +230,7 @@ def install_bundle(bundle_path: str) -> dict:
             try:
                 subprocess.run(["systemctl", "daemon-reload"], check=False)
                 for unit in (
+                    "yunsh-grow-root.service",
                     "orbit.service",
                     "orbit-voice-setup.service",
                     "yunsh-media-setup.service",

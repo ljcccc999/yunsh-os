@@ -215,9 +215,6 @@ Rectangle {
     }
 
     function show() {
-        if (Qt.application.layoutDirection === Qt.RightToLeft) {
-            // Fallback for accessibility
-        }
         opacity = 0
         visible = true
         if (passwordRequired) {

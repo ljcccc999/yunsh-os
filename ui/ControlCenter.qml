@@ -321,6 +321,7 @@ Item {
                         ]
 
                         Rectangle {
+                            id: actionTile
                             required property var modelData
                             width: (content.width - 30) / 4
                             height: 82
@@ -341,7 +342,7 @@ Item {
                                     width: 38
                                     height: 38
                                     radius: 19
-                                    color: parent.parent.active
+                                    color: actionTile.active
                                         ? Qt.rgba(0/255, 212/255, 255/255, 0.16)
                                         : Qt.rgba(1, 1, 1, 0.48)
                                     border.width: 1

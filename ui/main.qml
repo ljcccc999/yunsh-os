@@ -1366,6 +1366,8 @@ ApplicationWindow {
                            && command.systemAction) {
                     yunshOS.beginSystemActionConfirmation(
                         String(command.systemAction))
+                } else if (command.action === "toast" && command.message) {
+                    yunshOS.showToast(String(command.message))
                 } else if (command.action === "ui_action" && command.uiAction) {
                     var action = String(command.uiAction)
                     if (action === "home") {

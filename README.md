@@ -23,7 +23,8 @@ portable Raspberry Pi 5 environment.
 
 The current local release line is **v3.0.0**, with a circular liquid-glass
 Orbit identity, direct in-island tool approvals, voice speaking-wave feedback,
-interruptible window transitions, and a verified Raspberry Pi image.
+interruptible window transitions, and a release image that has passed static
+integrity checks and generic ARM64 graphical startup checks.
 
 ## Experience
 
@@ -109,10 +110,10 @@ app does not retain the API key.
 
 ### Device services
 
-- Multilingual Hello welcome followed by a touch-first activation flow with
-  separate local YUNSH-account and device-unlock passwords. The YUNSH-account
-  password is stored as a PBKDF2-SHA256 hash; changing either credential never
-  changes the other.
+- A multilingual Hello welcome that repeats until the user selects Continue,
+  followed by a touch-first activation flow with separate local YUNSH-account
+  and device-unlock passwords. The YUNSH-account password is stored as a
+  PBKDF2-SHA256 hash; changing either credential never changes the other.
 - Smart Wake is the default: automatic display-off turns the AR surface black
   and can be resumed immediately. An explicit local Lock requires the device
   password before returning to the desktop; Orbit and YUNSH Link cannot bypass
@@ -247,7 +248,12 @@ responsible for showing that same frame on both displays.
 
 ## Project status
 
-YUNSH OS is an active prototype for YUNSH spatial computing hardware. Hardware-dependent capabilities—including optical display behavior, Android compatibility, IMU tracking, and OTA delivery—should be validated on the intended Raspberry Pi 5 configuration.
+YUNSH OS is an active prototype for YUNSH spatial computing hardware. The
+v3.0.0 release image has passed XZ/SHA-256, partition and boot configuration,
+ext4, embedded-file, systemd-link, and QML static checks; a generic ARM64
+QEMU virtio-gpu run reached the QML activation surface. These checks do not
+replace Raspberry Pi 5 HDMI/GPU/input, Bluetooth, Android, or optical-display
+hardware validation.
 
 ## License
 

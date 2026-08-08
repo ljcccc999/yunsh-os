@@ -168,6 +168,7 @@ arm_64bit=1
 ${KMS_OVERLAY}
 disable_splash=1
 display_auto_detect=1
+hdmi_drive=2
 hdmi_force_hotplug=1
 framebuffer_depth=32
 disable_overscan=1
@@ -231,6 +232,7 @@ sync
 # a failed mtools write must stop the build rather than becoming an unbootable
 # image published under an otherwise valid checksum.
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtoverlay=vc4-kms-v3d'
+mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^hdmi_drive=2'
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtparam=i2c_arm=on'
 mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'psi=1'
 mtype -i "${BOOT_IMG}" ::/YUNSH-FIRSTBOOT.SH >/dev/null
@@ -246,6 +248,10 @@ DEBUGFS_SCRIPT="${BUILD_DIR}/yunsh-debugfs.txt"
 add_file() {
     local src="$1" dest="$2"
     local size=$(stat -f%z "$src" 2>/dev/null || stat -c%s "$src" 2>/dev/null || echo 0)
+    # debugfs `write` refuses to replace an existing inode. Always remove the
+    # exact destination first so a reused base cannot silently retain an old
+    # launcher, firstboot script, daemon, unit, or configuration file.
+    echo "rm ${dest}" >> "${DEBUGFS_SCRIPT}"
     echo "write \"$src\" \"$dest\"" >> "${DEBUGFS_SCRIPT}"
     echo "  $dest ($size bytes)"
 }
@@ -256,6 +262,21 @@ echo "mkdir /usr/share/yunsh/icons" >> "${DEBUGFS_SCRIPT}"
 echo "mkdir /usr/share/yunsh/apps" >> "${DEBUGFS_SCRIPT}"
 echo "mkdir /usr/share/yunsh/logo" >> "${DEBUGFS_SCRIPT}"
 echo "mkdir /etc/yunsh" >> "${DEBUGFS_SCRIPT}"
+
+# A reused base image must never turn a release into an already-installed or
+# already-activated system. Remove all boot-state markers before injecting the
+# current release; firstboot is the only code allowed to create them.
+for stale_state in \
+    /etc/yunsh/.packages_installed \
+    /etc/yunsh/.activated \
+    /etc/yunsh/.firstboot_partial \
+    /etc/yunsh/.firewall_configured \
+    /etc/yunsh/.ssh_hardened \
+    /var/lib/yunsh/.android_ready \
+    /var/lib/yunsh/media/.ready \
+    /var/lib/yunsh/orbit/voice/.ready; do
+    echo "rm ${stale_state}" >> "${DEBUGFS_SCRIPT}"
+done
 
 echo "→ QML UI files..."
 for qml in "${YUNSH_DIR}/ui/"*.qml; do
@@ -287,6 +308,7 @@ add_file "${YUNSH_DIR}/system/yunsh-headtracking-sim" "/usr/bin/yunsh-headtracki
 add_file "${YUNSH_DIR}/system/yunsh-screenshotd" "/usr/bin/yunsh-screenshotd"
 add_file "${YUNSH_DIR}/system/yunsh-recordingd" "/usr/bin/yunsh-recordingd"
 add_file "${YUNSH_DIR}/system/yunsh-media-setup" "/usr/bin/yunsh-media-setup"
+add_file "${YUNSH_DIR}/system/yunsh-grow-root" "/usr/bin/yunsh-grow-root"
 add_file "${YUNSH_DIR}/system/yunsh-factory-reset" "/usr/bin/yunsh-factory-reset"
 add_file "${YUNSH_DIR}/system/yunsh-install-progress.sh" "/usr/bin/yunsh-install-progress.sh"
 add_file "${YUNSH_DIR}/system/yunsh-inputd" "/usr/bin/yunsh-inputd"
@@ -315,35 +337,11 @@ echo "  F-Droid APK injected (verified fallback)"
 
 # Launcher script
 LAUNCHER_FILE="${BUILD_DIR}/yunsh-ui-launcher"
-cp "${YUNSH_DIR}/system/yunsh-ui-launcher" "${LAUNCHER_FILE}" 2>/dev/null || {
-    cat > "${LAUNCHER_FILE}" << 'LAUNCHER'
-#!/bin/bash
-cd /usr/share/yunsh/ui || exit 1
-QML_RUNNER=$(command -v qml6 || command -v qml || :)
-if [ -z "$QML_RUNNER" ]; then
-    echo "YUNSH: qml runtime is missing" >&2
+if [ ! -f "${YUNSH_DIR}/system/yunsh-ui-launcher" ]; then
+    echo "ERROR: canonical UI launcher is missing"
     exit 1
 fi
-if [ ! -f /etc/yunsh/.packages_installed ] && [ -x /usr/bin/yunsh-firstboot.sh ]; then
-    /usr/bin/yunsh-firstboot.sh
-    touch /etc/yunsh/.packages_installed; sync; sleep 2; reboot; exit 0
-fi
-if ! id -u yunsh &>/dev/null 2>&1; then
-    useradd -m -s /bin/bash yunsh 2>/dev/null || true
-fi
-/usr/bin/yunsh-disk-helper 2>/dev/null || true
-while true; do
-    if [ -f /etc/yunsh/.activated ]; then
-        $QML_RUNNER main.qml -- --activated 2>>/var/log/yunsh-ui.log
-    else
-        $QML_RUNNER main.qml -- --firstboot 2>>/var/log/yunsh-ui.log
-        QML_EXIT=$?
-        [ $QML_EXIT -eq 42 ] && touch /etc/yunsh/.activated 2>/dev/null && sync
-    fi
-    sleep 2
-done
-LAUNCHER
-}
+cp "${YUNSH_DIR}/system/yunsh-ui-launcher" "${LAUNCHER_FILE}"
 chmod +x "${LAUNCHER_FILE}"
 add_file "${LAUNCHER_FILE}" "/usr/bin/yunsh-ui-launcher"
 
@@ -367,9 +365,9 @@ echo "mkdir /etc/systemd/system/multi-user.target.wants" >> "${DEBUGFS_SCRIPT}"
 # Main OS service
 cat > "${BUILD_DIR}/yunsh-os.service" << 'SVC'
 [Unit]
-Description=YUNSH OS v1.0 AR Glasses UI
-After=network.target yunsh-firstboot.service yunsh-splash.service
-Wants=network.target yunsh-firstboot.service yunsh-splash.service
+Description=YUNSH OS Spatial UI
+After=network.target yunsh-firstboot.service yunsh-splash.service yunsh-grow-root.service
+Wants=network.target yunsh-firstboot.service yunsh-splash.service yunsh-grow-root.service
 Conflicts=getty@tty1.service
 ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
@@ -392,8 +390,8 @@ add_file "${BUILD_DIR}/yunsh-os.service" "/etc/systemd/system/yunsh-os.service"
 cat > "${BUILD_DIR}/yunsh-firstboot.service" << 'FBSVC'
 [Unit]
 Description=YUNSH OS First Boot Installer
-After=network.target yunsh-splash.service
-Wants=network.target yunsh-splash.service
+After=network.target yunsh-splash.service yunsh-grow-root.service
+Wants=network.target yunsh-splash.service yunsh-grow-root.service
 Before=yunsh-os.service
 Conflicts=getty@tty1.service
 ConditionPathExists=!/etc/yunsh/.packages_installed
@@ -405,13 +403,30 @@ TimeoutStartSec=0
 # manual reboot here was one of the ways a fresh image appeared stuck.
 Restart=on-failure
 RestartSec=30
-StandardInput=tty
+# The installer only writes progress; a terminal handoff must not deliver
+# SIGHUP when serial/tty getty services start during first boot.
+StandardInput=null
 StandardOutput=journal+console
 StandardError=journal+console
 [Install]
 WantedBy=multi-user.target
 FBSVC
 add_file "${BUILD_DIR}/yunsh-firstboot.service" "/etc/systemd/system/yunsh-firstboot.service"
+
+cat > "${BUILD_DIR}/yunsh-grow-root.service" << 'GROWSVC'
+[Unit]
+Description=YUNSH Grow Root Filesystem to SD Card
+After=local-fs.target
+Before=yunsh-firstboot.service yunsh-os.service
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/yunsh-grow-root
+TimeoutStartSec=180
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target
+GROWSVC
+add_file "${BUILD_DIR}/yunsh-grow-root.service" "/etc/systemd/system/yunsh-grow-root.service"
 
 cat > "${BUILD_DIR}/yunsh-local-api.service" << 'APISVC'
 [Unit]
@@ -455,6 +470,7 @@ cat > "${BUILD_DIR}/yunsh-screen-relay.service" << 'RELAYDSVC'
 Description=YUNSH Encrypted iPhone Screen Relay
 After=yunsh-spaced.service network-online.target avahi-daemon.service
 Requires=yunsh-spaced.service
+ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-screen-relayd
@@ -716,6 +732,7 @@ cat > "${BUILD_DIR}/yunsh-powerd.service" << 'POWERSVC'
 [Unit]
 Description=YUNSH OS Power Manager
 After=local-fs.target
+ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-powerd
@@ -743,16 +760,32 @@ TERMSVC
 add_file "${BUILD_DIR}/yunsh-terminal.service" "/etc/systemd/system/yunsh-terminal.service"
 
 # Enable services
-for service in yunsh-os yunsh-firstboot yunsh-local-api yunsh-spaced yunsh-screen-relay yunsh-network yunsh-bluetooth \
+for service in yunsh-os yunsh-firstboot yunsh-grow-root yunsh-local-api yunsh-spaced yunsh-screen-relay yunsh-network yunsh-bluetooth \
                yunsh-update yunsh-link-ble yunsh-glasses-bridge yunsh-appd yunsh-android-setup yunsh-terminal yunsh-headtracking \
                yunsh-powerd yunsh-splash yunsh-media-setup orbit orbit-voice-setup; do
+    echo "rm /etc/systemd/system/multi-user.target.wants/${service}.service" >> "${DEBUGFS_SCRIPT}"
     echo "symlink /etc/systemd/system/multi-user.target.wants/${service}.service ../${service}.service" >> "${DEBUGFS_SCRIPT}"
 done
 # Network: disable dhcpcd, enable NetworkManager + fstrim
 echo "rm /etc/systemd/system/multi-user.target.wants/dhcpcd.service" >> "${DEBUGFS_SCRIPT}"
-# The filesystem is grown while building the image, so do not run the stock
-# first-boot rpi-resize job (which delegates to a no-timeout growfs service).
+# The filesystem is grown while building the image. Removing one wants-link is
+# insufficient on current Raspberry Pi OS: first-boot generators can still
+# enqueue both resize units and stall sysinit. Mask them explicitly.
 echo "rm /etc/systemd/system/sysinit.target.wants/rpi-resize.service" >> "${DEBUGFS_SCRIPT}"
+echo "rm /etc/systemd/system/rpi-resize.service" >> "${DEBUGFS_SCRIPT}"
+echo "symlink /etc/systemd/system/rpi-resize.service /dev/null" >> "${DEBUGFS_SCRIPT}"
+echo "rm /etc/systemd/system/rpi-resize-swap-file.service" >> "${DEBUGFS_SCRIPT}"
+echo "symlink /etc/systemd/system/rpi-resize-swap-file.service /dev/null" >> "${DEBUGFS_SCRIPT}"
+# Raspberry Pi OS can recreate the stock user-configuration wants-link during
+# boot.  Its whiptail dialog owns tty8 and keeps multi-user/graphical.target in
+# the starting state forever on a headless YUNSH image.  YUNSH has its own
+# first-boot/account flow, so mask the unit itself.  NetworkManager is the only
+# network manager in this image; the systemd-networkd waiter otherwise burns
+# 120 seconds on every boot waiting for a daemon that is intentionally unused.
+echo "rm /etc/systemd/system/userconfig.service" >> "${DEBUGFS_SCRIPT}"
+echo "symlink /etc/systemd/system/userconfig.service /dev/null" >> "${DEBUGFS_SCRIPT}"
+echo "rm /etc/systemd/system/systemd-networkd-wait-online.service" >> "${DEBUGFS_SCRIPT}"
+echo "symlink /etc/systemd/system/systemd-networkd-wait-online.service /dev/null" >> "${DEBUGFS_SCRIPT}"
 
 # Keep the stock tty1 getty. The first-boot service owns tty1 while installing,
 # avoiding a race with auto-login before the yunsh user has been created.
@@ -772,6 +805,17 @@ add_file "${RCLOCAL_FILE}" "/etc/rc.local"
 echo "rm /etc/hostname" >> "${DEBUGFS_SCRIPT}"
 echo "yunsh-v1" > "${BUILD_DIR}/yunsh-hostname"
 add_file "${BUILD_DIR}/yunsh-hostname" "/etc/hostname"
+# Keep the configured hostname locally resolvable.  Without this entry every
+# sudo call emits a resolver warning, and services which resolve their own
+# hostname can pause on DNS during the first boot.
+cat > "${BUILD_DIR}/yunsh-hosts" << 'HOSTS'
+127.0.0.1 localhost
+127.0.1.1 yunsh-v1
+::1 localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+HOSTS
+add_file "${BUILD_DIR}/yunsh-hosts" "/etc/hosts"
 
 # Set permissions
 for bin in yunsh-update-daemon yunsh-updater yunsh-network-daemon yunsh-bluetooth-daemon \
@@ -780,7 +824,7 @@ for bin in yunsh-update-daemon yunsh-updater yunsh-network-daemon yunsh-bluetoot
            yunsh-screenshotd yunsh-factory-reset yunsh-install-progress.sh yunsh-inputd \
            yunsh-powerd yunsh-firstboot.sh yunsh-iptables.sh yunsh-ui-launcher yunsh-splash \
            yunsh-appd yunsh-terminal yunsh-disk-helper yunsh-headtracking yunsh-headtracking-sim \
-           yunsh-bno085-reader yunsh-activation-helper yunsh-android yunsh-recordingd yunsh-media-setup orbitd orbit-voice-setup; do
+           yunsh-bno085-reader yunsh-activation-helper yunsh-android yunsh-recordingd yunsh-media-setup yunsh-grow-root orbitd orbit-voice-setup; do
     echo "set_inode_field /usr/bin/${bin} mode 0100755" >> "${DEBUGFS_SCRIPT}"
 done
 echo "set_inode_field /etc/rc.local mode 0100755" >> "${DEBUGFS_SCRIPT}"
@@ -846,6 +890,9 @@ echo "(partial listing, see build log for complete)"
 REQUIRED_ROOT_FILES="
 /usr/bin/yunsh-ui-launcher
 /usr/bin/yunsh-firstboot.sh
+/usr/bin/yunsh-grow-root
+/usr/bin/growpart
+/usr/sbin/resize2fs
 /usr/bin/yunsh-activation-helper
 /usr/bin/yunsh-network-daemon
 /usr/bin/yunsh-bluetooth-daemon
@@ -868,12 +915,18 @@ REQUIRED_ROOT_FILES="
 /etc/yunsh/version.conf
 /etc/systemd/system/yunsh-os.service
 /etc/systemd/system/yunsh-firstboot.service
+/etc/systemd/system/yunsh-grow-root.service
 /etc/systemd/system/yunsh-android-setup.service
 /etc/systemd/system/orbit.service
 /etc/systemd/system/orbit-voice-setup.service
 /etc/systemd/system/yunsh-media-setup.service
+/etc/systemd/system/rpi-resize.service
+/etc/systemd/system/rpi-resize-swap-file.service
+/etc/systemd/system/userconfig.service
+/etc/systemd/system/systemd-networkd-wait-online.service
 /etc/systemd/system/multi-user.target.wants/yunsh-os.service
 /etc/systemd/system/multi-user.target.wants/yunsh-firstboot.service
+/etc/systemd/system/multi-user.target.wants/yunsh-grow-root.service
 /etc/systemd/system/multi-user.target.wants/yunsh-android-setup.service
 /etc/systemd/system/multi-user.target.wants/orbit.service
 /etc/systemd/system/multi-user.target.wants/orbit-voice-setup.service
@@ -886,6 +939,24 @@ for required in ${REQUIRED_ROOT_FILES}; do
         exit 1
     fi
 done
+
+FORBIDDEN_ROOT_STATE="
+/etc/yunsh/.packages_installed
+/etc/yunsh/.activated
+/etc/yunsh/.firstboot_partial
+/etc/yunsh/.firewall_configured
+/etc/yunsh/.ssh_hardened
+/var/lib/yunsh/.android_ready
+/var/lib/yunsh/media/.ready
+/var/lib/yunsh/orbit/voice/.ready
+"
+for forbidden in ${FORBIDDEN_ROOT_STATE}; do
+    if "${E2FSPROGS}/sbin/debugfs" -R "stat ${forbidden}" "${ROOT_TEST_IMG}" 2>&1 |
+        grep -q '^Inode:'; then
+        echo "ERROR: release image contains stale runtime state: ${forbidden}"
+        exit 1
+    fi
+done
 set +e
 "${E2FSCK}" -fn "${ROOT_TEST_IMG}" >/dev/null 2>&1
 FSCK_VERIFY=$?
@@ -894,7 +965,7 @@ if [ "${FSCK_VERIFY}" -gt 1 ]; then
     echo "ERROR: final root filesystem verification failed (${FSCK_VERIFY})"
     exit "${FSCK_VERIFY}"
 fi
-echo "  ✓ Required boot, desktop, service, OTA, and tracking files verified"
+echo "  ✓ Required files and clean first-boot state verified"
 
 # Cleanup
 rm -f "${ROOT_PARTITION_IMG}" "${ROOT_TEST_IMG}" "${LAUNCHER_FILE}" "${DEBUGFS_SCRIPT}" "${IMAGE_VERSION_CONF}"

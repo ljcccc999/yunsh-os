@@ -22,6 +22,7 @@ Rectangle {
     // ─── Context Popup (reusable) ────────────────
     Popup {
         id: outputPopup
+        property var menuModel: []
         modal: false
         closePolicy: Popup.CloseOnPressOutside
 
@@ -92,6 +93,7 @@ Rectangle {
 
     Popup {
         id: inputPopup
+        property var menuModel: []
         modal: false
         closePolicy: Popup.CloseOnPressOutside
 

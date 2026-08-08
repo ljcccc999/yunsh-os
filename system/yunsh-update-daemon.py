@@ -619,7 +619,7 @@ class UpdateDaemon:
 
         # Persist update-info.json
         info = {
-            "current_version": cur or "1.0.3",
+            "current_version": cur or "3.0.0",
             "current_build": cur_build,
             "latest_version": latest,
             "latest_build": latest_build,
@@ -642,7 +642,7 @@ class UpdateDaemon:
         self._state = "idle"
         write_status(
             state="idle" if not available else "update_available",
-            current_version=cur or "1.0.3",
+            current_version=cur or "3.0.0",
             current_build=cur_build,
             latest_version=latest,
             latest_build=latest_build,
@@ -745,7 +745,7 @@ class UpdateDaemon:
         logger.info("Listening on %s", SOCKET_PATH)
         write_status(
             state="idle",
-            current_version=current_version() or "1.0.3",
+            current_version=current_version() or "3.0.0",
             auto_update=self._config.get("auto_update", False),
             wifi_only=self._config.get("wifi_only", True),
             update_channel=self._config.get("update_channel", "stable"),

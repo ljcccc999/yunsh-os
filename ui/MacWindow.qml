@@ -202,14 +202,14 @@ Rectangle {
         x: 0; y: 12
         width: parent.width
         height: parent.height
-        radius: parent.radius + 4
+        radius: macWindow.radius + 4
         color: Qt.rgba(0, 0, 0, 0.3)
     }
     Rectangle {
         x: 0; y: 6
         width: parent.width
         height: parent.height
-        radius: parent.radius + 2
+        radius: macWindow.radius + 2
         color: Qt.rgba(0, 0, 0, 0.15)
     }
 
@@ -217,7 +217,7 @@ Rectangle {
     Rectangle {
         id: windowGlass
         anchors.fill: parent
-        radius: parent.radius
+        radius: macWindow.radius
         // AR optical displays treat black as transparent. All app windows use
         // a bright white liquid-glass base so they remain visible in glasses.
         color: macWindow.reduceTransparency

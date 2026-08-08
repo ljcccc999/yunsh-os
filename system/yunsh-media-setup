@@ -8,6 +8,13 @@ MARKER="${STATE_DIR}/.ready"
 [ -f /etc/yunsh/.packages_installed ] || exit 0
 [ -f "${MARKER}" ] && exit 0
 
+# Optional installers all use APT.  Running media, Orbit voice and Android
+# preparation at once corrupts debconf/dpkg transactions on the first desktop
+# boot, so take one short shared lease and let systemd retry if it is busy.
+install -d -m 0755 /run/lock
+exec 9>/run/lock/yunsh-package-setup.lock
+flock -w 30 9 || exit 75
+
 install -d -m 0755 "${STATE_DIR}"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq

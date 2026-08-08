@@ -13,6 +13,11 @@ MARKER="${STATE_DIR}/.ready"
 [ -f /etc/yunsh/.packages_installed ] || exit 0
 [ -f "${MARKER}" ] && exit 0
 
+
+install -d -m 0755 /run/lock
+exec 9>/run/lock/yunsh-package-setup.lock
+flock -w 30 9 || exit 75
+
 install -d -m 0700 "${STATE_DIR}"
 
 export DEBIAN_FRONTEND=noninteractive

@@ -1,0 +1,68 @@
+#!/bin/bash
+# Expand the flashed root partition to the physical SD card, then grow ext4.
+# The release image itself is 6 GiB so it still fits nominal 8 GB media.
+
+set -u
+
+log() { printf '[yunsh-grow-root] %s\n' "$*"; }
+
+for tool in findmnt lsblk blockdev growpart resize2fs; do
+    command -v "$tool" >/dev/null 2>&1 || {
+        log "Skipping expansion: required tool is missing: $tool"
+        exit 0
+    }
+done
+
+root_device="$(findmnt -nro SOURCE / 2>/dev/null || true)"
+root_device="$(readlink -f "$root_device" 2>/dev/null || true)"
+[ -b "$root_device" ] || {
+    log "Skipping expansion: root block device was not resolved"
+    exit 0
+}
+
+parent_name="$(lsblk -ndo PKNAME "$root_device" 2>/dev/null | head -n 1)"
+partition_number="$(lsblk -ndo PARTN "$root_device" 2>/dev/null | head -n 1)"
+[ -n "$parent_name" ] && [ -n "$partition_number" ] || {
+    log "Skipping expansion: root is not a normal disk partition"
+    exit 0
+}
+parent_device="/dev/$parent_name"
+[ -b "$parent_device" ] || {
+    log "Skipping expansion: parent device $parent_device is unavailable"
+    exit 0
+}
+
+disk_bytes="$(blockdev --getsize64 "$parent_device" 2>/dev/null || echo 0)"
+partition_bytes="$(blockdev --getsize64 "$root_device" 2>/dev/null || echo 0)"
+sector_bytes="$(blockdev --getss "$parent_device" 2>/dev/null || echo 512)"
+start_sector="$(lsblk -ndo START "$root_device" 2>/dev/null | head -n 1)"
+case "$disk_bytes:$partition_bytes:$sector_bytes:$start_sector" in
+    *[!0-9:]*|0:*|*:0:*|*:*:0:*|*:*:*:0)
+        log "Skipping expansion: invalid block geometry"
+        exit 0
+        ;;
+esac
+
+partition_end=$((start_sector * sector_bytes + partition_bytes))
+remaining=$((disk_bytes - partition_end))
+# Alignment and table metadata can leave a small tail. Only alter the table
+# when at least 16 MiB is genuinely unused.
+if [ "$remaining" -lt $((16 * 1024 * 1024)) ]; then
+    # The initramfs growroot hook may already have expanded the partition while
+    # leaving the ext4 filesystem at its original image size.  Do not return
+    # here: resize2fs still has to inspect and, when needed, grow the filesystem.
+    log "Root partition already uses the available disk; checking ext4 size"
+else
+    log "Growing partition $root_device into $remaining unused bytes"
+    if ! timeout 120 growpart "$parent_device" "$partition_number"; then
+        log "WARNING: partition growth failed; checking ext4 size anyway"
+    fi
+    command -v udevadm >/dev/null 2>&1 && udevadm settle --timeout=30 2>/dev/null || true
+fi
+
+if ! timeout 120 resize2fs "$root_device"; then
+    log "WARNING: ext4 growth failed; it will be retried at the next boot"
+    exit 0
+fi
+log "Root filesystem expansion complete"
+exit 0

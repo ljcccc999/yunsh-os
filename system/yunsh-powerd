@@ -5,8 +5,16 @@
 PIDFILE="/var/run/yunsh-powerd.pid"
 BATTERY_PATH="/sys/class/power_supply"
 STATUS_PATH="/tmp/yunsh-power-status.json"
+UI_COMMAND_PATH="/tmp/yunsh-ui-command.json"
 
 echo "YUNSH: Power daemon starting..."
+
+notify_user() {
+    _level="$1"
+    _tmp="${UI_COMMAND_PATH}.tmp.$$"
+    printf '{"id":"battery-%s-%s","action":"toast","message":"电量仅剩 %s%%，请尽快充电"}\n' \
+        "$(date +%s)" "$$" "$_level" > "$_tmp" && mv "$_tmp" "$UI_COMMAND_PATH"
+}
 
 # Check battery status
 check_battery() {
@@ -33,8 +41,9 @@ check_battery() {
             # Low battery warning
             if [ "$level" -lt 15 ] && [ "$status" = "Discharging" ]; then
                 echo "YUNSH: Low battery! Please charge."
-                # Notify user via compositor
-                echo "low_battery $level" | nc -U /tmp/yunsh-compositor.sock -w 0 2>/dev/null || true
+                # The old compositor socket never had a server. Send the
+                # warning through the same atomic UI-command bridge as Orbit.
+                notify_user "$level" || true
             fi
             
             # Critical battery - shutdown
