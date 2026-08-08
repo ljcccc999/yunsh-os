@@ -45,40 +45,66 @@ fi
 /usr/bin/yunsh-disk-helper 2>/dev/null || true
 
 # Waydroid requires a real Wayland session. Weston owns DRM/KMS and composes
-# both the YUNSH shell and Android surfaces on the same display.
+# both the YUNSH shell and Android surfaces on the same display.  Some Pi 5
+# firmware/kernel combinations can leave the firmware framebuffer available
+# while VC4's DRM clock provider fails. Keep the display usable in that case
+# by running Qt directly on the framebuffer with its software scenegraph.
 if ! command -v weston >/dev/null 2>&1; then
     echo "YUNSH: Weston is not installed." >&2
     exit 1
 fi
-# A compositor killed during startup can leave its socket behind. Do not treat
-# that dead endpoint as a valid session; otherwise every later QML launch gets
-# "Connection refused" and the device remains on the recovery surface.
-if [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && ! pgrep -x weston >/dev/null 2>&1; then
-    rm -f "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" \
-        "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY.lock"
+DISPLAY_BACKEND="wayland"
+DRM_DEVICE=""
+if [ -d /dev/dri ]; then
+    DRM_DEVICE="$(find /dev/dri -maxdepth 1 -type c -name 'card*' -print -quit 2>/dev/null || true)"
 fi
-if [ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]; then
-    # Weston versions shipped by Debian/Raspberry Pi OS do not all accept
-    # --continue-without-input. Passing an unsupported option makes Weston
-    # quit before it creates its Wayland socket, leaving the display black.
-    WESTON_ARGS="--backend=drm-backend.so --shell=kiosk-shell.so --socket=$WAYLAND_DISPLAY --idle-time=0"
-    if weston --help 2>&1 | grep -q -- '--continue-without-input'; then
-        WESTON_ARGS="$WESTON_ARGS --continue-without-input"
+
+if [ -n "$DRM_DEVICE" ]; then
+    # A compositor killed during startup can leave its socket behind. Do not
+    # treat that dead endpoint as a valid session.
+    if [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && ! pgrep -x weston >/dev/null 2>&1; then
+        rm -f "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" \
+            "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY.lock"
     fi
-    # shellcheck disable=SC2086
-    weston $WESTON_ARGS >>"$WESTON_LOG" 2>&1 &
-    # Weston may take several seconds to initialize GBM/EGL on a cold Pi boot,
-    # and considerably longer in an ARM64 VM using software rendering. Keep
-    # the compositor child alive while it finishes opening the DRM seat.
-    for _ in $(seq 1 300); do
-        [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && break
-        sleep 0.1
-    done
+    if [ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]; then
+        # Weston versions shipped by Debian/Raspberry Pi OS do not all accept
+        # --continue-without-input. Passing an unsupported option makes Weston
+        # quit before it creates its Wayland socket, leaving the display black.
+        WESTON_ARGS="--backend=drm-backend.so --shell=kiosk-shell.so --socket=$WAYLAND_DISPLAY --idle-time=0"
+        if weston --help 2>&1 | grep -q -- '--continue-without-input'; then
+            WESTON_ARGS="$WESTON_ARGS --continue-without-input"
+        fi
+        # shellcheck disable=SC2086
+        weston $WESTON_ARGS >>"$WESTON_LOG" 2>&1 &
+        # Weston may take several seconds to initialize GBM/EGL on a cold Pi.
+        for _ in $(seq 1 300); do
+            [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && break
+            sleep 0.1
+        done
+    fi
+    if [ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]; then
+        printf '%s Weston did not create a Wayland socket; checking framebuffer fallback.\n' \
+            "$(date -Iseconds)" >>"$UI_LOG"
+        DISPLAY_BACKEND="linuxfb"
+    fi
+else
+    DISPLAY_BACKEND="linuxfb"
 fi
-[ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] || {
-    echo "YUNSH: Wayland compositor failed to start." >&2
-    exit 1
-}
+
+if [ "$DISPLAY_BACKEND" = "linuxfb" ]; then
+    if [ ! -c /dev/fb0 ]; then
+        echo "YUNSH: neither DRM/KMS nor a framebuffer display is available." >&2
+        exit 1
+    fi
+    export QT_QPA_PLATFORM="linuxfb:fb=/dev/fb0"
+    export QT_QUICK_BACKEND="software"
+    printf '%s Using Qt linuxfb fallback on /dev/fb0.\n' "$(date -Iseconds)" >>"$UI_LOG"
+else
+    [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] || {
+        echo "YUNSH: Wayland compositor failed to start." >&2
+        exit 1
+    }
+fi
 
 # Do not leave a connected display on a featureless black surface when the
 # shell has a QML error.  A minimal, independent QML screen makes the failure

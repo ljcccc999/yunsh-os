@@ -23,17 +23,13 @@ arm_64bit=1
 # Boot (Pi 5 auto-picks kernel8.img — no kernel= line needed)
 # kernel= line removed: Pi 5 firmware searches kernel8.img by default
 
-# GPU — vc4-kms-v3d ONLY. vc4-fkms-v3d conflicts with KMS on Pi 5.
-dtoverlay=vc4-kms-v3d
+# Pi 5 firmware KMS overlay. The launcher can use the firmware framebuffer
+# with Qt linuxfb if the VC4 firmware clock provider is unavailable.
+dtoverlay=vc4-kms-v3d-pi5
 max_framebuffers=2
 
 # Serial console for debugging
 enable_uart=1
-
-# Performance
-arm_freq=1500
-gpu_freq=600
-force_turbo=1
 
 # Audio
 dtparam=audio=on

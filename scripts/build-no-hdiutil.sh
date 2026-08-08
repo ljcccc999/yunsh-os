@@ -156,9 +156,18 @@ MTOOL="mcopy -i ${BOOT_IMG}"
 echo ""
 echo "→ config.txt..."
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null > "${BUILD_DIR}/yunsh-config-new.txt"
+# The base Raspberry Pi image may carry a generic VC4 overlay or the legacy
+# firmware-KMS hand-off switch. Normalize both before adding the Pi 5 section:
+# the Pi 5 overlay still asks firmware for its initial framebuffer, while the
+# userspace launcher can fall back to Qt linuxfb when the VC4 clock provider is
+# unavailable.
+sed -i '' -e 's/^dtoverlay=vc4-kms-v3d$/dtoverlay=vc4-kms-v3d-pi5/' \
+    -e '/^disable_fw_kms_setup=1$/d' "${BUILD_DIR}/yunsh-config-new.txt" 2>/dev/null || \
+sed -i -e 's/^dtoverlay=vc4-kms-v3d$/dtoverlay=vc4-kms-v3d-pi5/' \
+    -e '/^disable_fw_kms_setup=1$/d' "${BUILD_DIR}/yunsh-config-new.txt"
 KMS_OVERLAY=""
-if ! grep -q '^dtoverlay=vc4-kms-v3d' "${BUILD_DIR}/yunsh-config-new.txt"; then
-    KMS_OVERLAY="dtoverlay=vc4-kms-v3d"
+if ! grep -q '^dtoverlay=vc4-kms-v3d-pi5' "${BUILD_DIR}/yunsh-config-new.txt"; then
+    KMS_OVERLAY="dtoverlay=vc4-kms-v3d-pi5"
 fi
 cat >> "${BUILD_DIR}/yunsh-config-new.txt" << YUNSHCONF
 
@@ -207,6 +216,13 @@ case " ${CMDLINE} " in
     *" console=tty1 "*) ;;
     *) CMDLINE="${CMDLINE} console=tty1" ;;
 esac
+# If VC4 cannot obtain the Pi 5 firmware clocks, loading vc4/v3d removes the
+# firmware-provided simple framebuffer before Qt can use it. Keep that
+# framebuffer available as a deterministic graphical fallback.
+case " ${CMDLINE} " in
+    *" module_blacklist=vc4,v3d "*) ;;
+    *) CMDLINE="${CMDLINE} module_blacklist=vc4,v3d" ;;
+esac
 # Never hide the userspace hand-off on a fresh image.  A Pi that reaches
 # init-bottom but cannot start systemd must show its last service, not appear
 # frozen on an otherwise healthy rootfs.
@@ -243,11 +259,13 @@ sync
 # Read the FAT image back before deleting it. These are boot-critical settings:
 # a failed mtools write must stop the build rather than becoming an unbootable
 # image published under an otherwise valid checksum.
-mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtoverlay=vc4-kms-v3d'
+mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtoverlay=vc4-kms-v3d-pi5'
+mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -qv '^disable_fw_kms_setup=1$'
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^hdmi_drive=2'
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtparam=i2c_arm=on'
 mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'psi=1'
 mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'root=/dev/mmcblk0p2'
+mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'module_blacklist=vc4,v3d'
 if mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'root=PARTUUID='; then
     echo "  ✗ Stale PARTUUID root target remains"
     exit 1
