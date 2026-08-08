@@ -192,6 +192,17 @@ CMDLINE=$(printf '%s\n' "${CMDLINE}" | sed -E \
     -e 's/(^| )video=HDMI-A-[12]:[^ ]+//g' \
     -e 's/(^| )resize( |$)/ /g' \
     -e 's/  +/ /g')
+# Boot from the physical Pi 5 SD-card root partition.  The base image's MBR
+# disk signature can change when a card is cloned or rewritten, which makes a
+# baked-in root=PARTUUID fail before systemd (and therefore before SSH) starts.
+# The release image is SD-card targeted, so use the stable Pi device path and
+# keep rootwait to cover card enumeration during early boot.
+CMDLINE=$(printf '%s\n' "${CMDLINE}" | sed -E \
+    -e 's#(^| )root=PARTUUID=[^ ]+#\1root=/dev/mmcblk0p2#')
+case " ${CMDLINE} " in
+    *" root=/dev/mmcblk0p2 "*) ;;
+    *) CMDLINE="${CMDLINE} root=/dev/mmcblk0p2" ;;
+esac
 case " ${CMDLINE} " in
     *" console=tty1 "*) ;;
     *) CMDLINE="${CMDLINE} console=tty1" ;;
@@ -236,6 +247,11 @@ mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtoverlay=vc4-kms-v
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^hdmi_drive=2'
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtparam=i2c_arm=on'
 mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'psi=1'
+mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'root=/dev/mmcblk0p2'
+if mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'root=PARTUUID='; then
+    echo "  ✗ Stale PARTUUID root target remains"
+    exit 1
+fi
 mtype -i "${BOOT_IMG}" ::/YUNSH-FIRSTBOOT.SH >/dev/null
 rm -f "${BOOT_IMG}" "${BUILD_DIR}/yunsh-config-new.txt" "${BUILD_DIR}/yunsh-cmdline-new.txt"
 echo "  ✓ Boot partition written back"
