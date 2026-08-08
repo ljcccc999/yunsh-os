@@ -286,6 +286,10 @@ pct 3 "Updating package lists..."
 apt-get update -qq 2>/dev/null || { sleep 10; apt-get update -qq 2>/dev/null || true; }
 
 # Install packages
+# Keep the Pi 5 kernel, firmware and utility stack current before the desktop
+# starts.  A stale firmware/clock provider can leave vc4-drm unbound, which
+# makes Weston report "no drm device found" even when the HDMI overlay exists.
+install_apt 6 "Raspberry Pi kernel and firmware" linux-image-rpi-2712 raspi-firmware raspi-utils-core
 install_apt 8 "Qt6 framework" qt6-base-dev qt6-declarative-dev libqt6svg6 qt6-svg-plugins libqt6opengl6 qt6-base-dev-tools qt6-qmltooling-plugins qml-qt6 qmlscene-qt6 qml6-module-qtqml qml6-module-qtqml-workerscript qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-window qml6-module-qtquick-virtualkeyboard qml6-module-qt-labs-qmlmodels qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtquick-templates
 install_apt 14 "Python environment" python3-cryptography python3-pip python3-smbus2
 install_apt 20 "WebEngine" qt6-webengine-dev libqt6webenginequick6 qml6-module-qtwebengine
@@ -368,7 +372,7 @@ pct 92 "Preparing Android application store..."
 # status check below is the authoritative gate.
 
 pct 98 "Cleaning up..."
-CORE_PACKAGES="qml-qt6 qt6-svg-plugins libqt6opengl6 qml6-module-qtqml qml6-module-qtqml-workerscript qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-virtualkeyboard qml6-module-qtquick-templates qml6-module-qt-labs-qmlmodels qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtwebengine qt6-wayland weston network-manager wpasupplicant bluez openssh-server avahi-daemon avahi-utils openssl iptables i2c-tools curl wget git unzip python3-pil python3-cryptography python3-smbus2 python3-dbus python3-gi libegl1 libgl1-mesa-dri mesa-vulkan-drivers psmisc util-linux"
+CORE_PACKAGES="linux-image-rpi-2712 raspi-firmware raspi-utils-core qml-qt6 qt6-svg-plugins libqt6opengl6 qml6-module-qtqml qml6-module-qtqml-workerscript qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-virtualkeyboard qml6-module-qtquick-templates qml6-module-qt-labs-qmlmodels qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtwebengine qt6-wayland weston network-manager wpasupplicant bluez openssh-server avahi-daemon avahi-utils openssl iptables i2c-tools curl wget git unzip python3-pil python3-cryptography python3-smbus2 python3-dbus python3-gi libegl1 libgl1-mesa-dri mesa-vulkan-drivers psmisc util-linux"
 CORE_MISSING=""
 for package in $CORE_PACKAGES; do
     dpkg-query -W -f='${Status}' "$package" 2>/dev/null |

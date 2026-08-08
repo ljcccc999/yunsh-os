@@ -1,5 +1,6 @@
 # YUNSH OS v1.0 - Raspberry Pi Boot Config
-# EDID-driven output for mono monitors and binocular SBS display controllers.
+# EDID-driven output for mono monitors and binocular SBS display controllers,
+# with a KMS kernel-command-line fallback for displays that do not assert HPD.
 # Black remains transparent on the target optical display.
 
 # GPU memory
@@ -9,6 +10,8 @@ gpu_mem=256
 # can expose 3840x1080 (two 1920x1080 eyes); a normal monitor stays supported.
 display_auto_detect=1
 hdmi_drive=2
+# Retain the firmware-side hint; KMS hotplug/mode fallback is injected into
+# cmdline.txt by scripts/build-no-hdiutil.sh.
 hdmi_force_hotplug=1
 
 # Display settings

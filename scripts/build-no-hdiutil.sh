@@ -189,12 +189,20 @@ CMDLINE=$(cat "${BUILD_DIR}/yunsh-cmdline-new.txt")
 # but no visible first-boot error when the online package install failed.
 CMDLINE=$(printf '%s\n' "${CMDLINE}" | sed -E \
     -e 's/(^| )(quiet|splash|logo\.nologo|consoleblank=[^ ]+|loglevel=[^ ]+|systemd\.show_status=[^ ]+|systemd\.log_target=[^ ]+|vt\.global_cursor_default=[^ ]+|cma=[^ ]+)( |$)/ /g' \
+    -e 's/(^| )video=HDMI-A-[12]:[^ ]+//g' \
     -e 's/(^| )resize( |$)/ /g' \
     -e 's/  +/ /g')
 case " ${CMDLINE} " in
     *" console=tty1 "*) ;;
     *) CMDLINE="${CMDLINE} console=tty1" ;;
 esac
+# KMS owns the HDMI pipeline on Raspberry Pi 5.  A high-resolution monitor
+# can fail to assert HPD or return usable EDID during boot; force a conservative
+# mode on the primary HDMI0 connector so Weston receives a real DRM device.
+# Keep this on the kernel command line: legacy hdmi_force_hotplug/config mode
+# settings do not replace KMS hotplug detection.
+KMS_VIDEO_MODE="video=HDMI-A-1:1920x1080@60D"
+CMDLINE="${CMDLINE} ${KMS_VIDEO_MODE}"
 # Never hide the userspace hand-off on a fresh image.  A Pi that reaches
 # init-bottom but cannot start systemd must show its last service, not appear
 # frozen on an otherwise healthy rootfs.
@@ -235,6 +243,7 @@ mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtoverlay=vc4-kms-v
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^hdmi_drive=2'
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtparam=i2c_arm=on'
 mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'psi=1'
+mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'video=HDMI-A-1:1920x1080@60D'
 mtype -i "${BOOT_IMG}" ::/YUNSH-FIRSTBOOT.SH >/dev/null
 rm -f "${BOOT_IMG}" "${BUILD_DIR}/yunsh-config-new.txt" "${BUILD_DIR}/yunsh-cmdline-new.txt"
 echo "  ✓ Boot partition written back"
