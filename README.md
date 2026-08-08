@@ -24,7 +24,8 @@ portable Raspberry Pi 5 environment.
 The current local release line is **v3.0.0**, with a circular liquid-glass
 Orbit identity, direct in-island tool approvals, voice speaking-wave feedback,
 interruptible window transitions, and a release image that has passed static
-integrity checks and generic ARM64 graphical startup checks.
+integrity checks, generic ARM64 graphical startup checks, and Raspberry Pi 5
+activation-screen validation through the firmware framebuffer fallback.
 
 ## Experience
 
@@ -204,7 +205,11 @@ The initial setup creates the fixed Linux `yunsh` service account before any
 package transaction, downloads the required desktop and media packages,
 including the Raspberry Pi 5 DRM/KMS, EGL, OpenGL, Vulkan, FFmpeg, and OCR
 runtime, then reboots once into activation. Connect Ethernet before first
-power-on. Activation starts with multilingual Hello, then guides language,
+power-on. On Pi 5 firmware/kernel combinations where the VC4 DRM clock
+provider is unavailable, the image keeps the firmware framebuffer available
+and runs the Qt activation UI through the software `linuxfb` path; this keeps
+the interface visible but is not accelerated DRM/KMS rendering. Activation
+starts with multilingual Hello, then guides language,
 Wi-Fi, optional glasses and YUNSH Link pairing, a local account, optional Orbit
 provider/model/key/voice configuration, and optional Comfort DNA. Completing
 or skipping activation creates a persistent activation marker, so later boots
@@ -241,19 +246,23 @@ scripts/build-no-hdiutil.sh
 
 Review the script and its input image requirements before building. Generated images and large build artifacts are intentionally excluded from version control.
 
-The primary image build leaves display timing to DRM/KMS and the connected
-controller's EDID. It does not force a legacy 1920×1080 kernel mode. YUNSH OS
-outputs one complete frame by default; the current glasses controller is
-responsible for showing that same frame on both displays.
+When DRM/KMS is available, the primary image build leaves display timing to
+the connected controller's EDID and does not force a legacy 1920×1080 kernel
+mode. If the Pi firmware cannot expose a DRM card, YUNSH OS keeps the firmware
+framebuffer and uses Qt's software `linuxfb` path instead. YUNSH OS outputs one
+complete frame by default; the current glasses controller is responsible for
+showing that same frame on both displays.
 
 ## Project status
 
 YUNSH OS is an active prototype for YUNSH spatial computing hardware. The
 v3.0.0 release image has passed XZ/SHA-256, partition and boot configuration,
 ext4, embedded-file, systemd-link, and QML static checks; a generic ARM64
-QEMU virtio-gpu run reached the QML activation surface. These checks do not
-replace Raspberry Pi 5 HDMI/GPU/input, Bluetooth, Android, or optical-display
-hardware validation.
+QEMU virtio-gpu run reached the QML activation surface; and a real Raspberry
+Pi 5 reached and displayed the multilingual activation surface through
+`/dev/fb0`. This real-device check validates visible UI and service startup,
+not accelerated DRM/GPU/Wayland output, Bluetooth, Android, or optical-display
+hardware behavior.
 
 ## License
 
