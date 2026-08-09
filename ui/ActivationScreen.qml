@@ -277,7 +277,7 @@ Rectangle {
                     phoneConnected = data.connected === true || phoneAuthenticated
                     phonePairingProgress = phoneAuthenticated ? 100 : Math.min(78, phonePairingProgress + 7)
                     phonePairingStatus = phoneAuthenticated
-                        ? "手机已验证，请在 Pi 上点击“验证并继续”"
+                        ? "手机已验证，请在 Pi 上点击“继续”"
                         : "正在等待 YUNSH Link 连接…"
                 } catch (error) {
                     phonePairingStatus = "等待连接服务启动，可稍后重试或跳过"
@@ -1032,7 +1032,7 @@ Rectangle {
                         width: 190; height: 46; radius: 23
                         color: "#00D4FF"
                         opacity: phoneAuthenticated ? 1 : 0.42
-                        Text { anchors.centerIn: parent; text: phoneAuthenticated ? "验证并继续" : "等待手机验证"; color: "#00151B"; font.pixelSize: 14; font.weight: Font.Medium }
+                        Text { anchors.centerIn: parent; text: phoneAuthenticated ? "继续" : "等待手机验证"; color: "#00151B"; font.pixelSize: 14; font.weight: Font.Medium }
                         MouseArea { anchors.fill: parent; enabled: phoneAuthenticated; onClicked: currentStep = 5 }
                     }
                 }
