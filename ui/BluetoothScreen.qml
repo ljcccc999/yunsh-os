@@ -20,6 +20,7 @@ Rectangle {
     property var pairedDevices: []
     property var availableDevices: []
     property bool phoneLinked: false
+    property bool phoneAuthenticated: false
     property string phonePairingCode: ""
 
     // ── Signals ────────────────────────────────────────
@@ -69,11 +70,31 @@ Rectangle {
         linkXhr.onreadystatechange = function() {
             if (linkXhr.readyState === XMLHttpRequest.DONE && linkXhr.status === 200) {
                 try {
-                    phoneLinked = JSON.parse(linkXhr.responseText).connected === true
+                    var linkData = JSON.parse(linkXhr.responseText)
+                    phoneLinked = linkData.connected === true
+                    phoneAuthenticated = linkData.authenticated === true
+                    if (!phoneAuthenticated && phonePairingCode.length === 0)
+                        loadPhonePairingCode()
                 } catch(e) {}
             }
         }
         linkXhr.send()
+    }
+
+    function loadPhonePairingCode() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", "http://127.0.0.1:8591/api/link-pairing", true)
+        xhr.timeout = 1200
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return
+            try {
+                var data = JSON.parse(xhr.responseText)
+                if (data.success)
+                    phonePairingCode = data.code || ""
+            } catch(e) {}
+        }
+        xhr.send()
     }
 
     function createPhonePairingCode() {
@@ -103,7 +124,7 @@ Rectangle {
         radius: 18
         color: Qt.rgba(248/255, 252/255, 255/255, 0.82)
         border.width: 1
-        border.color: phoneLinked ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.60)
+        border.color: phoneAuthenticated ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.60)
 
         Row {
             anchors.fill: parent
@@ -121,11 +142,13 @@ Rectangle {
                 Text { text: "YUNSH Link / iPhone"; color: "#111722"; font.pixelSize: 15; font.weight: Font.DemiBold }
                 Text {
                     width: parent.width
-                    text: phoneLinked
-                        ? "已通过一次性密钥验证"
-                        : (phonePairingCode.length > 0
-                            ? "在 YUNSH Link 输入密钥 " + phonePairingCode
-                            : "先在 iPhone 下载 YUNSH Link，再生成一次性密钥")
+                    text: phonePairingCode.length > 0
+                        ? (phoneAuthenticated
+                            ? "新设备验证码：" + phonePairingCode
+                            : "在 YUNSH Link 输入验证码 " + phonePairingCode)
+                        : (phoneAuthenticated
+                            ? "已验证，可自动恢复连接"
+                            : (phoneLinked ? "iPhone 已连接，等待 App 验证" : "先连接 iPhone，再显示一次性验证码"))
                     color: "#5B6874"
                     font.pixelSize: 11
                     elide: Text.ElideRight
@@ -137,14 +160,14 @@ Rectangle {
                 color: "#00D4FF"
                 Text {
                     anchors.centerIn: parent
-                    text: phoneLinked ? "已连接" : "生成密钥"
+                    text: phonePairingCode.length > 0 ? "重新生成" : "显示验证码"
                     color: "#00151B"
                     font.pixelSize: 12
                     font.weight: Font.DemiBold
                 }
                 MouseArea {
                     anchors.fill: parent
-                    enabled: !phoneLinked
+                    enabled: true
                     onClicked: createPhonePairingCode()
                 }
             }
