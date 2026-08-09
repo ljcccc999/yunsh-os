@@ -13,6 +13,11 @@ Item {
     property bool showTrigger: false
     property bool settingsVisible: false
     property bool busy: false
+    property bool keyboardVisible: false
+    property bool reduceMotion: false
+    property string reasoningEffort: "medium"
+    property bool reasoningExpanded: false
+    readonly property real keyboardAvoidance: keyboardVisible && expanded ? -132 : 0
     // The top-right island is reserved for actual system-tool work.
     property bool computerOperationActive: false
     property bool computerApprovalPending: false
@@ -53,6 +58,13 @@ Item {
         expanded = true
         refreshStatus()
         Qt.callLater(function() { promptField.forceActiveFocus() })
+    }
+
+    function constrainPanelToViewport() {
+        if (!panel || panel.width <= 0 || panel.height <= 0)
+            return
+        panel.x = Math.max(24, Math.min(panel.x, orbit.width - panel.width - 24))
+        panel.y = Math.max(56, Math.min(panel.y, orbit.height - panel.height - 24))
     }
 
     function currentModels() {
@@ -211,7 +223,11 @@ Item {
         messagesModel.append({role: "user", content: message})
         promptField.text = ""
         busy = true
-        request("POST", "/v1/chat", {message: message, history: history},
+        request("POST", "/v1/chat", {
+            message: message,
+            history: history,
+            reasoningEffort: reasoningEffort
+        },
                 function(status, body) {
             busy = false
             handleAgentResponse(status, body)
@@ -384,10 +400,11 @@ Item {
     }
 
     Rectangle {
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.verticalCenter: parent.verticalCenter
-        width: Math.min(644, parent.width - 76)
-        height: expanded ? Math.min(624, parent.height - 96) : 0
+        id: panelShadow
+        x: panel.x - 12
+        y: panel.y - 12 + orbit.keyboardAvoidance
+        width: panel.width + 24
+        height: panel.height + 24
         radius: 42
         color: Qt.rgba(0, 0, 0, 0.10)
         opacity: expanded ? 0.62 : 0
@@ -398,7 +415,8 @@ Item {
 
     Rectangle {
         id: panel
-        anchors.centerIn: parent
+        x: (orbit.width - width) / 2
+        y: Math.max(56, (orbit.height - height) / 2)
         width: Math.min(620, parent.width - 100)
         height: expanded ? Math.min(600, parent.height - 120) : 0
         radius: 34
@@ -415,6 +433,16 @@ Item {
         }
         border.width: 1
         border.color: "#FFFFFF"
+
+        transform: Translate {
+            y: orbit.keyboardAvoidance
+            Behavior on y {
+                NumberAnimation {
+                    duration: orbit.reduceMotion ? 0 : 280
+                    easing.type: Easing.OutCubic
+                }
+            }
+        }
 
         Rectangle {
             anchors.fill: parent
@@ -435,6 +463,30 @@ Item {
             color: Qt.rgba(1, 1, 1, 0.96)
         }
 
+        // The title region is a direct-manipulation handle. Interactive
+        // buttons declared later remain above it and keep their own actions.
+        MouseArea {
+            id: panelDragArea
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: 82
+            z: 0
+            cursorShape: Qt.OpenHandCursor
+            preventStealing: true
+            drag.target: panel
+            drag.axis: Drag.XAndYAxis
+            drag.minimumX: 24
+            drag.maximumX: Math.max(24, orbit.width - panel.width - 24)
+            drag.minimumY: 56
+            drag.maximumY: Math.max(56, orbit.height - panel.height - 24)
+            onPressed: cursorShape = Qt.ClosedHandCursor
+            onReleased: {
+                cursorShape = Qt.OpenHandCursor
+                orbit.constrainPanelToViewport()
+            }
+        }
+
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 24
@@ -443,6 +495,13 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 12
+
+                Button {
+                    visible: settingsVisible
+                    text: "‹ 返回"
+                    flat: true
+                    onClicked: settingsVisible = false
+                }
 
                 OrbitGlyph { width: 48; height: 48 }
 
@@ -464,9 +523,10 @@ Item {
                 }
 
                 Button {
-                    text: settingsVisible ? "对话" : "设置"
+                    visible: !settingsVisible
+                    text: "设置"
                     flat: true
-                    onClicked: settingsVisible = !settingsVisible
+                    onClicked: settingsVisible = true
                 }
                 Button {
                     text: "完成"
@@ -540,6 +600,39 @@ Item {
                         text: "Orbit 正在规划、执行并检查结果…"
                         color: "#61707C"
                         font.pixelSize: 12
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 7
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Text {
+                                Layout.fillWidth: true
+                                text: modelName
+                                color: "#40515D"
+                                font.pixelSize: 12
+                                font.weight: Font.DemiBold
+                                elide: Text.ElideRight
+                            }
+                            Button {
+                                flat: true
+                                text: (reasoningEffort === "low" ? "Low"
+                                    : (reasoningEffort === "high" ? "High" : "Medium"))
+                                    + (reasoningExpanded ? " ︿" : " 调节")
+                                onClicked: reasoningExpanded = !reasoningExpanded
+                            }
+                        }
+
+                        ReasoningEffortSlider {
+                            Layout.fillWidth: true
+                            visible: reasoningExpanded
+                            selection: orbit.reasoningEffort
+                            onSelectionCommitted: function(value) {
+                                orbit.reasoningEffort = value
+                            }
+                        }
                     }
 
                     Rectangle {
@@ -713,15 +806,33 @@ Item {
                             placeholderText: "HTTPS API Base URL"
                         }
 
-                        TextField {
-                            id: apiKeyField
+                        Text {
+                            text: "API Key"
+                            color: "#101820"
+                            font.pixelSize: 14
+                            font.weight: Font.DemiBold
+                        }
+                        Row {
                             width: parent.width
-                            placeholderText: apiKeyHint.length
-                                    && provider === configuredProvider
-                                ? "已保存 " + apiKeyHint + "；留空保持不变"
-                                : "输入 API Key"
-                            echoMode: TextInput.Password
-                            selectByMouse: true
+                            spacing: 10
+                            TextField {
+                                id: apiKeyField
+                                width: parent.width - changeKeyButton.width - parent.spacing
+                                placeholderText: apiKeyHint.length
+                                        && provider === configuredProvider
+                                    ? "已保存 " + apiKeyHint + "；输入新 Key 可替换"
+                                    : "输入 API Key"
+                                echoMode: TextInput.Password
+                                selectByMouse: true
+                            }
+                            Button {
+                                id: changeKeyButton
+                                text: "更换"
+                                onClicked: {
+                                    apiKeyField.text = ""
+                                    apiKeyField.forceActiveFocus()
+                                }
+                            }
                         }
 
                         Text {
@@ -822,5 +933,84 @@ Item {
         Behavior on height { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
         Behavior on opacity { NumberAnimation { duration: 200 } }
         Behavior on scale { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+    }
+
+    component ReasoningEffortSlider: Item {
+        id: effortSlider
+        property string selection: "medium"
+        property real progress: selection === "low" ? 0
+            : (selection === "high" ? 1 : 0.5)
+        property bool dragging: false
+        signal selectionCommitted(string value)
+        implicitHeight: 46
+        height: 46
+
+        function updateFromPosition(position, commit) {
+            var usable = Math.max(1, width - 48)
+            progress = Math.max(0, Math.min(1, (position - 24) / usable))
+            if (commit) {
+                var index = Math.max(0, Math.min(2, Math.round(progress * 2)))
+                var value = index === 0 ? "low" : (index === 2 ? "high" : "medium")
+                progress = index / 2
+                selectionCommitted(value)
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: height / 2
+            color: Qt.rgba(1, 1, 1, 0.62)
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.88)
+        }
+        Rectangle {
+            x: 4
+            anchors.verticalCenter: parent.verticalCenter
+            width: Math.max(32, 20 + (parent.width - 40) * effortSlider.progress)
+            height: parent.height - 8
+            radius: height / 2
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: "#00A8FF" }
+                GradientStop { position: 1.0; color: "#0071F5" }
+            }
+        }
+        Repeater {
+            model: 3
+            Rectangle {
+                required property int index
+                width: 9; height: 9; radius: 4.5
+                x: 24 + index * (effortSlider.width - 48) / 2 - width / 2
+                anchors.verticalCenter: parent.verticalCenter
+                color: (index / 2) <= effortSlider.progress
+                    ? Qt.rgba(1, 1, 1, 0.50) : Qt.rgba(0.25, 0.33, 0.38, 0.32)
+            }
+        }
+        Rectangle {
+            width: 34; height: 34; radius: 17
+            x: 24 + (parent.width - 48) * effortSlider.progress - width / 2
+            anchors.verticalCenter: parent.verticalCenter
+            color: "white"
+            border.width: 3
+            border.color: "#007AF5"
+            Behavior on x {
+                enabled: !effortSlider.dragging && !orbit.reduceMotion
+                NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+            }
+        }
+        MouseArea {
+            anchors.fill: parent
+            onPressed: function(mouse) {
+                effortSlider.dragging = true
+                effortSlider.updateFromPosition(mouse.x, false)
+            }
+            onPositionChanged: function(mouse) {
+                if (pressed)
+                    effortSlider.updateFromPosition(mouse.x, false)
+            }
+            onReleased: function(mouse) {
+                effortSlider.dragging = false
+                effortSlider.updateFromPosition(mouse.x, true)
+            }
+        }
     }
 }

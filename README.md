@@ -21,11 +21,10 @@ system world, an optical-display-ready desktop, the system-level Orbit agent,
 connected-device services, and Bluetooth-connected motion tracking in one
 portable Raspberry Pi 5 environment.
 
-The current local release line is **v3.0.0**, with a circular liquid-glass
+The current local release line is **v3.0.1**, with a circular liquid-glass
 Orbit identity, direct in-island tool approvals, voice speaking-wave feedback,
-interruptible window transitions, and a release image that has passed static
-integrity checks, generic ARM64 graphical startup checks, and Raspberry Pi 5
-activation-screen validation through the firmware framebuffer fallback.
+interruptible window transitions, and an updated movable Orbit and spatial
+keyboard interaction model.
 
 ## Experience
 
@@ -46,7 +45,8 @@ activation-screen validation through the firmware framebuffer fallback.
 - 30 Hz head-pose sampling with adjustable smoothing, yaw wrap handling, roll compensation, and one-action recentering.
 - A Dock-free Home workspace with circular liquid-glass application icons,
   visionOS-style 4–5–4 honeycomb placement, automatic 13-app pages, a task
-  switcher, and a glass virtual keyboard.
+  switcher, and a movable glass virtual keyboard with upright or desk-pitched
+  presentation plus pinned or gaze-following behavior.
 - Optional Comfort DNA onboarding with steady, balanced, and responsive local comfort profiles.
 - Focus mode, reduced motion, reduced transparency, and increased contrast.
 - AR-visible white liquid-glass application surfaces over an optical-black transparent canvas.
@@ -71,12 +71,15 @@ then a model, then enter their own API key. DeepSeek, Kimi, and a custom
 OpenAI-compatible endpoint are supported. The credential is encrypted using a
 device-local key and is never returned in full by the local API.
 
-Orbit uses a plan–act–observe–verify loop for multi-step work. It can maintain
+Orbit uses a plan–act–observe–verify loop for multi-step work. Its panel can be
+moved without losing access to the global system entry, and it automatically
+clears the spatial keyboard's input plane when text entry begins. It can maintain
 an explicit task plan, open and manage system surfaces, enter the world layer,
 inspect the live shell state, capture and OCR the display, control screen
 recording, work with files, keep approved memory, execute commands, and verify
-results before replying. DeepSeek runs with thinking mode and maximum reasoning
-effort. The runtime API listens on device loopback only.
+results before replying. A Low/Medium/High reasoning profile mirrors the Orbit
+iPhone composer, while DeepSeek thinking mode remains available. The runtime API
+listens on device loopback only.
 
 Capability switches remain available in Orbit settings, while sensitive tools
 request **Allow Once**, **Always Allow**, or **Deny** on first use. Power,
@@ -261,11 +264,12 @@ showing that same frame on both displays.
 ## Project status
 
 YUNSH OS is an active prototype for YUNSH spatial computing hardware. The
-v3.0.0 release line has passed XZ/SHA-256, partition and boot configuration,
-ext4, embedded-file, systemd-link, and QML static checks. The current local
+v3.0.1 release line is validated through static QML, Python, shell, image
+structure, partition, boot configuration,
+ext4, embedded-file, and systemd-link checks. The current local
 rebuild also carries a read-only confirmed Raspberry Pi 5 firmware/kernel
-payload while keeping activation and runtime user state absent. The exact
-current archive has not been reflashed in this rebuild; earlier hardware
+payload while keeping activation and runtime user state absent. No virtual
+machine or fresh hardware boot is claimed for this update; earlier hardware
 evidence reached and displayed the multilingual activation surface through
 `/dev/fb0`. That real-device check validates visible UI and service startup,
 not accelerated DRM/GPU/Wayland output, Bluetooth, Android, or optical-display

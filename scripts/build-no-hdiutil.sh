@@ -8,7 +8,7 @@ BUILD_DIR="${YUNSH_DIR}/build"
 OUTPUT_DIR="${YUNSH_DIR}/output"
 VERSION_CONF="${BUILD_DIR}/yunsh-version.conf"
 if [ ! -f "${VERSION_CONF}" ]; then
-    printf 'VERSION=v3.0.0\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
+    printf 'VERSION=v3.0.1\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
 fi
 VERSION="$(awk -F= '$1 == "VERSION" { print $2; exit }' "${VERSION_CONF}")"
 BUILD_ID="${YUNSH_BUILD_ID:-$(date +%Y.%m.%d)}"
@@ -16,6 +16,24 @@ if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.]+)?$ ]]; then
     echo "ERROR: invalid VERSION in ${VERSION_CONF}: ${VERSION}"
     exit 1
 fi
+
+# Boot firmware layers are device-specific. The current release foundation is
+# Raspberry Pi 5; another target must be implemented with its own base image
+# and firmware layer before any image bytes are created.
+TARGET_DEVICE="${YUNSH_TARGET_DEVICE:-raspberry-pi-5}"
+case "${TARGET_DEVICE}" in
+    pi5|raspberry-pi-5)
+        TARGET_DEVICE="raspberry-pi-5"
+        PERSISTENT_BOOT_FIRMWARE_DIR="${YUNSH_DIR}/../../启动固件层/Raspberry Pi 5"
+        LEGACY_BOOT_FIRMWARE_DIR="${BUILD_DIR}/pi5-boot-confirmed"
+        ;;
+    *)
+        echo "ERROR: no device foundation is configured for ${TARGET_DEVICE}."
+        echo "Prepare that device's base image and boot firmware layer before building."
+        exit 1
+        ;;
+esac
+
 OUTPUT_FILE="${OUTPUT_DIR}/YUNSH-OS-${VERSION}.img"
 IMAGE_VERSION_CONF="${BUILD_DIR}/yunsh-version-image.conf"
 printf 'VERSION=%s\nBUILD=%s\n' "${VERSION}" "${BUILD_ID}" > "${IMAGE_VERSION_CONF}"
@@ -152,12 +170,50 @@ echo "  Boot partition extracted ($((BOOT_SIZE_BYTES / 1024 / 1024)) MB)"
 
 MTOOL="mcopy -i ${BOOT_IMG}"
 
-# A real Pi 5 SD card may have a newer Raspberry Pi kernel/firmware payload
-# than the cached lite-image base.  When a read-only, confirmed boot payload is
-# present, carry over only firmware/kernel files.  Deliberately exclude
-# config.txt, cmdline.txt, YUNSH firstboot files, cloud-init metadata, and any
-# other state; those are generated below from the clean v3.0.0 source.
-CONFIRMED_BOOT_DIR="${YUNSH_CONFIRMED_BOOT_DIR:-${BUILD_DIR}/pi5-boot-confirmed}"
+# Select the persistent, device-specific boot layer. It contains no settings,
+# activation, pairing, or runtime state.
+if [ -n "${YUNSH_BOOT_FIRMWARE_DIR:-}" ]; then
+    CONFIRMED_BOOT_DIR="${YUNSH_BOOT_FIRMWARE_DIR}"
+elif [ -n "${YUNSH_CONFIRMED_BOOT_DIR:-}" ]; then
+    # Compatibility with the previous environment variable.
+    CONFIRMED_BOOT_DIR="${YUNSH_CONFIRMED_BOOT_DIR}"
+elif [ -d "${PERSISTENT_BOOT_FIRMWARE_DIR}" ]; then
+    CONFIRMED_BOOT_DIR="${PERSISTENT_BOOT_FIRMWARE_DIR}"
+elif [ -d "${LEGACY_BOOT_FIRMWARE_DIR}" ]; then
+    CONFIRMED_BOOT_DIR="${LEGACY_BOOT_FIRMWARE_DIR}"
+else
+    echo "ERROR: missing boot firmware layer for ${TARGET_DEVICE}."
+    echo "Expected: ${PERSISTENT_BOOT_FIRMWARE_DIR}"
+    exit 1
+fi
+
+if [ -f "${CONFIRMED_BOOT_DIR}/DEVICE.conf" ]; then
+    LAYER_DEVICE_ID="$(awk -F= '$1 == "DEVICE_ID" {print $2; exit}' "${CONFIRMED_BOOT_DIR}/DEVICE.conf")"
+    if [ "${LAYER_DEVICE_ID}" != "${TARGET_DEVICE}" ]; then
+        echo "ERROR: firmware layer targets ${LAYER_DEVICE_ID:-unknown}, not ${TARGET_DEVICE}."
+        exit 1
+    fi
+fi
+for required_firmware in \
+    kernel_2712.img \
+    initramfs_2712 \
+    bcm2712-rpi-5-b.dtb \
+    overlays/vc4-kms-v3d-pi5.dtbo; do
+    if [ ! -f "${CONFIRMED_BOOT_DIR}/${required_firmware}" ]; then
+        echo "ERROR: incomplete ${TARGET_DEVICE} firmware layer: ${required_firmware}"
+        exit 1
+    fi
+done
+if [ -f "${CONFIRMED_BOOT_DIR}/SHA256SUMS" ]; then
+    (
+        cd "${CONFIRMED_BOOT_DIR}"
+        shasum -a 256 -c SHA256SUMS >/dev/null
+    ) || {
+        echo "ERROR: boot firmware layer checksum verification failed."
+        exit 1
+    }
+fi
+
 copy_confirmed_boot_file() {
     local source_file="$1"
     local target_file="$2"
@@ -166,7 +222,7 @@ copy_confirmed_boot_file() {
     mcopy -i "${BOOT_IMG}" "$source_file" "::/${target_file}"
 }
 if [ -d "${CONFIRMED_BOOT_DIR}" ]; then
-    echo "→ Applying confirmed Pi 5 firmware payload (no activation/user state)..."
+    echo "→ Applying ${TARGET_DEVICE} boot firmware layer (no settings or runtime state)..."
     for source_file in \
         "${CONFIRMED_BOOT_DIR}"/kernel*.img \
         "${CONFIRMED_BOOT_DIR}"/initramfs* \

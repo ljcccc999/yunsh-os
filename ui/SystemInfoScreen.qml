@@ -12,7 +12,7 @@ Rectangle {
     visible: true
     z: 60
 
-    property string osVersion: "YUNSH OS v3.0.0"
+    property string osVersion: "YUNSH OS v3.0.1"
     property string buildNumber: ""
     property string deviceModel: ""
     property string cpuInfo: ""
@@ -38,7 +38,7 @@ Rectangle {
                 return
             try {
                 var values = JSON.parse(xhr.responseText || "{}")
-                osVersion = "YUNSH OS " + (values.version || "v3.0.0")
+                osVersion = "YUNSH OS " + (values.version || "v3.0.1")
                 buildNumber = values.build || ""
                 deviceModel = values.model || "Raspberry Pi"
                 cpuInfo = values.cpu || "ARM processor"

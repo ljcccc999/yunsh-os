@@ -903,7 +903,7 @@ def upstream_request(config, messages):
         headers={
             "Authorization": f"Bearer {config['apiKey']}",
             "Content-Type": "application/json",
-            "User-Agent": "Orbit-YUNSH-OS/2.0.2",
+            "User-Agent": "Orbit-YUNSH-OS/3.0.1",
         },
         method="POST",
     )
@@ -936,6 +936,12 @@ SYSTEM_PROMPT = """你是 Orbit，YUNSH OS 的系统级 AI Agent。
 关机、重启和破坏性命令永远需要新确认。拒绝后尊重用户决定并提供安全替代方案。
 YUNSH 世界是系统层，不要称其为普通 App。当前显示硬件把一个完整画面同步到左右屏，
 不把 SBS 当作默认模式。用简洁自然的中文回复，明确说明执行结果和失败原因。"""
+
+REASONING_GUIDANCE = {
+    "low": "本轮使用 Low 推理强度：优先快速完成直接任务，减少不必要的展开。",
+    "medium": "本轮使用 Medium 推理强度：在速度、核验和分析深度之间保持平衡。",
+    "high": "本轮使用 High 推理强度：复杂任务先充分检查前提、替代方案和执行结果。",
+}
 
 
 def sanitize_history(history):
@@ -1090,7 +1096,13 @@ def chat(payload):
     message = str(payload.get("message", "")).strip()
     if not message or len(message) > 32000:
         raise ValueError("请输入有效内容")
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    reasoning_effort = str(payload.get("reasoningEffort", "medium")).lower()
+    if reasoning_effort not in REASONING_GUIDANCE:
+        raise ValueError("不支持的推理强度")
+    messages = [{
+        "role": "system",
+        "content": SYSTEM_PROMPT + "\n" + REASONING_GUIDANCE[reasoning_effort],
+    }]
     messages.extend(sanitize_history(payload.get("history")))
     messages.append({"role": "user", "content": message})
     return continue_agent({
@@ -1130,7 +1142,7 @@ def approve(payload):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "Orbit/2.0.2"
+    server_version = "Orbit/3.0.1"
 
     def send_json(self, status, payload):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")

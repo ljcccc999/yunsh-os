@@ -1,4 +1,4 @@
-// YUNSH OS v3.0.0 - Main QML Entry Point
+// YUNSH OS v3.0.1 - Main QML Entry Point
 // Apple-style glass system + Task Switcher + Home Indicator
 
 import QtQuick 2.15
@@ -61,6 +61,27 @@ ApplicationWindow {
     property string activeAppId: ""
     property string androidTarget: "appstore"
     property string lastUiCommandId: ""
+
+    // Native QML apps share the system spatial keyboard. Browser and Android
+    // surfaces keep using their input-method bridges because their editable
+    // elements are not QML TextInput objects.
+    function isNativeEditableItem(item) {
+        if (!item || item.enabled === false || item.visible === false)
+            return false
+        try {
+            return item.text !== undefined
+                    && item.cursorPosition !== undefined
+                    && item.readOnly !== true
+                    && typeof item.forceActiveFocus === "function"
+        } catch (error) {
+            return false
+        }
+    }
+
+    onActiveFocusItemChanged: {
+        if (isNativeEditableItem(activeFocusItem))
+            virtualKeyboard.showFor(activeFocusItem)
+    }
 
     property var openApps: []
     property var appInfo: ({
@@ -661,8 +682,12 @@ ApplicationWindow {
         // ===== VIRTUAL KEYBOARD (visionOS floating panel) =====
         VirtualKeyboard {
             id: virtualKeyboard
-            z: 1000
+            anchors.fill: parent
+            z: 7200
             reduceMotion: yunshOS.reduceMotion
+            headYaw: yunshOS.headYaw
+            headPitch: yunshOS.headPitch
+            pixelsPerDegree: yunshOS.pixelsPerDegree
             onDismissKeyboard: virtualKeyboard.hide()
         }
 
@@ -944,6 +969,8 @@ ApplicationWindow {
             z: 7100
             visible: !firstBoot || activationDone
             showTrigger: false
+            keyboardVisible: virtualKeyboard.visible
+            reduceMotion: yunshOS.reduceMotion
             onToastRequested: function(message) { yunshOS.showToast(message) }
         }
     }
@@ -1745,7 +1772,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        console.log("YUNSH OS UI v3.0.0")
+        console.log("YUNSH OS UI v3.0.1")
         checkFirstBoot()
         showFullScreen()
         applyWindowPreferences()
