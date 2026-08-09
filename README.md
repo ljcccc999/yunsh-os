@@ -215,6 +215,11 @@ provider/model/key/voice configuration, and optional Comfort DNA. Completing
 or skipping activation creates a persistent activation marker, so later boots
 open the desktop directly.
 
+The Pi-side YUNSH Link BLE service advertises the separate OS service and keeps
+phone pairing available during setup. The iPhone still must complete the
+user-approved six-digit pairing flow; a successful Pi-side advertisement does
+not by itself prove a full iPhone session.
+
 Factory reset clears user data, saved Wi-Fi networks, Bluetooth pairings, and the activation marker. It preserves YUNSH OS, installed desktop dependencies, and the current system version, then returns to activation on the next boot.
 
 ## Motion tracking
@@ -262,7 +267,9 @@ QEMU virtio-gpu run reached the QML activation surface; and a real Raspberry
 Pi 5 reached and displayed the multilingual activation surface through
 `/dev/fb0`. This real-device check validates visible UI and service startup,
 not accelerated DRM/GPU/Wayland output, Bluetooth, Android, or optical-display
-hardware behavior.
+hardware behavior. The real-device regression also confirmed the Pi-side
+YUNSH Link BLE advertisement and pairable controller state; a complete iPhone
+pairing session still requires the phone and its user-approved pairing flow.
 
 ## License
 
