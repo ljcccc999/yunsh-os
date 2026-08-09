@@ -558,8 +558,8 @@ add_file "${BUILD_DIR}/yunsh-bluetooth.service" "/etc/systemd/system/yunsh-bluet
 cat > "${BUILD_DIR}/yunsh-link-ble.service" << 'LINKSVC'
 [Unit]
 Description=YUNSH Link Bluetooth Companion
-After=bluetooth.service yunsh-update.service
-Wants=bluetooth.service
+After=bluetooth.service yunsh-bluetooth.service yunsh-update.service
+Wants=bluetooth.service yunsh-bluetooth.service
 ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple

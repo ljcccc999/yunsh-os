@@ -645,8 +645,8 @@ LINKSVC_FILE="${BUILD_DIR}/yunsh-link-ble.service"
 cat > "${LINKSVC_FILE}" << 'LINKSVC'
 [Unit]
 Description=YUNSH Link Bluetooth Companion
-After=bluetooth.service yunsh-update.service
-Wants=bluetooth.service
+After=bluetooth.service yunsh-bluetooth.service yunsh-update.service
+Wants=bluetooth.service yunsh-bluetooth.service
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-link-ble

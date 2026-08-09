@@ -389,8 +389,9 @@ def main():
         pass
     app = Application(bus)
     service = Service(bus, 0, SERVICE_UUID)
-    status = StatusCharacteristic(bus, 0, service)
+    status = StatusCharacteristic(bus, 1, service)
     service.add_characteristic(CommandCharacteristic(bus, 0, service, status))
+    # Keep each D-Bus object path unique: command is char0 and status is char1.
     service.add_characteristic(status)
     app.add_service(service)
     advertisement = Advertisement(bus)

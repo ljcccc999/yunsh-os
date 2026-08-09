@@ -1432,18 +1432,18 @@ Rectangle {
 
         Timer {
             interval: 80
-            running: currentStep === 8 && activationConfigReady && progressValue < 100
+            running: currentStep === 8 && activationConfigReady && initializingStep.progressValue < 100
             repeat: true
             onTriggered: {
-                _timerCount++
+                initializingStep._timerCount++
                 // Simulate progress: fast at first, then slow
-                if (progressValue < 40) progressValue += 2
-                else if (progressValue < 70) progressValue += 1
-                else if (progressValue < 90) progressValue += 1
-                else if (progressValue < 99) progressValue += 1
+                if (initializingStep.progressValue < 40) initializingStep.progressValue += 2
+                else if (initializingStep.progressValue < 70) initializingStep.progressValue += 1
+                else if (initializingStep.progressValue < 90) initializingStep.progressValue += 1
+                else if (initializingStep.progressValue < 99) initializingStep.progressValue += 1
 
-                if (progressValue >= 99) {
-                    progressValue = 100
+                if (initializingStep.progressValue >= 99) {
+                    initializingStep.progressValue = 100
                     running = false
                     // Auto-complete after showing 100%
                     Qt.callLater(function() {

@@ -497,7 +497,14 @@ def socket_server():
 def main():
     log.info("YUNSH Bluetooth Daemon starting...")
     btctl(["power", "on"])
-    btctl(["pairable", "on"])
+    # The Pi adapter can report bluetooth.service as active before the
+    # controller is ready. Retry pairability so phone pairing is not lost to
+    # that startup race.
+    for _ in range(10):
+        success, _ = btctl(["pairable", "on"])
+        if success:
+            break
+        time.sleep(1)
     
     # Initial status dump
     save_status()
@@ -510,6 +517,7 @@ def main():
     while True:
         time.sleep(15)
         try:
+            btctl(["pairable", "on"])
             save_status()
         except Exception as e:
             log.error(f"Status update error: {e}")
