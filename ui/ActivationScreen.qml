@@ -42,6 +42,7 @@ Rectangle {
     property string glassesPairingStatus: "打开眼镜并让它保持在附近"
     property int glassesPairingProgress: 0
     property bool phoneConnected: false
+    property bool phoneAuthenticated: false
     property int phonePairingProgress: 0
     property string phonePairingStatus: "在 iPhone 上打开 YUNSH Link"
     property string phonePairingCode: "••••••"
@@ -272,10 +273,11 @@ Rectangle {
                     return
                 try {
                     var data = JSON.parse(xhr.responseText)
-                    phoneConnected = data.connected === true
-                    phonePairingProgress = phoneConnected ? 100 : Math.min(78, phonePairingProgress + 7)
-                    phonePairingStatus = phoneConnected
-                        ? "iPhone 已连接并完成加密验证"
+                    phoneAuthenticated = data.authenticated === true
+                    phoneConnected = data.connected === true || phoneAuthenticated
+                    phonePairingProgress = phoneAuthenticated ? 100 : Math.min(78, phonePairingProgress + 7)
+                    phonePairingStatus = phoneAuthenticated
+                        ? "手机已验证，请在 Pi 上点击“验证并继续”"
                         : "正在等待 YUNSH Link 连接…"
                 } catch (error) {
                     phonePairingStatus = "等待连接服务启动，可稍后重试或跳过"
@@ -917,6 +919,8 @@ Rectangle {
 
         onVisibleChanged: {
             if (visible) {
+                phoneConnected = false
+                phoneAuthenticated = false
                 phonePairingProgress = 20
                 phonePairingStatus = "在 YUNSH Link 输入下方的一次性密钥"
                 requestPhonePairingCode()
@@ -983,7 +987,7 @@ Rectangle {
                 Text {
                     width: parent.width
                     text: phonePairingStatus
-                    color: phoneConnected ? "#14865D" : "#237489"
+                    color: phoneAuthenticated ? "#14865D" : "#237489"
                     font.pixelSize: 13
                     horizontalAlignment: Text.AlignHCenter
                 }
@@ -1000,15 +1004,15 @@ Rectangle {
                         spacing: 4
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: phoneConnected ? "✓ 安全控制通道已建立" : phonePairingCode
+                            text: phoneAuthenticated ? "✓ 手机已验证" : phonePairingCode
                             color: "#00AFCF"
-                            font.pixelSize: phoneConnected ? 17 : 31
+                            font.pixelSize: phoneAuthenticated ? 17 : 31
                             font.weight: Font.Bold
-                            font.letterSpacing: phoneConnected ? 0 : 7
+                            font.letterSpacing: phoneAuthenticated ? 0 : 7
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: phoneConnected ? "密钥已使用并失效" : "10 分钟有效 · 仅在 YUNSH Link 中输入"
+                            text: phoneAuthenticated ? "首次验证已完成，后续自动恢复连接" : "10 分钟有效 · 仅在 YUNSH Link 中输入"
                             color: "#64717D"
                             font.pixelSize: 11
                         }
@@ -1027,9 +1031,9 @@ Rectangle {
                     Rectangle {
                         width: 190; height: 46; radius: 23
                         color: "#00D4FF"
-                        opacity: phoneConnected ? 1 : 0.42
-                        Text { anchors.centerIn: parent; text: "继续"; color: "#00151B"; font.pixelSize: 14; font.weight: Font.Medium }
-                        MouseArea { anchors.fill: parent; enabled: phoneConnected; onClicked: currentStep = 5 }
+                        opacity: phoneAuthenticated ? 1 : 0.42
+                        Text { anchors.centerIn: parent; text: phoneAuthenticated ? "验证并继续" : "等待手机验证"; color: "#00151B"; font.pixelSize: 14; font.weight: Font.Medium }
+                        MouseArea { anchors.fill: parent; enabled: phoneAuthenticated; onClicked: currentStep = 5 }
                     }
                 }
             }
