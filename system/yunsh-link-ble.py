@@ -99,6 +99,24 @@ def verify_pairing_code(code, device: str) -> bool:
     return True
 
 
+def revoke_trusted_device(device: str) -> bool:
+    """Remove only the currently connected iPhone's trust on this Pi."""
+    if not trusted_device(device):
+        return False
+
+    try:
+        atomic_write_json(
+            LINK_PAIRING_PATH,
+            {"code": "", "createdAt": time.time(), "expiresAt": 0, "used": True},
+        )
+        os.unlink(LINK_TRUST_PATH)
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return False
+    return True
+
+
 def note_link_activity(options=None, authorized=False) -> None:
     device = ""
     if options:
@@ -170,6 +188,7 @@ def compact_status(result: dict) -> dict:
         "ua": bool(result.get("update_available", False)),
         "s": result.get("state", "error" if result.get("error") else "ready"),
         "d": str(detail)[:24],
+        "r": str(result.get("result", ""))[:24],
         "gc": bool(glasses.get("connected", False)),
         "gb": glasses.get("battery"),
         "gv": glasses.get("battery_mv"),
@@ -320,6 +339,19 @@ class CommandCharacteristic(Characteristic):
                     {
                         "authorized": authorized,
                         "result": "phone_paired" if authorized else "invalid_pairing_key",
+                    }
+                )
+                return
+            if action == "unpair_phone":
+                if not authorized:
+                    raise ValueError("phone pairing is not active")
+                revoked = revoke_trusted_device(device)
+                LAST_AUTHORIZED = False
+                note_link_activity(options, False)
+                self.status.refresh(
+                    {
+                        "authorized": False,
+                        "result": "phone_unpaired" if revoked else "phone_unpair_failed",
                     }
                 )
                 return
