@@ -152,6 +152,42 @@ echo "  Boot partition extracted ($((BOOT_SIZE_BYTES / 1024 / 1024)) MB)"
 
 MTOOL="mcopy -i ${BOOT_IMG}"
 
+# A real Pi 5 SD card may have a newer Raspberry Pi kernel/firmware payload
+# than the cached lite-image base.  When a read-only, confirmed boot payload is
+# present, carry over only firmware/kernel files.  Deliberately exclude
+# config.txt, cmdline.txt, YUNSH firstboot files, cloud-init metadata, and any
+# other state; those are generated below from the clean v3.0.0 source.
+CONFIRMED_BOOT_DIR="${YUNSH_CONFIRMED_BOOT_DIR:-${BUILD_DIR}/pi5-boot-confirmed}"
+copy_confirmed_boot_file() {
+    local source_file="$1"
+    local target_file="$2"
+    [ -f "$source_file" ] || return 0
+    mdel -i "${BOOT_IMG}" "::/${target_file}" 2>/dev/null || true
+    mcopy -i "${BOOT_IMG}" "$source_file" "::/${target_file}"
+}
+if [ -d "${CONFIRMED_BOOT_DIR}" ]; then
+    echo "→ Applying confirmed Pi 5 firmware payload (no activation/user state)..."
+    for source_file in \
+        "${CONFIRMED_BOOT_DIR}"/kernel*.img \
+        "${CONFIRMED_BOOT_DIR}"/initramfs* \
+        "${CONFIRMED_BOOT_DIR}"/*.dtb \
+        "${CONFIRMED_BOOT_DIR}"/*.elf \
+        "${CONFIRMED_BOOT_DIR}"/*.dat \
+        "${CONFIRMED_BOOT_DIR}"/bootcode.bin \
+        "${CONFIRMED_BOOT_DIR}"/LICENCE.broadcom; do
+        [ -f "$source_file" ] || continue
+        copy_confirmed_boot_file "$source_file" "$(basename "$source_file")"
+    done
+    for source_file in \
+        "${CONFIRMED_BOOT_DIR}"/overlays/README \
+        "${CONFIRMED_BOOT_DIR}"/overlays/overlay_map.dtb \
+        "${CONFIRMED_BOOT_DIR}"/overlays/*.dtbo; do
+        [ -f "$source_file" ] || continue
+        copy_confirmed_boot_file "$source_file" "overlays/$(basename "$source_file")"
+    done
+    echo "  ✓ Confirmed firmware payload applied"
+fi
+
 # Modify config.txt --- extract, modify, write back
 echo ""
 echo "→ config.txt..."
@@ -197,7 +233,7 @@ CMDLINE=$(cat "${BUILD_DIR}/yunsh-cmdline-new.txt")
 # original quiet/splash settings could leave a working Pi 5 with HDMI signal
 # but no visible first-boot error when the online package install failed.
 CMDLINE=$(printf '%s\n' "${CMDLINE}" | sed -E \
-    -e 's/(^| )(quiet|splash|logo\.nologo|consoleblank=[^ ]+|loglevel=[^ ]+|systemd\.show_status=[^ ]+|systemd\.log_target=[^ ]+|vt\.global_cursor_default=[^ ]+|cma=[^ ]+)( |$)/ /g' \
+    -e 's/(^| )(quiet|splash|logo\.nologo|consoleblank=[^ ]+|loglevel=[^ ]+|systemd\.show_status=[^ ]+|systemd\.log_target=[^ ]+|systemd\.log_level=[^ ]+|systemd\.default_standard_output=[^ ]+|vt\.global_cursor_default=[^ ]+|cma=[^ ]+|psi=[^ ]+|module_blacklist=[^ ]+)( |$)/ /g' \
     -e 's/(^| )video=HDMI-A-[12]:[^ ]+//g' \
     -e 's/(^| )resize( |$)/ /g' \
     -e 's/  +/ /g')
@@ -216,17 +252,13 @@ case " ${CMDLINE} " in
     *" console=tty1 "*) ;;
     *) CMDLINE="${CMDLINE} console=tty1" ;;
 esac
-# If VC4 cannot obtain the Pi 5 firmware clocks, loading vc4/v3d removes the
-# firmware-provided simple framebuffer before Qt can use it. Keep that
-# framebuffer available as a deterministic graphical fallback.
-case " ${CMDLINE} " in
-    *" module_blacklist=vc4,v3d "*) ;;
-    *) CMDLINE="${CMDLINE} module_blacklist=vc4,v3d" ;;
-esac
 # Never hide the userspace hand-off on a fresh image.  A Pi that reaches
 # init-bottom but cannot start systemd must show its last service, not appear
 # frozen on an otherwise healthy rootfs.
-echo "${CMDLINE} consoleblank=0 loglevel=4 vt.global_cursor_default=1 cma=256M psi=1 systemd.show_status=1 systemd.log_target=console systemd.log_level=info systemd.default_standard_output=journal+console" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
+# Keep the blacklist at the end of the canonical line, matching the confirmed
+# Pi 5 SD layout while retaining the firmware-framebuffer fallback.
+CMDLINE=$(printf '%s\n' "${CMDLINE}" | sed -E 's/  +/ /g; s/^ +//; s/ +$//')
+echo "${CMDLINE} consoleblank=0 loglevel=4 vt.global_cursor_default=1 cma=256M psi=1 systemd.show_status=1 systemd.log_target=console systemd.log_level=info systemd.default_standard_output=journal+console module_blacklist=vc4,v3d" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
 mdel -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null || true
 mcopy -i "${BOOT_IMG}" "${BUILD_DIR}/yunsh-cmdline-new.txt" ::/cmdline.txt
 echo "  ✓ cmdline.txt modified"

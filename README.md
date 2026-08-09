@@ -261,11 +261,13 @@ showing that same frame on both displays.
 ## Project status
 
 YUNSH OS is an active prototype for YUNSH spatial computing hardware. The
-v3.0.0 release image has passed XZ/SHA-256, partition and boot configuration,
-ext4, embedded-file, systemd-link, and QML static checks; a generic ARM64
-QEMU virtio-gpu run reached the QML activation surface; and a real Raspberry
-Pi 5 reached and displayed the multilingual activation surface through
-`/dev/fb0`. This real-device check validates visible UI and service startup,
+v3.0.0 release line has passed XZ/SHA-256, partition and boot configuration,
+ext4, embedded-file, systemd-link, and QML static checks. The current local
+rebuild also carries a read-only confirmed Raspberry Pi 5 firmware/kernel
+payload while keeping activation and runtime user state absent. The exact
+current archive has not been reflashed in this rebuild; earlier hardware
+evidence reached and displayed the multilingual activation surface through
+`/dev/fb0`. That real-device check validates visible UI and service startup,
 not accelerated DRM/GPU/Wayland output, Bluetooth, Android, or optical-display
 hardware behavior. The real-device regression also confirmed the Pi-side
 YUNSH Link BLE advertisement and pairable controller state; a complete iPhone
