@@ -1,0 +1,111 @@
+name: Assemble v3.0.2 release image
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Install reconstruction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential zstd
+
+      - name: Download verified base and exact patches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p work/patches
+          gh release download v3.0.0 \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern 'YUNSH-OS-v3.0.0.img.xz' \
+            --dir work
+          printf '%s  %s\n' \
+            'cffc5c4b1f1b106f2424dad25badc98c4f613ac912f677f04c8b17943602d3fc' \
+            'work/YUNSH-OS-v3.0.0.img.xz' | sha256sum -c -
+
+          patch_asset_id="$(
+            gh api "repos/$GITHUB_REPOSITORY/releases" \
+              --jq '.[] | select(.tag_name == "v3.0.2") | .assets[] | select(.name == "YUNSH-v3.0.0-to-v3.0.2-exact-patches.tar.gz") | .id' |
+              head -n 1
+          )"
+          test -n "$patch_asset_id"
+          printf '%s' "$patch_asset_id" > work/patch-asset-id
+          gh api \
+            -H 'Accept: application/octet-stream' \
+            "repos/$GITHUB_REPOSITORY/releases/assets/$patch_asset_id" \
+            > work/patches.tar.gz
+          printf '%s  %s\n' \
+            '1c85639302382f17ce62a9fcf6d19132cb9e10246bf86ef5fbe3734abdcd20b8' \
+            'work/patches.tar.gz' | sha256sum -c -
+          tar -xzf work/patches.tar.gz -C work/patches
+
+      - name: Reconstruct the exact v3.0.2 raw image
+        run: |
+          set -euo pipefail
+          xz -dk work/YUNSH-OS-v3.0.0.img.xz
+          : > work/YUNSH-OS-v3.0.2.img
+          for suffix in 00 01 02 03 04 05; do
+            index=$((10#$suffix))
+            dd if=work/YUNSH-OS-v3.0.0.img \
+              of=work/base.part \
+              bs=1M skip=$((index * 1024)) count=1024 status=none
+            zstd -q -d \
+              --patch-from=work/base.part \
+              "work/patches/patch.$suffix.zst" \
+              -o work/new.part
+            test "$(stat -c '%s' work/new.part)" = '1073741824'
+            cat work/new.part >> work/YUNSH-OS-v3.0.2.img
+            rm -f work/base.part work/new.part
+          done
+          printf '%s  %s\n' \
+            '1ccb7e9192c5f097513be3bacc4cfc370430c4f43979e4b05ef0fa41f74703ec' \
+            'work/YUNSH-OS-v3.0.2.img' | sha256sum -c -
+          rm -f work/YUNSH-OS-v3.0.0.img work/YUNSH-OS-v3.0.0.img.xz
+
+      - name: Compress with the pinned XZ implementation
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 \
+            -o work/xz-5.8.3.tar.xz \
+            'https://github.com/tukaani-project/xz/releases/download/v5.8.3/xz-5.8.3.tar.xz'
+          printf '%s  %s\n' \
+            'fff1ffcf2b0da84d308a14de513a1aa23d4e9aa3464d17e64b9714bfdd0bbfb6' \
+            'work/xz-5.8.3.tar.xz' | sha256sum -c -
+          tar -xf work/xz-5.8.3.tar.xz -C work
+          cd work/xz-5.8.3
+          ./configure --disable-shared --disable-doc --disable-scripts
+          make -j2 src/xz/xz
+          ./src/xz/xz -T2 -f ../YUNSH-OS-v3.0.2.img
+          cd ../..
+          printf '%s  %s\n' \
+            '8e60247d35f832e7d1cd89f9018eab0c60ebb69331d7f05326da9e554596b0b7' \
+            'work/YUNSH-OS-v3.0.2.img.xz' | sha256sum -c -
+          work/xz-5.8.3/src/xz/xz -t work/YUNSH-OS-v3.0.2.img.xz
+
+      - name: Upload, verify, publish, and remove the temporary patch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release upload v3.0.2 \
+            work/YUNSH-OS-v3.0.2.img.xz \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber
+          uploaded_digest="$(
+            gh release view v3.0.2 \
+              --repo "$GITHUB_REPOSITORY" \
+              --json assets \
+              --jq '.assets[] | select(.name == "YUNSH-OS-v3.0.2.img.xz") | .digest'
+          )"
+          test "$uploaded_digest" = 'sha256:8e60247d35f832e7d1cd89f9018eab0c60ebb69331d7f05326da9e554596b0b7'
+          gh release edit v3.0.2 --repo "$GITHUB_REPOSITORY" --draft=false
+          gh api -X DELETE \
+            "repos/$GITHUB_REPOSITORY/releases/assets/$(cat work/patch-asset-id)"
