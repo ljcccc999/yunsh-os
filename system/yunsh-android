@@ -165,12 +165,17 @@ trigger_setup_retry() {
 }
 
 status_json() {
-    python3 - "$STATE_FILE" "$READY_FILE" "$WAYDROID_DATA_DIR" "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" <<'PY'
+    local service_failed="false"
+    if systemctl is-failed --quiet yunsh-android-setup.service 2>/dev/null; then
+        service_failed="true"
+    fi
+    python3 - "$STATE_FILE" "$READY_FILE" "$WAYDROID_DATA_DIR" "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" "$service_failed" <<'PY'
 import json
 import os
 import sys
+import time
 
-state_path, ready_path, data_path, wayland_path = sys.argv[1:]
+state_path, ready_path, data_path, wayland_path, service_failed = sys.argv[1:]
 try:
     with open(state_path, encoding="utf-8") as handle:
         data = json.load(handle)
@@ -181,6 +186,31 @@ except (OSError, ValueError):
         "message": "Android setup has not started",
         "error": None,
     }
+
+# A failed oneshot can leave the last "preparing" state on disk, which made
+# the UI spin forever even though systemd had already stopped retrying.  Also
+# surface genuinely stale setup attempts instead of pretending that progress
+# is still being made.  The timeout is deliberately longer than the 30-minute
+# image download timeout and firstboot package installation window.
+try:
+    updated = int(data.get("updated", 0) or 0)
+except (TypeError, ValueError):
+    updated = 0
+if service_failed == "true" and data.get("state") not in ("ready", "display_unavailable"):
+    data.update({
+        "state": "error",
+        "progress": min(int(data.get("progress", 0) or 0), 95),
+        "message": "Android 后台准备失败",
+        "error": "后台服务已停止，请点击“重试准备”",
+    })
+elif (data.get("state") in ("pending", "installing", "initializing") and
+      updated and time.time() - updated > 2700):
+    data.update({
+        "state": "error",
+        "progress": min(int(data.get("progress", 0) or 0), 95),
+        "message": "Android 后台准备超时",
+        "error": "准备时间过长，请检查网络后点击“重试准备”",
+    })
 initialized = all(
     os.path.isfile(os.path.join(data_path, relative)) and
     os.path.getsize(os.path.join(data_path, relative)) > 0

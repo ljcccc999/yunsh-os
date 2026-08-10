@@ -293,7 +293,6 @@ ApplicationWindow {
             headTrackingConnected: yunshOS.headTrackingEnabled
             reduceMotion: yunshOS.reduceMotion
             appIconsManuallyHidden: yunshOS.appIconsManuallyHidden
-            inputMethodLabel: virtualKeyboard.inputMethodLabel
             desktopIconToggleEnabled: yunshOS.hasVisibleAppWindows()
             onOpenSettings: switchTo(settingsWindow, "settings")
             onOpenAbout: switchTo(systemInfoWindow, "systeminfo")
@@ -400,6 +399,7 @@ ApplicationWindow {
             stereoEnabled: yunshOS.stereoEnabled
             reduceMotion: yunshOS.reduceMotion
             appIconsManuallyHidden: yunshOS.appIconsManuallyHidden
+            inputMethodLabel: virtualKeyboard.inputMethodLabel
             onOpenNetwork: { controlCenter.hide(); switchTo(networkWindow, "network") }
             onOpenBluetooth: { controlCenter.hide(); switchTo(bluetoothWindow, "bluetooth") }
             onOpenSettings: { controlCenter.hide(); switchTo(settingsWindow, "settings") }
@@ -879,7 +879,10 @@ ApplicationWindow {
             id: homeIndicator
             z: 300
             reduceMotion: yunshOS.reduceMotion
-            visible: homeScreen.visible || (taskSwitcher.visible && yunshOS.openApps.length > 0)
+            // Keep the home hit zone alive while a minimized/background app is
+            // tracked, even if the home surface was briefly hidden during the
+            // minimize animation.
+            visible: homeScreen.visible || yunshOS.openApps.length > 0 || taskSwitcher.visible
             onSwipeUpTriggered: showTaskSwitcher()
             onClicked: showTaskSwitcher()
         }
@@ -1187,7 +1190,52 @@ ApplicationWindow {
         if (w) switchTo(w, appId)
     }
 
+    // Reconcile the switcher model from the actual window state immediately
+    // before it is shown.  A minimize click changes the window first; relying
+    // only on the earlier openApps snapshot could therefore leave the
+    // background app absent from the swipe-up view.
+    function syncOpenAppsFromWindows() {
+        var next = []
+        var seen = {}
+        var candidates = workspaceWindowEntries()
+        candidates.push({appId: androidTarget, window: androidWindow})
+        for (var i = 0; i < candidates.length; i++) {
+            var entry = candidates[i]
+            var window = entry.window
+            if (!window || (!window.visible && !window.isMinimized))
+                continue
+            var appId = entry.appId
+            if (!appId || seen[appId])
+                continue
+            seen[appId] = true
+            var info = appInfo[appId] || {
+                name: window.appTitle || appId,
+                icon: "/usr/share/yunsh/icons/android-app.svg",
+                color: "#7C77A8"
+            }
+            next.push({appId: appId, name: info.name, icon: info.icon,
+                       color: info.color, minimized: window.isMinimized === true})
+        }
+        // Keep any tracked Android app that is represented by the shared
+        // compositor surface, even when its current target changed.
+        for (var j = 0; j < openApps.length; j++) {
+            var old = openApps[j]
+            if (!old || seen[old.appId])
+                continue
+            if (old.appId.indexOf("android:") === 0 && androidWindow.isMinimized) {
+                seen[old.appId] = true
+                next.push(old)
+            }
+        }
+        openApps = next
+    }
+
     function showTaskSwitcher() {
+        syncOpenAppsFromWindows()
+        // The home surface remains the background behind the switcher; this
+        // also keeps the bottom hit zone alive after minimizing the last
+        // visible window.
+        homeScreen.visible = true
         taskSwitcher.show()
     }
 

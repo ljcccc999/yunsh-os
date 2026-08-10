@@ -126,7 +126,7 @@ Rectangle {
             height: 6
             radius: 3
             color: Qt.rgba(70/255, 88/255, 102/255, 0.18)
-            visible: !runtimeReady
+            visible: !runtimeReady && setupState !== "error" && setupState !== "display_unavailable"
 
             Rectangle {
                 width: parent.width * Math.max(0.05, setupProgress / 100)
@@ -179,7 +179,9 @@ Rectangle {
             wrapMode: Text.WordWrap
             text: runtimeReady
                 ? "应用在隔离的 Android 容器中运行"
-                : "系统桌面可以正常使用；Android 镜像会在后台下载并自动重试"
+                : (setupState === "error" || setupState === "display_unavailable"
+                    ? "系统桌面可以正常使用；修复网络或图形环境后可重新准备 Android"
+                    : "系统桌面可以正常使用；Android 镜像会在后台下载并自动重试")
             color: Qt.rgba(23/255, 33/255, 42/255, 0.46)
             font.pixelSize: 12
         }

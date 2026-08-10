@@ -247,8 +247,10 @@ Item {
                             Text {
                                 anchors.right: parent.right; anchors.rightMargin: 20
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: "🟢"
-                                font.pixelSize: 14
+                                text: appData.minimized ? "后台 · 点击操作" : "运行中 · 点击操作"
+                                color: appData.minimized ? "#087F5B" : "#61707C"
+                                font.pixelSize: 10
+                                font.weight: Font.Medium
                             }
                         }
 
@@ -300,6 +302,7 @@ Item {
 
                         // === Main click area (switch to app) ===
                         MouseArea {
+                            z: 10
                             anchors.fill: parent
                             anchors.margins: 10
                             hoverEnabled: true
