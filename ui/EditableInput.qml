@@ -11,7 +11,7 @@ TextInput {
     // by TextField.  Declare and render them here because this lightweight
     // component is used inside custom glass input surfaces.
     property string placeholderText: ""
-    property color placeholderTextColor: Qt.rgba(1, 1, 1, 0.35)
+    property color placeholderTextColor: Qt.rgba(23/255, 33/255, 42/255, 0.38)
     property var _menuItems: [
         {label: "粘贴", action: "paste"},
         {label: "全选", action: "selectAll"}
@@ -35,15 +35,15 @@ TextInput {
         padding: 4
 
         background: Rectangle {
-            color: Qt.rgba(12/255, 12/255, 25/255, 0.75)
+            color: Qt.rgba(248/255, 252/255, 255/255, 0.92)
             radius: 12
-            border.color: Qt.rgba(0/255, 212/255, 255/255, 0.12)
+            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.94)
             border.width: 1
 
             // Frost
             Rectangle {
                 anchors.fill: parent; radius: 12
-                color: Qt.rgba(255/255, 255/255, 255/255, 0.02)
+                color: Qt.rgba(205/255, 239/255, 255/255, 0.12)
             }
             // Top highlight
             Rectangle {
@@ -51,7 +51,7 @@ TextInput {
                 anchors.left: parent.left; anchors.leftMargin: 8
                 anchors.right: parent.right; anchors.rightMargin: 8
                 height: 1; radius: 1
-                color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+                color: Qt.rgba(255/255, 255/255, 255/255, 0.88)
             }
         }
 
@@ -71,7 +71,7 @@ TextInput {
                     Text {
                         anchors.centerIn: parent
                         text: modelData.label
-                        color: "#FFFFFF"
+                        color: "#17212A"
                         font.pixelSize: 13
                     }
 

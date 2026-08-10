@@ -16,9 +16,9 @@ Rectangle {
 
     height: 74
     radius: 16
-    color: Qt.rgba(1, 1, 1, 0.045)
+    color: Qt.rgba(1, 1, 1, 0.62)
     border.width: 1
-    border.color: Qt.rgba(1, 1, 1, 0.055)
+    border.color: Qt.rgba(1, 1, 1, 0.86)
 
     Text {
         anchors.left: parent.left
@@ -26,7 +26,7 @@ Rectangle {
         anchors.top: parent.top
         anchors.topMargin: 12
         text: root.title
-        color: "#FFFFFF"
+        color: "#17212A"
         font.pixelSize: 14
         font.weight: Font.Medium
     }
@@ -37,7 +37,7 @@ Rectangle {
         anchors.top: parent.top
         anchors.topMargin: 12
         text: Number(root.value).toFixed(root.stepSize < 1 ? 1 : 0) + root.suffix
-        color: "#00D4FF"
+        color: "#008EAA"
         font.pixelSize: 13
         font.weight: Font.DemiBold
     }
@@ -64,7 +64,7 @@ Rectangle {
             width: slider.availableWidth
             height: 6
             radius: 3
-            color: Qt.rgba(1, 1, 1, 0.1)
+            color: Qt.rgba(70/255, 88/255, 102/255, 0.18)
 
             Rectangle {
                 width: slider.visualPosition * parent.width

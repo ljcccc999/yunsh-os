@@ -15,7 +15,7 @@ Rectangle {
     property real cardCornerRadius: 14
     property bool showArrow: false
     property color accentColor: "transparent"
-    property color titleColor: "#FFFFFF"
+    property color titleColor: "#17212A"
     property bool isToggle: false
     property bool toggleState: false
     property alias contentItem: customContent.data
@@ -28,13 +28,13 @@ Rectangle {
     radius: cardCornerRadius
     
     // Glass background
-    color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
+    color: Qt.rgba(248/255, 252/255, 255/255, 0.66)
     
     // Hover/press state
     property bool pressed: false
     
     // Subtle border
-    border.color: Qt.rgba(255/255, 255/255, 255/255, 0.03)
+    border.color: Qt.rgba(255/255, 255/255, 255/255, 0.86)
     border.width: 1
 
     Item {
@@ -62,7 +62,7 @@ Rectangle {
         width: iconSize + 12
         height: iconSize + 12
         radius: (iconSize + 12) / 2
-        color: Qt.rgba(255/255, 255/255, 255/255, 0.05)
+        color: Qt.rgba(220/255, 245/255, 255/255, 0.52)
         visible: iconSource.length > 0
         
         Image {
@@ -92,7 +92,7 @@ Rectangle {
         
         Text {
             text: subtitle
-            color: "#666680"
+            color: "#61707C"
             font.pixelSize: 12
             visible: subtitle.length > 0
         }
@@ -104,7 +104,7 @@ Rectangle {
         anchors.rightMargin: 16
         anchors.verticalCenter: parent.verticalCenter
         text: "›"
-        color: "#555568"
+        color: "#53616C"
         font.pixelSize: 20
         font.weight: Font.Light
         visible: showArrow
@@ -117,7 +117,7 @@ Rectangle {
         anchors.rightMargin: 14
         anchors.verticalCenter: parent.verticalCenter
         width: 48; height: 28; radius: 14
-        color: toggleState ? Qt.rgba(0/255, 200/255, 83/255, 0.6) : Qt.rgba(255/255, 255/255, 255/255, 0.08)
+        color: toggleState ? Qt.rgba(0/255, 200/255, 83/255, 0.78) : Qt.rgba(90/255, 108/255, 122/255, 0.24)
         visible: isToggle
         
         // Toggle knob
@@ -145,8 +145,8 @@ Rectangle {
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
-        onEntered: parent.color = Qt.rgba(0/255, 212/255, 255/255, 0.06)
-        onExited: parent.color = Qt.rgba(255/255, 255/255, 255/255, 0.04)
+        onEntered: parent.color = Qt.rgba(225/255, 248/255, 255/255, 0.82)
+        onExited: parent.color = Qt.rgba(248/255, 252/255, 255/255, 0.66)
         onClicked: {
             if (glassCard.isToggle) {
                 glassCard.toggleState = !glassCard.toggleState
@@ -155,8 +155,8 @@ Rectangle {
                 glassCard.clicked()
             }
         }
-        onPressed: parent.color = Qt.rgba(0/255, 212/255, 255/255, 0.1)
-        onReleased: parent.color = Qt.rgba(0/255, 212/255, 255/255, 0.06)
+        onPressed: parent.color = Qt.rgba(205/255, 243/255, 255/255, 0.92)
+        onReleased: parent.color = Qt.rgba(225/255, 248/255, 255/255, 0.82)
     }
     
     // Hover scale effect

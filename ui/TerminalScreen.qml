@@ -27,7 +27,7 @@ Rectangle {
         closePolicy: Popup.CloseOnPressOutside
 
         background: Rectangle {
-            color: Qt.rgba(12/255, 12/255, 25/255, 0.75)
+            color: Qt.rgba(248/255, 252/255, 255/255, 0.94)
             radius: 12
             border.color: Qt.rgba(0/255, 212/255, 255/255, 0.12)
             border.width: 1
@@ -35,7 +35,7 @@ Rectangle {
             // Frost
             Rectangle {
                 anchors.fill: parent; radius: 12
-                color: Qt.rgba(255/255, 255/255, 255/255, 0.02)
+                color: Qt.rgba(205/255, 239/255, 255/255, 0.12)
             }
             // Top highlight
             Rectangle {
@@ -43,7 +43,7 @@ Rectangle {
                 anchors.left: parent.left; anchors.leftMargin: 8
                 anchors.right: parent.right; anchors.rightMargin: 8
                 height: 1; radius: 1
-                color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+                color: Qt.rgba(255/255, 255/255, 255/255, 0.88)
             }
         }
 
@@ -63,7 +63,7 @@ Rectangle {
                     Text {
                         anchors.centerIn: parent
                         text: modelData.label
-                        color: "#FFFFFF"
+                        color: "#17212A"
                         font.pixelSize: 13
                     }
 
@@ -98,7 +98,7 @@ Rectangle {
         closePolicy: Popup.CloseOnPressOutside
 
         background: Rectangle {
-            color: Qt.rgba(12/255, 12/255, 25/255, 0.75)
+            color: Qt.rgba(248/255, 252/255, 255/255, 0.94)
             radius: 12
             border.color: Qt.rgba(0/255, 212/255, 255/255, 0.12)
             border.width: 1
@@ -106,7 +106,7 @@ Rectangle {
             // Frost
             Rectangle {
                 anchors.fill: parent; radius: 12
-                color: Qt.rgba(255/255, 255/255, 255/255, 0.02)
+                color: Qt.rgba(205/255, 239/255, 255/255, 0.12)
             }
             // Top highlight
             Rectangle {
@@ -114,7 +114,7 @@ Rectangle {
                 anchors.left: parent.left; anchors.leftMargin: 8
                 anchors.right: parent.right; anchors.rightMargin: 8
                 height: 1; radius: 1
-                color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+                color: Qt.rgba(255/255, 255/255, 255/255, 0.88)
             }
         }
 
@@ -134,7 +134,7 @@ Rectangle {
                     Text {
                         anchors.centerIn: parent
                         text: modelData.label
-                        color: "#FFFFFF"
+                        color: "#17212A"
                         font.pixelSize: 13
                     }
 
@@ -177,13 +177,13 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         height: 44
-        color: Qt.rgba(12/255, 12/255, 28/255, 0.8)
+        color: Qt.rgba(255/255, 255/255, 255/255, 0.58)
 
         Text {
             anchors.left: parent.left; anchors.leftMargin: 16
             anchors.verticalCenter: parent.verticalCenter
             text: "终端"
-            color: "#FFFFFF"
+            color: "#17212A"
             font.pixelSize: 16
             font.weight: Font.Medium
         }
@@ -226,7 +226,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: inputBar.top
-        color: "#0d0d1a"
+            color: Qt.rgba(248/255, 252/255, 255/255, 0.52)
 
         // Tap on empty = dismiss popups
         MouseArea {
@@ -258,7 +258,7 @@ Rectangle {
                 id: outputText
                 width: outputFlick.width - 4
                 text: ""
-                color: "#00FF88"
+                color: "#087F5B"
                 font.family: "Menlo, Courier, monospace"
                 font.pixelSize: 13
                 font.weight: Font.Normal
@@ -271,7 +271,7 @@ Rectangle {
 
                 // Selection color
                 selectionColor: Qt.rgba(0/255, 212/255, 255/255, 0.25)
-                selectedTextColor: "#FFFFFF"
+                selectedTextColor: "#17212A"
 
                 // iOS-style: long press → if text selected show copy menu
                 // if no selection → start selection mode
@@ -366,7 +366,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         height: 44
-        color: Qt.rgba(12/255, 12/255, 28/255, 0.8)
+        color: Qt.rgba(255/255, 255/255, 255/255, 0.60)
 
         // Prompt
         Text {
@@ -374,7 +374,7 @@ Rectangle {
             anchors.left: parent.left; anchors.leftMargin: 12
             anchors.verticalCenter: parent.verticalCenter
             text: "$"
-            color: "#00FF88"
+            color: "#087F5B"
             font.family: "Menlo, Courier, monospace"
             font.pixelSize: 14
             font.weight: Font.Bold
@@ -387,14 +387,14 @@ Rectangle {
             anchors.right: sendBtn.left; anchors.rightMargin: 8
             anchors.verticalCenter: parent.verticalCenter
             height: 30
-            color: "#FFFFFF"
+            color: "#17212A"
             font.family: "Menlo, Courier, monospace"
             font.pixelSize: 13
             background: Rectangle {
                 color: "transparent"
             }
             placeholderText: "输入命令..."
-            placeholderTextColor: Qt.rgba(255/255, 255/255, 255/255, 0.2)
+            placeholderTextColor: Qt.rgba(23/255, 33/255, 42/255, 0.38)
 
             // iOS-style: long press → paste popup
             MouseArea {

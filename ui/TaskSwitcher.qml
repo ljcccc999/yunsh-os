@@ -119,12 +119,12 @@ Item {
                         clip: true
 
                         radius: 32
-                        color: Qt.rgba(14/255, 14/255, 32/255, 0.65)
+                        color: Qt.rgba(248/255, 252/255, 255/255, 0.80)
 
                         // Frost layer
                         Rectangle {
                             anchors.fill: parent; radius: 32
-                            color: Qt.rgba(255/255, 255/255, 255/255, 0.02)
+                            color: Qt.rgba(205/255, 239/255, 255/255, 0.14)
                         }
 
                         // Top highlight
@@ -133,11 +133,11 @@ Item {
                             anchors.left: parent.left; anchors.leftMargin: 20
                             anchors.right: parent.right; anchors.rightMargin: 20
                             height: 1; radius: 1
-                            color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
+                            color: Qt.rgba(255/255, 255/255, 255/255, 0.84)
                         }
 
                         // Border
-                        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.90)
                         border.width: 1
 
                         // === App Preview (gradient background) ===
@@ -155,17 +155,17 @@ Item {
                                         parseInt(appData.color.substring(1,3), 16) / 255,
                                         parseInt(appData.color.substring(3,5), 16) / 255,
                                         parseInt(appData.color.substring(5,7), 16) / 255,
-                                        0.12
-                                    )
-                                }
-                                GradientStop { position: 1.0; color: Qt.rgba(10/255, 10/255, 25/255, 0.4) }
+                                    0.20
+                                )
+                            }
+                                GradientStop { position: 1.0; color: Qt.rgba(238/255, 248/255, 255/255, 0.56) }
                             }
 
                             // Frost overlay on preview
                             Rectangle {
                                 anchors.fill: parent
                                 radius: 32
-                                color: Qt.rgba(255/255, 255/255, 255/255, 0.02)
+                                color: Qt.rgba(255/255, 255/255, 255/255, 0.10)
                             }
 
                             // App icon in preview center
@@ -207,7 +207,7 @@ Item {
                                     Rectangle {
                                         width: parent.width * (0.5 + Math.random() * 0.4)
                                         height: 6; radius: 3
-                                        color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                                        color: Qt.rgba(46/255, 68/255, 82/255, 0.12)
                                     }
                                 }
                             }
@@ -219,9 +219,9 @@ Item {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.bottom: parent.bottom
-                            color: Qt.rgba(8/255, 8/255, 20/255, 0.3)
+                            color: Qt.rgba(255/255, 255/255, 255/255, 0.58)
 
-                            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.02)
+                            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.76)
                             border.width: 1
 
                             // Top separator glass line
@@ -230,7 +230,7 @@ Item {
                                 anchors.left: parent.left
                                 anchors.right: parent.right
                                 height: 1
-                                color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                                color: Qt.rgba(255/255, 255/255, 255/255, 0.82)
                             }
 
                             // App name
@@ -238,7 +238,7 @@ Item {
                                 anchors.left: parent.left; anchors.leftMargin: 20
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: appData.name
-                                color: "#FFFFFF"
+                                color: "#17212A"
                                 font.pixelSize: 18
                                 font.weight: Font.Medium
                             }
@@ -306,11 +306,11 @@ Item {
                             cursorShape: Qt.PointingHandCursor
                             onEntered: {
                                 parent.scale = 1.03
-                                parent.color = Qt.rgba(18/255, 18/255, 40/255, 0.7)
+                                parent.color = Qt.rgba(225/255, 248/255, 255/255, 0.90)
                             }
                             onExited: {
                                 parent.scale = 1.0
-                                parent.color = Qt.rgba(14/255, 14/255, 32/255, 0.65)
+                                parent.color = Qt.rgba(248/255, 252/255, 255/255, 0.80)
                             }
                             onClicked: {
                                 taskSwitcher.switchToApp(appData.appId)

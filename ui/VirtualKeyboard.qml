@@ -106,8 +106,8 @@ Item {
         x: (keyboardPanel.width - width) / 2
         y: Math.max(20, keyboardPanel.height - height - 40)
         radius: 32
-        color: Qt.rgba(250/255, 250/255, 255/255, 0.15)
-        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
+        color: Qt.rgba(248/255, 252/255, 255/255, 0.82)
+        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.90)
         border.width: 1
         antialiasing: true
         layer.enabled: true
@@ -146,8 +146,8 @@ Item {
         Rectangle {
             anchors.fill: parent; radius: parent.radius
             gradient: Gradient {
-                GradientStop { position: 0.0; color: Qt.rgba(225/255, 242/255, 248/255, 0.06) }
-                GradientStop { position: 1.0; color: Qt.rgba(255/255, 255/255, 255/255, 0.14) }
+                GradientStop { position: 0.0; color: Qt.rgba(205/255, 239/255, 255/255, 0.14) }
+                GradientStop { position: 1.0; color: Qt.rgba(255/255, 255/255, 255/255, 0.30) }
             }
         }
 
@@ -161,14 +161,14 @@ Item {
 
             Rectangle {
                 width: 72; height: 28; radius: 14
-                color: tiltMouse.pressed ? Qt.rgba(0, 0.83, 1, 0.30)
-                    : Qt.rgba(1, 1, 1, 0.13)
+                color: tiltMouse.pressed ? Qt.rgba(0, 0.83, 1, 0.34)
+                    : Qt.rgba(1, 1, 1, 0.58)
                 border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.18)
+                border.color: Qt.rgba(1, 1, 1, 0.82)
                 Text {
                     anchors.centerIn: parent
                     text: keyboardPanel.tilted ? "倾斜" : "正向"
-                    color: "white"
+                    color: "#17212A"
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
                 }
@@ -181,14 +181,14 @@ Item {
 
             Rectangle {
                 width: 80; height: 28; radius: 14
-                color: pinMouse.pressed ? Qt.rgba(0, 0.83, 1, 0.30)
-                    : Qt.rgba(1, 1, 1, 0.13)
+                color: pinMouse.pressed ? Qt.rgba(0, 0.83, 1, 0.34)
+                    : Qt.rgba(1, 1, 1, 0.58)
                 border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.18)
+                border.color: Qt.rgba(1, 1, 1, 0.82)
                 Text {
                     anchors.centerIn: parent
                     text: keyboardPanel.pinMode === "pinned" ? "固定" : "跟随视线"
-                    color: "white"
+                    color: "#17212A"
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
                 }
@@ -207,7 +207,7 @@ Item {
             anchors.left: parent.left; anchors.leftMargin: 28
             anchors.right: parent.right; anchors.rightMargin: 28
             height: 1; radius: 1
-            color: Qt.rgba(255/255, 255/255, 255/255, 0.12)
+            color: Qt.rgba(255/255, 255/255, 255/255, 0.84)
         }
 
         // Shadow beneath
@@ -257,15 +257,15 @@ Item {
             width: 28; height: 28; radius: 14
             color: closeBtn.containsMouse
                 ? Qt.rgba(255/255, 95/255, 87/255, 0.3)  // red tint on hover
-                : Qt.rgba(255/255, 255/255, 255/255, 0.06)
-            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
+                : Qt.rgba(255/255, 255/255, 255/255, 0.60)
+            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.84)
 
             Text {
                 anchors.centerIn: parent
                 text: "✕"
                 color: closeBtn.containsMouse
                     ? "#FF5F57"
-                    : Qt.rgba(1, 1, 1, 0.35)
+                    : Qt.rgba(23/255, 33/255, 42/255, 0.55)
                 font.pixelSize: 12
                 font.weight: Font.Light
             }
@@ -284,7 +284,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             y: 10
             width: 36; height: 4; radius: 2
-            color: Qt.rgba(255/255, 255/255, 255/255, 0.2)
+            color: Qt.rgba(23/255, 33/255, 42/255, 0.28)
             MouseArea {
                 anchors.fill: parent; anchors.margins: -6
                 onClicked: keyboardPanel.hide()
@@ -395,9 +395,9 @@ Item {
 
                 Rectangle {
                     width: 180; height: 48; radius: 24
-                    color: kma.containsMouse ? Qt.rgba(255/255, 255/255, 255/255, 0.25) : Qt.rgba(255/255, 255/255, 255/255, 0.1)
-                    border.color: Qt.rgba(255/255, 255/255, 255/255, 0.08); border.width: 1
-                    Text { anchors.centerIn: parent; text: "space"; color: Qt.rgba(1,1,1,0.3); font.pixelSize: 13; font.weight: Font.Light }
+                    color: kma.containsMouse ? Qt.rgba(225/255, 248/255, 255/255, 0.88) : Qt.rgba(255/255, 255/255, 255/255, 0.62)
+                    border.color: Qt.rgba(255/255, 255/255, 255/255, 0.86); border.width: 1
+                    Text { anchors.centerIn: parent; text: "space"; color: Qt.rgba(23/255,33/255,42/255,0.62); font.pixelSize: 13; font.weight: Font.Light }
                     MouseArea { id: kma; anchors.fill: parent; hoverEnabled: true
                         onClicked: keyboardPanel.spacePressed() }
                 }
@@ -416,11 +416,11 @@ Item {
         id: roundKey
         width: 48; height: 48; radius: width / 2
         color: kArea.containsMouse
-            ? (accent ? Qt.rgba(0/255, 212/255, 255/255, 0.35) : Qt.rgba(255/255, 255/255, 255/255, 0.25))
-            : (accent ? Qt.rgba(0/255, 212/255, 255/255, 0.2) : Qt.rgba(255/255, 255/255, 255/255, 0.1))
+            ? (accent ? Qt.rgba(0/255, 212/255, 255/255, 0.38) : Qt.rgba(225/255, 248/255, 255/255, 0.90))
+            : (accent ? Qt.rgba(0/255, 212/255, 255/255, 0.24) : Qt.rgba(255/255, 255/255, 255/255, 0.62))
         border.color: kArea.containsMouse || accent
             ? Qt.rgba(0/255, 212/255, 255/255, kArea.containsMouse ? 0.25 : 0.18)
-            : Qt.rgba(255/255, 255/255, 255/255, 0.06)
+            : Qt.rgba(255/255, 255/255, 255/255, 0.86)
         border.width: 1
         property alias label: keyText.text
         property bool accent: false
@@ -428,12 +428,12 @@ Item {
 
         Rectangle {
             anchors.fill: parent; radius: parent.radius
-            color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+            color: Qt.rgba(210/255, 241/255, 255/255, 0.10)
         }
 
         Text {
             id: keyText; anchors.centerIn: parent
-            color: accent ? "#00D4FF" : Qt.rgba(1,1,1,0.7)
+            color: accent ? "#008EAA" : "#17212A"
             font.pixelSize: 16; font.weight: accent ? Font.Bold : Font.Light
         }
 

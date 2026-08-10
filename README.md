@@ -21,10 +21,11 @@ system world, an optical-display-ready desktop, the system-level Orbit agent,
 connected-device services, and Bluetooth-connected motion tracking in one
 portable Raspberry Pi 5 environment.
 
-The current local release line is **v3.0.1**, with a circular liquid-glass
+The current local release line is **v3.0.2**, with a circular liquid-glass
 Orbit identity, direct in-island tool approvals, voice speaking-wave feedback,
-interruptible window transitions, and an updated movable Orbit and spatial
-keyboard interaction model.
+interruptible window transitions, a movable Orbit and spatial keyboard, and a
+desktop icon shelf that recedes when an application window opens, all within a
+system-wide bright liquid-glass material language.
 
 ## Experience
 
@@ -47,10 +48,25 @@ keyboard interaction model.
   visionOS-style 4–5–4 honeycomb placement, automatic 13-app pages, a task
   switcher, and a movable glass virtual keyboard with upright or desk-pitched
   presentation plus pinned or gaze-following behavior.
+- Application icons recede automatically when a window opens. Selecting the
+  exposed desktop toggles the temporary shelf; after restoration, 30 seconds
+  without opening an app or changing icon pages hides it again. Opening any
+  second app also hides it immediately. The YUNSH system menu offers a
+  persistent show/hide control, and a manual hide choice is not cancelled by
+  a desktop click. Application glass is slightly denser for optical-display
+  legibility.
 - Optional Comfort DNA onboarding with steady, balanced, and responsive local comfort profiles.
 - Focus mode, reduced motion, reduced transparency, and increased contrast.
-- AR-visible white liquid-glass application surfaces over an optical-black transparent canvas.
-- Black background designed for transparent optical displays; white glass surfaces preserve legibility.
+- One bright liquid-glass material language across visible system surfaces,
+  including activation, applications, menus, task switching, keyboard,
+  dialogs, browser and terminal chrome, and recovery UI.
+- A clean optical-display startup path keeps kernel and systemd diagnostics in
+  the journal and on the serial console instead of painting command output on
+  tty1 behind the YUNSH splash and desktop.
+- AR-visible white liquid-glass surfaces over an optical-black transparent
+  canvas. Dark text is used on bright glass where it provides stronger
+  contrast; optical black remains available for transparent canvas, dimming,
+  calibration, and media content.
 
 The shell uses one comfortable shared focal plane for both eyes. True stereo application content requires a future per-eye rendering path and is not claimed by the current shell compositor. Spatial layouts are view-relative: head rotation preserves the desktop arrangement as the user looks around. Real-world room anchoring requires future 6DoF visual tracking hardware and is not represented as a current feature.
 
@@ -264,7 +280,7 @@ showing that same frame on both displays.
 ## Project status
 
 YUNSH OS is an active prototype for YUNSH spatial computing hardware. The
-v3.0.1 release line is validated through static QML, Python, shell, image
+v3.0.2 release line is validated through static QML, Python, shell, image
 structure, partition, boot configuration,
 ext4, embedded-file, and systemd-link checks. The current local
 rebuild also carries a read-only confirmed Raspberry Pi 5 firmware/kernel

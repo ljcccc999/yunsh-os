@@ -20,6 +20,12 @@ Item {
     /* ---- Data model ---- */
     property var updateHistory: [
         {
+            version: "3.0.2",
+            date: "2026-08-10",
+            changelog: "空间桌面与全系统液态玻璃更新。\n• 打开任意 App 窗口时自动隐藏桌面 App 图标\n• 空白桌面可切换临时图标栏，30 秒无操作后再次隐藏\n• 图标翻页会重置计时，打开第二个 App 会立即隐藏\n• YUNSH 菜单手动隐藏后，空白桌面不会恢复\n• 激活、App、菜单、任务切换、键盘与系统工具统一明亮液态玻璃\n• 黑色保留为 AR 透明画布，亮色玻璃使用高对比深色文字",
+            build: "build 2026.0810"
+        },
+        {
             version: "2.0.2",
             date: "2026-07-29",
             changelog: "系统世界与 Orbit 更新。\n• YUNSH META Universe 升级为系统级持续世界层，不再作为普通 App\n• Orbit 系统级 Agent 每次开机自动启动，可选 DeepSeek、Kimi 或兼容提供商与模型\n• 用户 API Key 设备级加密保存，系统权限默认开启且可随时关闭\n• 激活时可配置或跳过 Orbit，默认甜美女声并提供男声选项\n• USB/蓝牙麦克风语音识别与自然语音组件在桌面后后台准备\n• 全局 YUNSH / METAVERSE / Orbit 菜单栏与液态玻璃系统图标\n• 当前眼镜默认输出单个完整画面，由显示驱动同步到左右屏；高级 SBS 仅为未来驱动保留",
@@ -67,15 +73,15 @@ Item {
             width: 40
             height: 40
             radius: 20
-            iconSource: "/usr/share/yunsh/icons/chevron-left-white.svg"
-            bgColor: Qt.rgba(1, 1, 1, 0.15)
+            iconSource: "/usr/share/yunsh/icons/chevron-left-dark.svg"
+            bgColor: Qt.rgba(1, 1, 1, 0.62)
             onClicked: root.backToUpdates()
         }
 
         Text {
             anchors.centerIn: parent
             text: "更新历史"
-            color: "#FFFFFF"
+            color: "#17212A"
             font.pixelSize: 28
             font.weight: Font.Medium
             font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
@@ -88,7 +94,7 @@ Item {
             anchors.topMargin: -4
             anchors.horizontalCenter: parent.horizontalCenter
             text: updateHistory.length + " 个版本"
-            color: Qt.rgba(1, 1, 1, 0.35)
+            color: Qt.rgba(23/255, 33/255, 42/255, 0.46)
             font.pixelSize: 13
             font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
         }
@@ -122,7 +128,7 @@ Item {
                 y: 24
                 width: 2
                 height: parent.height + listView.spacing - 32
-                color: Qt.rgba(1, 1, 1, 0.08)
+                color: Qt.rgba(23/255, 33/255, 42/255, 0.12)
                 visible: index < updateHistory.length - 1
             }
 
@@ -135,18 +141,18 @@ Item {
                 radius: 9
                 color: index === 0
                        ? Qt.rgba(0.345, 0.886, 0.51, 0.4)
-                       : Qt.rgba(1, 1, 1, 0.15)
+                       : Qt.rgba(70/255, 88/255, 102/255, 0.18)
                 border.width: 2
                 border.color: index === 0
                               ? Qt.rgba(0.345, 0.886, 0.51, 0.7)
-                              : Qt.rgba(1, 1, 1, 0.2)
+                              : Qt.rgba(70/255, 88/255, 102/255, 0.28)
 
                 Rectangle {
                     anchors.centerIn: parent
                     width: 6
                     height: 6
                     radius: 3
-                    color: index === 0 ? "#30D158" : Qt.rgba(1, 1, 1, 0.3)
+                    color: index === 0 ? "#30D158" : Qt.rgba(23/255, 33/255, 42/255, 0.42)
                 }
             }
 
@@ -180,7 +186,7 @@ Item {
 
                         Text {
                             text: "YUNSH OS v" + modelData.version
-                            color: index === 0 ? "#FFFFFF" : Qt.rgba(1, 1, 1, 0.8)
+                            color: index === 0 ? "#17212A" : Qt.rgba(23/255, 33/255, 42/255, 0.78)
                             font.pixelSize: index === 0 ? 22 : 20
                             font.weight: index === 0 ? Font.Bold : Font.Medium
                             font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
@@ -211,7 +217,7 @@ Item {
                     /* Date */
                     Text {
                         text: modelData.date
-                        color: Qt.rgba(1, 1, 1, 0.4)
+                        color: Qt.rgba(23/255, 33/255, 42/255, 0.52)
                         font.pixelSize: 13
                         font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
                     }
@@ -220,7 +226,7 @@ Item {
                     Text {
                         visible: modelData.build && modelData.build.length > 0
                         text: modelData.build
-                        color: Qt.rgba(1, 1, 1, 0.3)
+                        color: Qt.rgba(23/255, 33/255, 42/255, 0.42)
                         font.pixelSize: 11
                         font.family: "SF Pro Mono, Menlo, Courier, monospace"
                         font.letterSpacing: 0.5
@@ -230,7 +236,7 @@ Item {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 1
-                        color: Qt.rgba(1, 1, 1, 0.06)
+                        color: Qt.rgba(23/255, 33/255, 42/255, 0.12)
                         Layout.topMargin: 4
                         Layout.bottomMargin: 4
                     }
@@ -238,7 +244,7 @@ Item {
                     /* Changelog */
                     Text {
                         text: modelData.changelog
-                        color: Qt.rgba(1, 1, 1, 0.6)
+                        color: Qt.rgba(23/255, 33/255, 42/255, 0.70)
                         font.pixelSize: 13
                         font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
                         lineHeight: 1.6
@@ -270,7 +276,7 @@ Item {
                     Text {
                         Layout.alignment: Qt.AlignHCenter
                         text: "暂无更新记录"
-                        color: Qt.rgba(1, 1, 1, 0.4)
+                        color: Qt.rgba(23/255, 33/255, 42/255, 0.52)
                         font.pixelSize: 17
                         font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
                     }
@@ -287,7 +293,7 @@ Item {
         height: 30
         gradient: Gradient {
             GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0) }
-            GradientStop { position: 1.0; color: "#000000" }
+            GradientStop { position: 1.0; color: Qt.rgba(248/255, 252/255, 255/255, 0.36) }
         }
     }
 }

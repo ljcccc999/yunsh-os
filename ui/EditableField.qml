@@ -6,6 +6,8 @@ import QtQuick.Controls 2.15
 
 TextField {
     id: field
+    color: "#17212A"
+    placeholderTextColor: Qt.rgba(23/255, 33/255, 42/255, 0.38)
 
     // Long press → popup menu
     property var _menuItems: [
@@ -20,15 +22,15 @@ TextField {
         padding: 4
 
         background: Rectangle {
-            color: Qt.rgba(12/255, 12/255, 25/255, 0.75)
+            color: Qt.rgba(248/255, 252/255, 255/255, 0.92)
             radius: 12
-            border.color: Qt.rgba(0/255, 212/255, 255/255, 0.12)
+            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.94)
             border.width: 1
 
             // Frost
             Rectangle {
                 anchors.fill: parent; radius: 12
-                color: Qt.rgba(255/255, 255/255, 255/255, 0.02)
+                color: Qt.rgba(205/255, 239/255, 255/255, 0.12)
             }
             // Top highlight
             Rectangle {
@@ -36,7 +38,7 @@ TextField {
                 anchors.left: parent.left; anchors.leftMargin: 8
                 anchors.right: parent.right; anchors.rightMargin: 8
                 height: 1; radius: 1
-                color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+                color: Qt.rgba(255/255, 255/255, 255/255, 0.88)
             }
         }
 
@@ -56,7 +58,7 @@ TextField {
                     Text {
                         anchors.centerIn: parent
                         text: modelData.label
-                        color: "#FFFFFF"
+                        color: "#17212A"
                         font.pixelSize: 13
                     }
 

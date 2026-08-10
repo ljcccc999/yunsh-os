@@ -80,15 +80,15 @@ Item {
         width: calibrationTitle.width + 56
         height: 54
         radius: 27
-        color: Qt.rgba(18/255, 18/255, 32/255, 0.92)
+        color: Qt.rgba(248/255, 252/255, 255/255, 0.90)
         border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.18)
+        border.color: Qt.rgba(1, 1, 1, 0.94)
 
         Text {
             id: calibrationTitle
             anchors.centerIn: parent
             text: "双目校准 · 让左右眼中心图形舒适重合"
-            color: "#FFFFFF"
+            color: "#17212A"
             font.pixelSize: 18
             font.weight: Font.DemiBold
         }
@@ -101,7 +101,7 @@ Item {
         width: calibrationInfo.width + 60
         height: 62
         radius: 22
-        color: Qt.rgba(18/255, 18/255, 32/255, 0.92)
+        color: Qt.rgba(248/255, 252/255, 255/255, 0.90)
         border.width: 1
         border.color: Qt.rgba(0, 212/255, 1, 0.3)
 
@@ -111,7 +111,7 @@ Item {
             text: "IPD " + ipdMm.toFixed(1) + " mm   ·   融合偏移 "
                   + eyeShiftPx.toFixed(0) + " px   ·   FOV "
                   + fieldOfView.toFixed(0) + "°"
-            color: "#DDEEFF"
+            color: "#26343E"
             font.pixelSize: 15
             font.weight: Font.Medium
         }

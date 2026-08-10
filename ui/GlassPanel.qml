@@ -9,15 +9,15 @@ Rectangle {
     id: glassPanel
     
     // === Customizable Properties ===
-    property real glassOpacity: 0.35  // Base opacity (higher = less transparent)
+    property real glassOpacity: 0.82  // Bright enough to remain materialized in AR
     property real cornerRadius: 24    // Large radius for visionOS feel
     property real blurRadius: 36     // Heavy gaussian-like blur
     property real shadowDepth: 24    // Shadow spread in pixels
     property real shadowOpacity: 0.6 // Shadow darkness
-    property color glassTint: Qt.rgba(0.45, 0.5, 0.7, 0.08) // Slight blue tint
+    property color glassTint: Qt.rgba(190/255, 229/255, 1, 0.10)
     property bool showBorder: true
-    property color panelColor: Qt.rgba(245/255, 249/255, 255/255, Math.max(0.14, glassOpacity * 0.58))
-    property color borderColor: Qt.rgba(255/255, 255/255, 255/255, 0.28)
+    property color panelColor: Qt.rgba(248/255, 252/255, 255/255, Math.max(0.64, glassOpacity))
+    property color borderColor: Qt.rgba(255/255, 255/255, 255/255, 0.86)
     property real borderWidth: 1
     property bool glowBorder: false
     property alias contentItem: customContent.data
@@ -45,7 +45,7 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: cornerRadius
-        color: Qt.rgba(255/255, 255/255, 255/255, 0.03)
+        color: Qt.rgba(255/255, 255/255, 255/255, 0.12)
     }
     
     // Top highlight (visionOS signature light edge)
@@ -55,7 +55,7 @@ Rectangle {
         anchors.right: parent.right; anchors.rightMargin: 12
         height: 1
         radius: 1
-        color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
+        color: Qt.rgba(255/255, 255/255, 255/255, 0.78)
     }
     
     // Bottom shadow gradient

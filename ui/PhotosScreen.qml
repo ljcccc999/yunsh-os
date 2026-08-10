@@ -84,7 +84,7 @@ Rectangle {
         Text {
             id: headerText
             anchors.centerIn: parent; text: "相册"
-            color: "#FFFFFF"; font.pixelSize: 20; font.weight: Font.Bold
+            color: "#17212A"; font.pixelSize: 20; font.weight: Font.Bold
         }
 
         // Photo count
@@ -92,7 +92,7 @@ Rectangle {
             anchors.right: parent.right; anchors.rightMargin: 24
             anchors.verticalCenter: parent.verticalCenter
             text: gridView.count + " 张"
-            color: Qt.rgba(255/255, 255/255, 255/255, 0.3)
+            color: Qt.rgba(23/255, 33/255, 42/255, 0.46)
             font.pixelSize: 13
         }
     }
@@ -128,8 +128,8 @@ Rectangle {
             Rectangle {
                 anchors.fill: parent
                 radius: 12
-                color: Qt.rgba(18/255, 18/255, 32/255, 0.4)
-                border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                color: Qt.rgba(255/255, 255/255, 255/255, 0.64)
+                border.color: Qt.rgba(255/255, 255/255, 255/255, 0.88)
                 border.width: 1
 
                 // Thumbnail
@@ -165,7 +165,7 @@ Rectangle {
                     anchors.fill: parent
                     hoverEnabled: true
                     onEntered: parent.color = Qt.rgba(0/255, 212/255, 255/255, 0.08)
-                    onExited: parent.color = Qt.rgba(18/255, 18/255, 32/255, 0.4)
+                    onExited: parent.color = Qt.rgba(255/255, 255/255, 255/255, 0.64)
                     onClicked: {
                         currentPhoto = folderModel.get(index, "filePath") || ""
                         showGrid = false
@@ -180,7 +180,7 @@ Rectangle {
             anchors.centerIn: parent
             text: "暂无照片\n截图后在这里查看"
             horizontalAlignment: Text.AlignHCenter
-            color: Qt.rgba(255/255, 255/255, 255/255, 0.15)
+            color: Qt.rgba(23/255, 33/255, 42/255, 0.44)
             font.pixelSize: 16
             lineHeight: 1.5
             visible: gridView.count === 0
@@ -219,15 +219,15 @@ Rectangle {
             anchors.bottomMargin: 32
             anchors.horizontalCenter: parent.horizontalCenter
             width: 200; height: 44; radius: 22
-            color: Qt.rgba(12/255, 12/255, 25/255, 0.6)
-            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
+            color: Qt.rgba(248/255, 252/255, 255/255, 0.84)
+            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.92)
             border.width: 1
             z: 2
 
             // Frost
             Rectangle {
                 anchors.fill: parent; radius: 22
-                color: Qt.rgba(255/255, 255/255, 255/255, 0.02)
+                color: Qt.rgba(205/255, 239/255, 255/255, 0.12)
             }
 
             Row {

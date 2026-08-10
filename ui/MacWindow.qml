@@ -222,7 +222,7 @@ Rectangle {
         // a bright white liquid-glass base so they remain visible in glasses.
         color: macWindow.reduceTransparency
             ? Qt.rgba(248/255, 252/255, 255/255, 0.98)
-            : Qt.rgba(248/255, 252/255, 255/255, 0.82)
+            : Qt.rgba(248/255, 252/255, 255/255, 0.88)
         opacity: macWindow.focusDimmed ? 0.22 : 1.0
         border.width: macWindow.highContrast ? 2 : 1
         border.color: macWindow.highContrast
@@ -343,9 +343,9 @@ Rectangle {
                 width: 32; height: 32; radius: 8
                 color: spatialButtonMouse.containsMouse
                     ? Qt.rgba(0/255, 212/255, 255/255, 0.18)
-                    : Qt.rgba(1, 1, 1, 0.04)
+                    : Qt.rgba(1, 1, 1, 0.58)
                 border.color: macWindow.spatialPlacement === "front"
-                    ? Qt.rgba(1, 1, 1, 0.06)
+                    ? Qt.rgba(1, 1, 1, 0.84)
                     : Qt.rgba(0/255, 212/255, 255/255, 0.32)
 
                 Text {
@@ -353,7 +353,7 @@ Rectangle {
                     text: macWindow.spatialPlacement === "left" ? "◀"
                         : macWindow.spatialPlacement === "right" ? "▶"
                         : macWindow.spatialPlacement === "far" ? "◌" : "▣"
-                    color: macWindow.spatialPlacement === "front" ? Qt.rgba(1, 1, 1, 0.65) : "#00D4FF"
+                    color: macWindow.spatialPlacement === "front" ? "#26343E" : "#008EAA"
                     font.pixelSize: 14
                 }
                 MouseArea {
@@ -372,7 +372,7 @@ Rectangle {
                     text: macWindow.spatialPlacement === "front" ? "空间位置：正前"
                         : macWindow.spatialPlacement === "left" ? "空间位置：左侧"
                         : macWindow.spatialPlacement === "right" ? "空间位置：右侧" : "空间位置：远处"
-                    color: Qt.rgba(1, 1, 1, 0.55)
+                    color: Qt.rgba(23/255, 33/255, 42/255, 0.58)
                     font.pixelSize: 10
                     visible: spatialButtonMouse.containsMouse && !macWindow.placementMenuVisible
                 }
@@ -385,11 +385,11 @@ Rectangle {
                     height: 72
                     radius: 18
                     color: macWindow.reduceTransparency
-                        ? "#252532" : Qt.rgba(22/255, 22/255, 38/255, 0.94)
+                        ? "#F8FCFF" : Qt.rgba(248/255, 252/255, 255/255, 0.92)
                     border.width: macWindow.highContrast ? 2 : 1
                     border.color: macWindow.highContrast
-                        ? Qt.rgba(1, 1, 1, 0.48)
-                        : Qt.rgba(1, 1, 1, 0.14)
+                        ? Qt.rgba(75/255, 91/255, 103/255, 0.48)
+                        : Qt.rgba(1, 1, 1, 0.92)
                     visible: macWindow.placementMenuVisible
                     z: 100
 
@@ -412,12 +412,12 @@ Rectangle {
                                 color: macWindow.spatialPlacement === modelData.id
                                     ? Qt.rgba(0, 212/255, 1, 0.2)
                                     : (placementMouse.pressed
-                                       ? Qt.rgba(1, 1, 1, 0.12)
-                                       : Qt.rgba(1, 1, 1, 0.05))
+                                       ? Qt.rgba(210/255, 244/255, 255/255, 0.82)
+                                       : Qt.rgba(1, 1, 1, 0.58))
                                 border.width: 1
                                 border.color: macWindow.spatialPlacement === modelData.id
                                     ? Qt.rgba(0, 212/255, 1, 0.4)
-                                    : Qt.rgba(1, 1, 1, 0.06)
+                                    : Qt.rgba(1, 1, 1, 0.86)
 
                                 Column {
                                     anchors.centerIn: parent
@@ -427,13 +427,13 @@ Rectangle {
                                         anchors.horizontalCenter: parent.horizontalCenter
                                         text: modelData.icon
                                         color: macWindow.spatialPlacement === modelData.id
-                                            ? "#00D4FF" : "#FFFFFF"
+                                            ? "#008EAA" : "#26343E"
                                         font.pixelSize: 15
                                     }
                                     Text {
                                         anchors.horizontalCenter: parent.horizontalCenter
                                         text: modelData.label
-                                        color: "#D8D8E4"
+                                        color: "#52616C"
                                         font.pixelSize: 10
                                         font.weight: Font.Medium
                                     }
@@ -459,10 +459,10 @@ Rectangle {
                 radius: 8
                 color: macWindow.pinMode === "following"
                     ? Qt.rgba(0/255, 212/255, 255/255, 0.15)
-                    : Qt.rgba(1, 1, 1, 0.04)
+                    : Qt.rgba(1, 1, 1, 0.58)
                 border.color: macWindow.pinMode === "following"
                     ? Qt.rgba(0/255, 212/255, 255/255, 0.3)
-                    : Qt.rgba(1, 1, 1, 0.06)
+                    : Qt.rgba(1, 1, 1, 0.84)
 
                 // Pushpin icon (simple geometric)
                 Rectangle {
@@ -473,7 +473,7 @@ Rectangle {
                     border.width: 2
                     border.color: macWindow.pinMode === "following"
                         ? "#00D4FF"
-                        : Qt.rgba(1, 1, 1, 0.5)
+                        : Qt.rgba(23/255, 33/255, 42/255, 0.52)
 
                     // Pin head (circle at bottom)
                     Rectangle {
@@ -482,7 +482,7 @@ Rectangle {
                         width: 6; height: 6; radius: 3
                         color: macWindow.pinMode === "following"
                             ? "#00D4FF"
-                            : Qt.rgba(1, 1, 1, 0.5)
+                            : Qt.rgba(23/255, 33/255, 42/255, 0.52)
                     }
 
                     // Line from pin head to top
@@ -493,7 +493,7 @@ Rectangle {
                         width: 2
                         color: macWindow.pinMode === "following"
                             ? "#00D4FF"
-                            : Qt.rgba(1, 1, 1, 0.5)
+                            : Qt.rgba(23/255, 33/255, 42/255, 0.52)
                     }
                 }
 
@@ -519,10 +519,10 @@ Rectangle {
                     cursorShape: Qt.PointingHandCursor
                     onEntered: parent.color = macWindow.pinMode === "following"
                         ? Qt.rgba(0/255, 212/255, 255/255, 0.25)
-                        : Qt.rgba(1, 1, 1, 0.08)
+                        : Qt.rgba(225/255, 248/255, 255/255, 0.84)
                     onExited: parent.color = macWindow.pinMode === "following"
                         ? Qt.rgba(0/255, 212/255, 255/255, 0.15)
-                        : Qt.rgba(1, 1, 1, 0.04)
+                        : Qt.rgba(1, 1, 1, 0.58)
                     onClicked: {
                         macWindow.togglePinMode()
                     }
@@ -534,7 +534,7 @@ Rectangle {
                     anchors.top: parent.bottom; anchors.topMargin: 6
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: macWindow.pinMode === "following" ? "松开固定" : "视线跟随"
-                    color: Qt.rgba(1, 1, 1, 0.5)
+                    color: Qt.rgba(23/255, 33/255, 42/255, 0.56)
                     font.pixelSize: 10
                     font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
                     visible: pinBtnMA.containsMouse
@@ -546,7 +546,7 @@ Rectangle {
                 id: titleLabel
                 anchors.centerIn: parent
                 text: appTitle
-                color: Qt.rgba(1, 1, 1, 0.6)
+                color: Qt.rgba(23/255, 33/255, 42/255, 0.72)
                 font.pixelSize: 13
                 font.weight: Font.Medium
                 font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
@@ -558,7 +558,7 @@ Rectangle {
                 anchors.left: parent.left; anchors.leftMargin: 12
                 anchors.right: parent.right; anchors.rightMargin: 12
                 height: 1
-                color: Qt.rgba(255/255, 255/255, 255/255, 0.05)
+                color: Qt.rgba(1, 1, 1, 0.72)
             }
         }
 

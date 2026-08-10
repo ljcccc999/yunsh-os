@@ -214,6 +214,8 @@ class AppHandler(BaseHTTPRequestHandler):
         allowed = {
             "activeAppId": str(state.get("activeAppId", ""))[:64],
             "homeVisible": state.get("homeVisible") is True,
+            "appIconsVisible": state.get("appIconsVisible") is True,
+            "appIconsManuallyHidden": state.get("appIconsManuallyHidden") is True,
             "worldVisible": state.get("worldVisible") is True,
             "focusMode": state.get("focusMode") is True,
             "recording": state.get("recording") is True,
@@ -347,7 +349,7 @@ class AppHandler(BaseHTTPRequestHandler):
                 pass
             return values
 
-        version = read_values("/etc/yunsh/version.conf").get("VERSION", "v3.0.1")
+        version = read_values("/etc/yunsh/version.conf").get("VERSION", "v3.0.2")
         language = read_values("/etc/yunsh/language.conf")
         return {
             "status": "ok",
@@ -407,7 +409,7 @@ class AppHandler(BaseHTTPRequestHandler):
         model = read_text("/proc/device-tree/model").replace("\x00", "").strip()
         return {
             "status": "ok",
-            "version": version.get("VERSION", "v3.0.1"),
+            "version": version.get("VERSION", "v3.0.2"),
             "build": version.get("BUILD", ""),
             "model": model or "Raspberry Pi",
             "cpu": f"{cpu_name or 'ARM processor'} × {os.cpu_count() or 1}",

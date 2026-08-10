@@ -39,7 +39,10 @@ Item {
         onTriggered: relay.refreshStatus()
     }
 
-    Rectangle { anchors.fill: parent; color: "#050607" }
+    Rectangle {
+        anchors.fill: parent
+        color: relay.live ? "#050607" : Qt.rgba(248/255, 252/255, 255/255, 0.72)
+    }
 
     Image {
         id: phoneFrame
@@ -58,14 +61,14 @@ Item {
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
             text: "iPhone Screen Relay"
-            color: "#FFFFFF"
+            color: "#17212A"
             font.pixelSize: 25
             font.weight: Font.DemiBold
         }
         Text {
             width: 470
             text: "在 YUNSH Link 中完成密钥配对，然后点“开始投屏”。iOS 会显示系统广播确认，只有你明确开始后画面才会传输。"
-            color: "#AAB3BC"
+            color: "#61707C"
             font.pixelSize: 13
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter

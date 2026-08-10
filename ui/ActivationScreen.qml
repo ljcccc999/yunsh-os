@@ -1,4 +1,4 @@
-// YUNSH OS v3.0.1 - touch-first activation experience.
+// YUNSH OS v3.0.2 - touch-first activation experience.
 // Physical keyboard input is never required.
 
 import QtQuick 2.15
@@ -367,7 +367,7 @@ Rectangle {
                 // Version
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "v3.0.1"
+                    text: "v3.0.2"
                     color: Qt.rgba(16/255, 32/255, 42/255, 0.28)
                     font.pixelSize: 11
                 }
@@ -418,8 +418,8 @@ Rectangle {
             anchors.centerIn: parent
             width: 480; height: 400
             radius: 32
-            color: Qt.rgba(15/255, 15/255, 32/255, 0.45)
-            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
+            color: Qt.rgba(248/255, 252/255, 255/255, 0.90)
+            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.92)
             border.width: 1
 
             Column {
@@ -430,7 +430,7 @@ Rectangle {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "语言 Language"
-                    color: "#FFFFFF"
+                    color: "#101820"
                     font.pixelSize: 18
                     font.weight: Font.Bold
                 }
@@ -443,20 +443,20 @@ Rectangle {
                     // 简体中文
                     Rectangle {
                         width: 360; height: 48; radius: 14
-                        color: selectedLanguage === "简体中文" ? Qt.rgba(0/255, 212/255, 255/255, 0.12) : Qt.rgba(255/255, 255/255, 255/255, 0.03)
-                        border.color: selectedLanguage === "简体中文" ? Qt.rgba(0/255, 212/255, 255/255, 0.15) : Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                        color: selectedLanguage === "简体中文" ? Qt.rgba(210/255, 247/255, 255/255, 0.86) : Qt.rgba(255/255, 255/255, 255/255, 0.60)
+                        border.color: selectedLanguage === "简体中文" ? Qt.rgba(0/255, 142/255, 170/255, 0.42) : Qt.rgba(255/255, 255/255, 255/255, 0.84)
                         border.width: 1
 
                         Row {
                             anchors.left: parent.left; anchors.leftMargin: 16
                             anchors.verticalCenter: parent.verticalCenter; spacing: 12
                             Text { text: "🇨🇳"; font.pixelSize: 20; anchors.verticalCenter: parent.verticalCenter }
-                            Text { text: "简体中文"; color: "#FFFFFF"; font.pixelSize: 15; anchors.verticalCenter: parent.verticalCenter }
+                            Text { text: "简体中文"; color: "#17212A"; font.pixelSize: 15; anchors.verticalCenter: parent.verticalCenter }
                         }
                         Rectangle {
                             anchors.right: parent.right; anchors.rightMargin: 16; anchors.verticalCenter: parent.verticalCenter
                             width: 16; height: 16; radius: 8
-                            color: selectedLanguage === "简体中文" ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.06)
+                            color: selectedLanguage === "简体中文" ? "#00D4FF" : Qt.rgba(70/255, 88/255, 102/255, 0.18)
                         }
                         MouseArea {
                             anchors.fill: parent
@@ -467,20 +467,20 @@ Rectangle {
                     // English
                     Rectangle {
                         width: 360; height: 48; radius: 14
-                        color: selectedLanguage === "English" ? Qt.rgba(0/255, 212/255, 255/255, 0.12) : Qt.rgba(255/255, 255/255, 255/255, 0.03)
-                        border.color: selectedLanguage === "English" ? Qt.rgba(0/255, 212/255, 255/255, 0.15) : Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                        color: selectedLanguage === "English" ? Qt.rgba(210/255, 247/255, 255/255, 0.86) : Qt.rgba(255/255, 255/255, 255/255, 0.60)
+                        border.color: selectedLanguage === "English" ? Qt.rgba(0/255, 142/255, 170/255, 0.42) : Qt.rgba(255/255, 255/255, 255/255, 0.84)
                         border.width: 1
 
                         Row {
                             anchors.left: parent.left; anchors.leftMargin: 16
                             anchors.verticalCenter: parent.verticalCenter; spacing: 12
                             Text { text: "🇺🇸"; font.pixelSize: 20; anchors.verticalCenter: parent.verticalCenter }
-                            Text { text: "English (US)"; color: "#FFFFFF"; font.pixelSize: 15; anchors.verticalCenter: parent.verticalCenter }
+                            Text { text: "English (US)"; color: "#17212A"; font.pixelSize: 15; anchors.verticalCenter: parent.verticalCenter }
                         }
                         Rectangle {
                             anchors.right: parent.right; anchors.rightMargin: 16; anchors.verticalCenter: parent.verticalCenter
                             width: 16; height: 16; radius: 8
-                            color: selectedLanguage === "English" ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.06)
+                            color: selectedLanguage === "English" ? "#00D4FF" : Qt.rgba(70/255, 88/255, 102/255, 0.18)
                         }
                         MouseArea {
                             anchors.fill: parent
@@ -491,20 +491,20 @@ Rectangle {
                     // 日本語
                     Rectangle {
                         width: 360; height: 48; radius: 14
-                        color: selectedLanguage === "日本語" ? Qt.rgba(0/255, 212/255, 255/255, 0.12) : Qt.rgba(255/255, 255/255, 255/255, 0.03)
-                        border.color: selectedLanguage === "日本語" ? Qt.rgba(0/255, 212/255, 255/255, 0.15) : Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                        color: selectedLanguage === "日本語" ? Qt.rgba(210/255, 247/255, 255/255, 0.86) : Qt.rgba(255/255, 255/255, 255/255, 0.60)
+                        border.color: selectedLanguage === "日本語" ? Qt.rgba(0/255, 142/255, 170/255, 0.42) : Qt.rgba(255/255, 255/255, 255/255, 0.84)
                         border.width: 1
 
                         Row {
                             anchors.left: parent.left; anchors.leftMargin: 16
                             anchors.verticalCenter: parent.verticalCenter; spacing: 12
                             Text { text: "🇯🇵"; font.pixelSize: 20; anchors.verticalCenter: parent.verticalCenter }
-                            Text { text: "日本語"; color: "#FFFFFF"; font.pixelSize: 15; anchors.verticalCenter: parent.verticalCenter }
+                            Text { text: "日本語"; color: "#17212A"; font.pixelSize: 15; anchors.verticalCenter: parent.verticalCenter }
                         }
                         Rectangle {
                             anchors.right: parent.right; anchors.rightMargin: 16; anchors.verticalCenter: parent.verticalCenter
                             width: 16; height: 16; radius: 8
-                            color: selectedLanguage === "日本語" ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.06)
+                            color: selectedLanguage === "日本語" ? "#00D4FF" : Qt.rgba(70/255, 88/255, 102/255, 0.18)
                         }
                         MouseArea {
                             anchors.fill: parent
@@ -515,20 +515,20 @@ Rectangle {
                     // 한국어
                     Rectangle {
                         width: 360; height: 48; radius: 14
-                        color: selectedLanguage === "한국어" ? Qt.rgba(0/255, 212/255, 255/255, 0.12) : Qt.rgba(255/255, 255/255, 255/255, 0.03)
-                        border.color: selectedLanguage === "한국어" ? Qt.rgba(0/255, 212/255, 255/255, 0.15) : Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                        color: selectedLanguage === "한국어" ? Qt.rgba(210/255, 247/255, 255/255, 0.86) : Qt.rgba(255/255, 255/255, 255/255, 0.60)
+                        border.color: selectedLanguage === "한국어" ? Qt.rgba(0/255, 142/255, 170/255, 0.42) : Qt.rgba(255/255, 255/255, 255/255, 0.84)
                         border.width: 1
 
                         Row {
                             anchors.left: parent.left; anchors.leftMargin: 16
                             anchors.verticalCenter: parent.verticalCenter; spacing: 12
                             Text { text: "🇰🇷"; font.pixelSize: 20; anchors.verticalCenter: parent.verticalCenter }
-                            Text { text: "한국어"; color: "#FFFFFF"; font.pixelSize: 15; anchors.verticalCenter: parent.verticalCenter }
+                            Text { text: "한국어"; color: "#17212A"; font.pixelSize: 15; anchors.verticalCenter: parent.verticalCenter }
                         }
                         Rectangle {
                             anchors.right: parent.right; anchors.rightMargin: 16; anchors.verticalCenter: parent.verticalCenter
                             width: 16; height: 16; radius: 8
-                            color: selectedLanguage === "한국어" ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.06)
+                            color: selectedLanguage === "한국어" ? "#00D4FF" : Qt.rgba(70/255, 88/255, 102/255, 0.18)
                         }
                         MouseArea {
                             anchors.fill: parent
@@ -574,8 +574,8 @@ Rectangle {
             anchors.centerIn: parent
             width: 480; height: 420
             radius: 32
-            color: Qt.rgba(15/255, 15/255, 32/255, 0.45)
-            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
+            color: Qt.rgba(248/255, 252/255, 255/255, 0.90)
+            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.92)
             border.width: 1
             
             Column {
@@ -586,13 +586,13 @@ Rectangle {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "选择 Wi-Fi 网络"
-                    color: "#FFFFFF"; font.pixelSize: 18; font.weight: Font.Bold
+                    color: "#101820"; font.pixelSize: 18; font.weight: Font.Bold
                 }
                 
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "连接互联网以完成设置"
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.4)
+                    color: "#61707C"
                     font.pixelSize: 12
                 }
                 
@@ -600,25 +600,25 @@ Rectangle {
                 Text {
                     anchors.left: parent.left; anchors.leftMargin: 36
                     text: "Wi-Fi 名称"
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.3)
+                    color: "#52616C"
                     font.pixelSize: 11
                 }
                 
                 Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: 360; height: 44; radius: 14
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.03)
-                    border.color: wifiSSIDInput.activeFocus ? Qt.rgba(0/255, 212/255, 255/255, 0.2) : Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                    color: Qt.rgba(255/255, 255/255, 255/255, 0.66)
+                    border.color: wifiSSIDInput.activeFocus ? Qt.rgba(0/255, 142/255, 170/255, 0.50) : Qt.rgba(255/255, 255/255, 255/255, 0.86)
                     border.width: 1
                     
                     EditableInput {
                         id: wifiSSIDInput
                         anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
                         anchors.verticalCenter: parent.verticalCenter
-                        color: "#FFFFFF"
+                        color: "#17212A"
                         font.pixelSize: 15
                         placeholderText: "输入 Wi-Fi 名称"
-                        placeholderTextColor: Qt.rgba(255/255, 255/255, 255/255, 0.15)
+                        placeholderTextColor: Qt.rgba(23/255, 33/255, 42/255, 0.36)
                         verticalAlignment: TextInput.AlignVCenter
                         
                         onTextChanged: wifiSSID = text
@@ -629,25 +629,25 @@ Rectangle {
                 Text {
                     anchors.left: parent.left; anchors.leftMargin: 36
                     text: "密码"
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.3)
+                    color: "#52616C"
                     font.pixelSize: 11
                 }
                 
                 Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: 360; height: 44; radius: 14
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.03)
-                    border.color: wifiPassInput.activeFocus ? Qt.rgba(0/255, 212/255, 255/255, 0.2) : Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                    color: Qt.rgba(255/255, 255/255, 255/255, 0.66)
+                    border.color: wifiPassInput.activeFocus ? Qt.rgba(0/255, 142/255, 170/255, 0.50) : Qt.rgba(255/255, 255/255, 255/255, 0.86)
                     border.width: 1
                     
                     EditableInput {
                         id: wifiPassInput
                         anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
                         anchors.verticalCenter: parent.verticalCenter
-                        color: "#FFFFFF"
+                        color: "#17212A"
                         font.pixelSize: 15
                         placeholderText: "输入密码"
-                        placeholderTextColor: Qt.rgba(255/255, 255/255, 255/255, 0.15)
+                        placeholderTextColor: Qt.rgba(23/255, 33/255, 42/255, 0.36)
                         echoMode: TextInput.Password
                         passwordCharacter: "●"
                         verticalAlignment: TextInput.AlignVCenter
@@ -1051,8 +1051,8 @@ Rectangle {
             anchors.centerIn: parent
             width: 560; height: 650
             radius: 32
-            color: Qt.rgba(15/255, 15/255, 32/255, 0.5)
-            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
+            color: Qt.rgba(248/255, 252/255, 255/255, 0.92)
+            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.94)
             border.width: 1
 
             Column {
@@ -1062,13 +1062,13 @@ Rectangle {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "创建本地 YUNSH 账户"
-                    color: "#FFFFFF"; font.pixelSize: 22; font.weight: Font.Medium
+                    color: "#101820"; font.pixelSize: 22; font.weight: Font.Medium
                 }
 
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "YUNSH 账户密码与本机锁定密码完全独立；默认自动熄屏可直接唤醒"
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.4)
+                    color: "#61707C"
                     font.pixelSize: 12
                     bottomPadding: 16
                 }
@@ -1078,21 +1078,21 @@ Rectangle {
                     spacing: 6
                     Row {
                         spacing: 8
-                        Text { text: "用户名"; color: Qt.rgba(255/255, 255/255, 255/255, 0.6); font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
+                        Text { text: "用户名"; color: "#52616C"; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
                     }
                     Rectangle {
                         width: 380; height: 44; radius: 12
-                        color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
-                        border.color: accountUsernameInput.activeFocus ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                        color: Qt.rgba(255/255, 255/255, 255/255, 0.68)
+                        border.color: accountUsernameInput.activeFocus ? "#00AFCF" : Qt.rgba(255/255, 255/255, 255/255, 0.88)
                         border.width: 1
                         EditableInput {
                             id: accountUsernameInput
                             anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
                             verticalAlignment: TextInput.AlignVCenter
-                            color: "#FFFFFF"; font.pixelSize: 15
+                            color: "#17212A"; font.pixelSize: 15
                             placeholderText: "你的显示名称"
                             text: "YUNSH User"
-                            placeholderTextColor: Qt.rgba(255/255, 255/255, 255/255, 0.2)
+                            placeholderTextColor: Qt.rgba(23/255, 33/255, 42/255, 0.36)
                             onTextChanged: {
                                 accountUsername = text
                             }
@@ -1102,20 +1102,20 @@ Rectangle {
 
                 Column {
                     spacing: 6
-                    Text { text: "本机开机与锁屏密码"; color: Qt.rgba(255/255, 255/255, 255/255, 0.6); font.pixelSize: 12 }
+                    Text { text: "本机开机与锁屏密码"; color: "#52616C"; font.pixelSize: 12 }
                     Rectangle {
                         width: 380; height: 44; radius: 12
-                        color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
-                        border.color: bootPassInput.activeFocus ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                        color: Qt.rgba(255/255, 255/255, 255/255, 0.68)
+                        border.color: bootPassInput.activeFocus ? "#00AFCF" : Qt.rgba(255/255, 255/255, 255/255, 0.88)
                         border.width: 1
                         EditableInput {
                             id: bootPassInput
                             anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
                             verticalAlignment: TextInput.AlignVCenter
-                            color: "#FFFFFF"; font.pixelSize: 15
+                            color: "#17212A"; font.pixelSize: 15
                             echoMode: TextInput.Password
                             placeholderText: "输入独立的本机密码"
-                            placeholderTextColor: Qt.rgba(255/255, 255/255, 255/255, 0.2)
+                            placeholderTextColor: Qt.rgba(23/255, 33/255, 42/255, 0.36)
                             onTextChanged: bootPassword = text
                         }
                     }
@@ -1123,20 +1123,20 @@ Rectangle {
 
                 Column {
                     spacing: 6
-                    Text { text: "确认本机密码"; color: Qt.rgba(255/255, 255/255, 255/255, 0.6); font.pixelSize: 12 }
+                    Text { text: "确认本机密码"; color: "#52616C"; font.pixelSize: 12 }
                     Rectangle {
                         width: 380; height: 44; radius: 12
-                        color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
-                        border.color: bootConfirmInput.activeFocus ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                        color: Qt.rgba(255/255, 255/255, 255/255, 0.68)
+                        border.color: bootConfirmInput.activeFocus ? "#00AFCF" : Qt.rgba(255/255, 255/255, 255/255, 0.88)
                         border.width: 1
                         EditableInput {
                             id: bootConfirmInput
                             anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
                             verticalAlignment: TextInput.AlignVCenter
-                            color: "#FFFFFF"; font.pixelSize: 15
+                            color: "#17212A"; font.pixelSize: 15
                             echoMode: TextInput.Password
                             placeholderText: "再次输入本机密码"
-                            placeholderTextColor: Qt.rgba(255/255, 255/255, 255/255, 0.2)
+                            placeholderTextColor: Qt.rgba(23/255, 33/255, 42/255, 0.36)
                             onTextChanged: bootConfirmPassword = text
                         }
                     }
@@ -1147,21 +1147,21 @@ Rectangle {
                     spacing: 6
                     Row {
                         spacing: 8
-                        Text { text: "YUNSH 账户密码"; color: Qt.rgba(255/255, 255/255, 255/255, 0.6); font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
+                        Text { text: "YUNSH 账户密码"; color: "#52616C"; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
                     }
                     Rectangle {
                         width: 380; height: 44; radius: 12
-                        color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
-                        border.color: accountPassInput.activeFocus ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                        color: Qt.rgba(255/255, 255/255, 255/255, 0.68)
+                        border.color: accountPassInput.activeFocus ? "#00AFCF" : Qt.rgba(255/255, 255/255, 255/255, 0.88)
                         border.width: 1
                         EditableInput {
                             id: accountPassInput
                             anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
                             verticalAlignment: TextInput.AlignVCenter
-                            color: "#FFFFFF"; font.pixelSize: 15
+                            color: "#17212A"; font.pixelSize: 15
                             echoMode: TextInput.Password
                             placeholderText: "输入 YUNSH 账户密码"
-                            placeholderTextColor: Qt.rgba(255/255, 255/255, 255/255, 0.2)
+                            placeholderTextColor: Qt.rgba(23/255, 33/255, 42/255, 0.36)
                             onTextChanged: accountPassword = text
                         }
                     }
@@ -1172,21 +1172,21 @@ Rectangle {
                     spacing: 6
                     Row {
                         spacing: 8
-                        Text { text: "确认 YUNSH 账户密码"; color: Qt.rgba(255/255, 255/255, 255/255, 0.6); font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
+                        Text { text: "确认 YUNSH 账户密码"; color: "#52616C"; font.pixelSize: 12; anchors.verticalCenter: parent.verticalCenter }
                     }
                     Rectangle {
                         width: 380; height: 44; radius: 12
-                        color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
-                        border.color: accountConfirmInput.activeFocus ? "#00D4FF" : Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                        color: Qt.rgba(255/255, 255/255, 255/255, 0.68)
+                        border.color: accountConfirmInput.activeFocus ? "#00AFCF" : Qt.rgba(255/255, 255/255, 255/255, 0.88)
                         border.width: 1
                         EditableInput {
                             id: accountConfirmInput
                             anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
                             verticalAlignment: TextInput.AlignVCenter
-                            color: "#FFFFFF"; font.pixelSize: 15
+                            color: "#17212A"; font.pixelSize: 15
                             echoMode: TextInput.Password
                             placeholderText: "再次输入 YUNSH 账户密码"
-                            placeholderTextColor: Qt.rgba(255/255, 255/255, 255/255, 0.2)
+                            placeholderTextColor: Qt.rgba(23/255, 33/255, 42/255, 0.36)
                             onTextChanged: accountConfirmPassword = text
                         }
                     }
@@ -1468,8 +1468,8 @@ Rectangle {
             anchors.centerIn: parent
             width: 420; height: 320
             radius: 32
-            color: Qt.rgba(15/255, 15/255, 32/255, 0.5)
-            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
+            color: Qt.rgba(248/255, 252/255, 255/255, 0.92)
+            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.94)
             border.width: 1
 
             Column {
@@ -1495,7 +1495,7 @@ Rectangle {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "正在初始化..."
-                    color: "#FFFFFF"; font.pixelSize: 20; font.weight: Font.Medium
+                    color: "#101820"; font.pixelSize: 20; font.weight: Font.Medium
                 }
 
                 Text {
@@ -1503,7 +1503,7 @@ Rectangle {
                     text: activationConfigError.length > 0
                         ? activationConfigError
                         : "正在保存系统设置"
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.4)
+                    color: activationConfigError.length > 0 ? "#B83242" : "#61707C"
                     font.pixelSize: 12
                 }
 
@@ -1511,7 +1511,7 @@ Rectangle {
                 Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: 280; height: 6; radius: 3
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+                    color: Qt.rgba(69/255, 88/255, 102/255, 0.18)
 
                     Rectangle {
                         width: parent.width * (initializingStep.progressValue / 100)
@@ -1531,7 +1531,7 @@ Rectangle {
                     text: activationStatusText.statusMessages[Math.min(
                         Math.floor(initializingStep._timerCount / 20),
                         activationStatusText.statusMessages.length - 1)]
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.2)
+                    color: Qt.rgba(23/255, 33/255, 42/255, 0.48)
                     font.pixelSize: 11
 
                     readonly property var statusMessages: [

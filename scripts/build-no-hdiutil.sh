@@ -8,7 +8,7 @@ BUILD_DIR="${YUNSH_DIR}/build"
 OUTPUT_DIR="${YUNSH_DIR}/output"
 VERSION_CONF="${BUILD_DIR}/yunsh-version.conf"
 if [ ! -f "${VERSION_CONF}" ]; then
-    printf 'VERSION=v3.0.1\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
+    printf 'VERSION=v3.0.2\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
 fi
 VERSION="$(awk -F= '$1 == "VERSION" { print $2; exit }' "${VERSION_CONF}")"
 BUILD_ID="${YUNSH_BUILD_ID:-$(date +%Y.%m.%d)}"
@@ -285,11 +285,10 @@ echo ""
 echo "→ cmdline.txt..."
 mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null > "${BUILD_DIR}/yunsh-cmdline-new.txt"
 CMDLINE=$(cat "${BUILD_DIR}/yunsh-cmdline-new.txt")
-# Keep a real Linux console on tty1 until the desktop is installed.  The
-# original quiet/splash settings could leave a working Pi 5 with HDMI signal
-# but no visible first-boot error when the online package install failed.
+# Keep detailed startup diagnostics on the serial console and in the journal,
+# while reserving the optical display for the YUNSH splash and spatial UI.
 CMDLINE=$(printf '%s\n' "${CMDLINE}" | sed -E \
-    -e 's/(^| )(quiet|splash|logo\.nologo|consoleblank=[^ ]+|loglevel=[^ ]+|systemd\.show_status=[^ ]+|systemd\.log_target=[^ ]+|systemd\.log_level=[^ ]+|systemd\.default_standard_output=[^ ]+|vt\.global_cursor_default=[^ ]+|cma=[^ ]+|psi=[^ ]+|module_blacklist=[^ ]+)( |$)/ /g' \
+    -e 's/(^| )(quiet|splash|logo\.nologo|console=tty[0-9]+|consoleblank=[^ ]+|loglevel=[^ ]+|systemd\.show_status=[^ ]+|systemd\.log_target=[^ ]+|systemd\.log_level=[^ ]+|systemd\.default_standard_output=[^ ]+|vt\.global_cursor_default=[^ ]+|cma=[^ ]+|psi=[^ ]+|module_blacklist=[^ ]+)( |$)/ /g' \
     -e 's/(^| )video=HDMI-A-[12]:[^ ]+//g' \
     -e 's/(^| )resize( |$)/ /g' \
     -e 's/  +/ /g')
@@ -304,17 +303,11 @@ case " ${CMDLINE} " in
     *" root=/dev/mmcblk0p2 "*) ;;
     *) CMDLINE="${CMDLINE} root=/dev/mmcblk0p2" ;;
 esac
-case " ${CMDLINE} " in
-    *" console=tty1 "*) ;;
-    *) CMDLINE="${CMDLINE} console=tty1" ;;
-esac
-# Never hide the userspace hand-off on a fresh image.  A Pi that reaches
-# init-bottom but cannot start systemd must show its last service, not appear
-# frozen on an otherwise healthy rootfs.
 # Keep the blacklist at the end of the canonical line, matching the confirmed
-# Pi 5 SD layout while retaining the firmware-framebuffer fallback.
+# Pi 5 SD layout while retaining the firmware-framebuffer fallback. Serial0
+# remains the diagnostic console; tty1 stays clean for splash and UI output.
 CMDLINE=$(printf '%s\n' "${CMDLINE}" | sed -E 's/  +/ /g; s/^ +//; s/ +$//')
-echo "${CMDLINE} consoleblank=0 loglevel=4 vt.global_cursor_default=1 cma=256M psi=1 systemd.show_status=1 systemd.log_target=console systemd.log_level=info systemd.default_standard_output=journal+console module_blacklist=vc4,v3d" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
+echo "${CMDLINE} quiet splash logo.nologo consoleblank=0 loglevel=3 vt.global_cursor_default=0 cma=256M psi=1 systemd.show_status=false systemd.log_target=journal systemd.log_level=notice systemd.default_standard_output=journal module_blacklist=vc4,v3d" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
 mdel -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null || true
 mcopy -i "${BOOT_IMG}" "${BUILD_DIR}/yunsh-cmdline-new.txt" ::/cmdline.txt
 echo "  ✓ cmdline.txt modified"
@@ -509,7 +502,8 @@ WantedBy=multi-user.target
 SVC
 add_file "${BUILD_DIR}/yunsh-os.service" "/etc/systemd/system/yunsh-os.service"
 
-# First-boot installer: own tty1 explicitly so progress and failures are visible.
+# First-boot installer: preserve progress in the journal and on serial0 without
+# painting installation logs over the optical display.
 cat > "${BUILD_DIR}/yunsh-firstboot.service" << 'FBSVC'
 [Unit]
 Description=YUNSH OS First Boot Installer
@@ -794,7 +788,6 @@ cat > "${BUILD_DIR}/yunsh-splash.service" << 'SSVC'
 Description=YUNSH OS Boot Splash
 After=local-fs.target
 Before=yunsh-firstboot.service yunsh-os.service
-ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/yunsh-splash

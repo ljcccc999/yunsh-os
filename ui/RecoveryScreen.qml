@@ -18,9 +18,18 @@ ApplicationWindow {
         width: Math.min(parent.width - 120, 920)
         height: 460
         radius: 32
-        color: "#F2F7FA"
-        border.color: "#00D4FF"
+        color: Qt.rgba(248/255, 252/255, 255/255, 0.94)
+        border.color: "#FFFFFF"
         border.width: 2
+
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 3
+            radius: 29
+            color: Qt.rgba(205/255, 239/255, 255/255, 0.10)
+            border.width: 1
+            border.color: "#BDEFFF"
+        }
 
         Column {
             anchors.fill: parent

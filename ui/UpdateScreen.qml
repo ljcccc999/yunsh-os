@@ -96,15 +96,15 @@ Item {
             width: 40
             height: 40
             radius: 20
-            iconSource: "/usr/share/yunsh/icons/chevron-left-white.svg"
-            bgColor: Qt.rgba(1, 1, 1, 0.15)
+            iconSource: "/usr/share/yunsh/icons/chevron-left-dark.svg"
+            bgColor: Qt.rgba(1, 1, 1, 0.62)
             onClicked: root.backToHome()
         }
 
         Text {
             anchors.centerIn: parent
             text: "系统更新"
-            color: "#FFFFFF"
+            color: "#17212A"
             font.pixelSize: 28
             font.weight: Font.Medium
             font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
@@ -146,7 +146,7 @@ Item {
 
                     Text {
                         text: "YUNSH OS"
-                        color: Qt.rgba(1, 1, 1, 0.5)
+                        color: Qt.rgba(23/255, 33/255, 42/255, 0.52)
                         font.pixelSize: 13
                         font.letterSpacing: 2
                         font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
@@ -155,7 +155,7 @@ Item {
 
                     Text {
                         text: "v" + currentVersion
-                        color: "#FFFFFF"
+                        color: "#17212A"
                         font.pixelSize: 38
                         font.weight: Font.Bold
                         font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
@@ -358,7 +358,7 @@ Item {
 
                             Text {
                                 text: "更新内容"
-                                color: "#FFFFFF"
+                                color: "#17212A"
                                 font.pixelSize: 16
                                 font.weight: Font.Medium
                                 font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
@@ -389,7 +389,7 @@ Item {
                         visible: showChangelog
                         clip: true
                         radius: 12
-                        color: Qt.rgba(1, 1, 1, 0.05)
+                        color: Qt.rgba(255/255, 255/255, 255/255, 0.62)
 
                         Flickable {
                             anchors.fill: parent
@@ -402,7 +402,7 @@ Item {
                                 id: changelogText
                                 width: parent.width
                                 text: changelog
-                                color: Qt.rgba(1, 1, 1, 0.75)
+                                color: Qt.rgba(23/255, 33/255, 42/255, 0.72)
                                 font.pixelSize: 13
                                 font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
                                 wrapMode: Text.WordWrap
@@ -452,7 +452,7 @@ Item {
 
                         Text {
                             text: "操作方式"
-                            color: "#FFFFFF"
+                            color: "#17212A"
                             font.pixelSize: 16
                             font.weight: Font.Medium
                             font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
@@ -474,7 +474,7 @@ Item {
                             + "  Home 指示条点击/上滑  → App Switcher\n"
                             + "  长按文字  → 复制菜单\n"
                             + "  右键  → 粘贴"
-                        color: Qt.rgba(1, 1, 1, 0.6)
+                        color: Qt.rgba(23/255, 33/255, 42/255, 0.68)
                         font.pixelSize: 13
                         font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
                         font.weight: Font.Light
@@ -523,7 +523,7 @@ Item {
                     Text {
                         Layout.alignment: Qt.AlignHCenter
                     text: "正在更新 YUNSH OS…"
-                        color: "#FFFFFF"
+                        color: "#17212A"
                         font.pixelSize: 18
                         font.weight: Font.Medium
                         font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
@@ -543,7 +543,7 @@ Item {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 8
                         radius: 4
-                        color: Qt.rgba(1, 1, 1, 0.1)
+                        color: Qt.rgba(70/255, 88/255, 102/255, 0.18)
 
                         Rectangle {
                             id: progressFill
@@ -568,7 +568,7 @@ Item {
 
                         Text {
                             text: downloadProgress + "%"
-                            color: "#FFFFFF"
+                            color: "#17212A"
                             font.pixelSize: 14
                             font.weight: Font.Medium
                             font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
@@ -576,7 +576,7 @@ Item {
 
                         Text {
                             text: downloadSpeed
-                            color: Qt.rgba(1, 1, 1, 0.5)
+                            color: Qt.rgba(23/255, 33/255, 42/255, 0.52)
                             font.pixelSize: 13
                             font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
                         }
@@ -585,7 +585,7 @@ Item {
 
                         Text {
                             text: downloadEta
-                            color: Qt.rgba(1, 1, 1, 0.5)
+                            color: Qt.rgba(23/255, 33/255, 42/255, 0.52)
                             font.pixelSize: 13
                             font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
                         }
@@ -597,14 +597,14 @@ Item {
                         Layout.preferredWidth: 120
                         Layout.preferredHeight: 36
                         radius: 18
-                        bgColor: Qt.rgba(1, 1, 1, 0.1)
-                        hoverBgColor: Qt.rgba(1, 1, 1, 0.2)
-                        pressedBgColor: Qt.rgba(1, 1, 1, 0.3)
+                        bgColor: Qt.rgba(1, 1, 1, 0.62)
+                        hoverBgColor: Qt.rgba(225/255, 248/255, 255/255, 0.84)
+                        pressedBgColor: Qt.rgba(205/255, 243/255, 255/255, 0.92)
 
                         contentItem: Text {
                             anchors.centerIn: parent
                             text: "取消"
-                            color: Qt.rgba(1, 1, 1, 0.7)
+                            color: Qt.rgba(23/255, 33/255, 42/255, 0.70)
                             font.pixelSize: 14
                             font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
                         }
@@ -634,7 +634,7 @@ Item {
 
                     Text {
                         text: "自动更新"
-                        color: "#FFFFFF"
+                        color: "#17212A"
                         font.pixelSize: 17
                         font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
                         Layout.fillWidth: true
@@ -703,7 +703,7 @@ Item {
 
                     Text {
                         text: "仅WiFi下载"
-                        color: "#FFFFFF"
+                        color: "#17212A"
                         font.pixelSize: 17
                         font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
                         Layout.fillWidth: true
@@ -764,7 +764,7 @@ Item {
                 Layout.topMargin: 4
                 visible: lastCheckTime.length > 0
                 text: "上次检查: " + lastCheckTime
-                color: Qt.rgba(1, 1, 1, 0.35)
+                color: Qt.rgba(23/255, 33/255, 42/255, 0.46)
                 font.pixelSize: 12
                 font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
             }
@@ -778,9 +778,9 @@ Item {
                 Layout.preferredWidth: 180
                 Layout.preferredHeight: 40
                 radius: 20
-                bgColor: Qt.rgba(1, 1, 1, 0.08)
-                hoverBgColor: Qt.rgba(1, 1, 1, 0.16)
-                pressedBgColor: Qt.rgba(1, 1, 1, 0.24)
+                bgColor: Qt.rgba(1, 1, 1, 0.62)
+                hoverBgColor: Qt.rgba(225/255, 248/255, 255/255, 0.84)
+                pressedBgColor: Qt.rgba(205/255, 243/255, 255/255, 0.92)
 
                 contentItem: RowLayout {
                     anchors.centerIn: parent
@@ -788,7 +788,7 @@ Item {
 
                     Text {
                         text: "更新历史"
-                        color: Qt.rgba(1, 1, 1, 0.6)
+                        color: Qt.rgba(23/255, 33/255, 42/255, 0.68)
                         font.pixelSize: 14
                         font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
                     }

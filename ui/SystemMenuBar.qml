@@ -84,10 +84,10 @@ Rectangle {
         height: 62
         radius: 28
         color: worldMouse.pressed
-            ? Qt.rgba(1, 1, 1, 0.42)
-            : (worldMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(1, 1, 1, 0.16))
+            ? Qt.rgba(221/255, 248/255, 255/255, 0.90)
+            : (worldMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.82) : Qt.rgba(1, 1, 1, 0.72))
         border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.48)
+        border.color: Qt.rgba(1, 1, 1, 0.94)
         scale: worldMouse.pressed ? 0.94 : (worldMouse.containsMouse ? 1.06 : 1)
 
         Rectangle {
@@ -118,7 +118,7 @@ Rectangle {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "METAVERSE"
-                color: "#FFFFFF"
+                color: "#17212A"
                 font.pixelSize: 7
                 font.weight: Font.Bold
                 font.letterSpacing: 1.2

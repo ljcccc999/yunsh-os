@@ -340,7 +340,7 @@ Rectangle {
         Text {
             anchors.centerIn: parent
             text: "蓝牙"
-            color: "#FFFFFF"
+            color: "#17212A"
             font.pixelSize: 20
             font.weight: Font.Bold
         }
@@ -352,15 +352,15 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             width: 72; height: 32; radius: 16
             color: scanning ? Qt.rgba(0/255, 212/255, 255/255, 0.15)
-                            : Qt.rgba(255/255, 255/255, 255/255, 0.05)
+                            : Qt.rgba(255/255, 255/255, 255/255, 0.62)
             border.color: scanning ? Qt.rgba(0/255, 212/255, 255/255, 0.2)
-                                   : Qt.rgba(255/255, 255/255, 255/255, 0.06)
+                                   : Qt.rgba(255/255, 255/255, 255/255, 0.86)
             border.width: 1
 
             Text {
                 anchors.centerIn: parent
                 text: scanning ? "扫描中" + scanAnimationStep : "扫描"
-                color: scanning ? "#00D4FF" : "#FFFFFF"
+                color: scanning ? "#008EAA" : "#17212A"
                 font.pixelSize: 12
                 font.weight: Font.Medium
             }
@@ -389,8 +389,8 @@ Rectangle {
         Rectangle {
             anchors.fill: parent
             radius: 16
-            color: Qt.rgba(18/255, 18/255, 30/255, 0.3)
-            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+            color: Qt.rgba(255/255, 255/255, 255/255, 0.64)
+            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.88)
             border.width: 1
         }
 
@@ -412,7 +412,7 @@ Rectangle {
             anchors.leftMargin: 56
             anchors.verticalCenter: parent.verticalCenter
             text: "蓝牙"
-            color: "#FFFFFF"
+            color: "#17212A"
             font.pixelSize: 16
             font.weight: Font.Bold
         }
@@ -496,8 +496,8 @@ Rectangle {
             Rectangle {
                 anchors.fill: parent
                 radius: 14
-                color: Qt.rgba(255/255, 255/255, 255/255, 0.03)
-                border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                color: Qt.rgba(255/255, 255/255, 255/255, 0.62)
+                border.color: Qt.rgba(255/255, 255/255, 255/255, 0.86)
                 border.width: 1
 
                 // Device type icon
@@ -526,7 +526,7 @@ Rectangle {
 
                     Text {
                         text: modelData.name || "未知设备"
-                        color: "#FFFFFF"
+                        color: "#17212A"
                         font.pixelSize: 15
                         font.weight: Font.Medium
                         elide: Text.ElideRight
@@ -572,7 +572,7 @@ Rectangle {
                     anchors.fill: parent
                     hoverEnabled: true
                     onEntered: parent.color = Qt.rgba(0/255, 212/255, 255/255, 0.08)
-                    onExited: parent.color = Qt.rgba(255/255, 255/255, 255/255, 0.03)
+                    onExited: parent.color = Qt.rgba(255/255, 255/255, 255/255, 0.62)
                     onClicked: {
                         deviceActionSheet.mac = modelData.mac
                         deviceActionSheet.name = modelData.name
@@ -667,8 +667,8 @@ Rectangle {
             Rectangle {
                 anchors.fill: parent
                 radius: 14
-                color: Qt.rgba(255/255, 255/255, 255/255, 0.03)
-                border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                color: Qt.rgba(255/255, 255/255, 255/255, 0.62)
+                border.color: Qt.rgba(255/255, 255/255, 255/255, 0.86)
                 border.width: 1
 
                 // Device type icon
@@ -677,7 +677,7 @@ Rectangle {
                     anchors.leftMargin: 12
                     anchors.verticalCenter: parent.verticalCenter
                     width: 32; height: 32; radius: 16
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.05)
+                    color: Qt.rgba(220/255, 245/255, 255/255, 0.54)
 
                     Text {
                         anchors.centerIn: parent
@@ -692,7 +692,7 @@ Rectangle {
                     anchors.leftMargin: 54
                     anchors.verticalCenter: parent.verticalCenter
                     text: modelData.name || "未知设备"
-                    color: "#FFFFFF"
+                    color: "#17212A"
                     font.pixelSize: 15
                     font.weight: Font.Medium
                     elide: Text.ElideRight
@@ -712,7 +712,7 @@ Rectangle {
                     anchors.fill: parent
                     hoverEnabled: true
                     onEntered: parent.color = Qt.rgba(0/255, 212/255, 255/255, 0.08)
-                    onExited: parent.color = Qt.rgba(255/255, 255/255, 255/255, 0.03)
+                    onExited: parent.color = Qt.rgba(255/255, 255/255, 255/255, 0.62)
                     onClicked: {
                         deviceActionSheet.mac = modelData.mac
                         deviceActionSheet.name = modelData.name
@@ -754,8 +754,8 @@ Rectangle {
             width: 340
             height: deviceActionSheet.connected ? 260 : 220
             radius: 24
-            color: Qt.rgba(20/255, 20/255, 40/255, 0.85)
-            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+            color: Qt.rgba(248/255, 252/255, 255/255, 0.94)
+            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.94)
             border.width: 1
 
             Column {
@@ -766,7 +766,7 @@ Rectangle {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: deviceActionSheet.name
-                    color: "#FFFFFF"
+                    color: "#17212A"
                     font.pixelSize: 18
                     font.weight: Font.Bold
                 }
@@ -837,9 +837,9 @@ Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: 260; height: 44; radius: 22
                         color: deviceActionSheet.paired
-                            ? Qt.rgba(255/255, 255/255, 255/255, 0.05)
+                            ? Qt.rgba(255/255, 255/255, 255/255, 0.68)
                             : Qt.rgba(0/255, 212/255, 255/255, 0.1)
-                        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.88)
                         border.width: 1
 
                         Text {
@@ -855,7 +855,7 @@ Rectangle {
                             hoverEnabled: true
                             onEntered: parent.color = Qt.rgba(0/255, 212/255, 255/255, 0.18)
                             onExited: parent.color = deviceActionSheet.paired
-                                ? Qt.rgba(255/255, 255/255, 255/255, 0.05)
+                                ? Qt.rgba(255/255, 255/255, 255/255, 0.68)
                                 : Qt.rgba(0/255, 212/255, 255/255, 0.1)
                             onClicked: {
                                 if (deviceActionSheet.paired) {
@@ -872,8 +872,8 @@ Rectangle {
                     Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: 260; height: 44; radius: 22
-                        color: Qt.rgba(255/255, 255/255, 255/255, 0.03)
-                        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                        color: Qt.rgba(255/255, 255/255, 255/255, 0.68)
+                        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.88)
                         border.width: 1
 
                         Text {

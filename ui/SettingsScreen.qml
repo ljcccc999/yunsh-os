@@ -21,7 +21,7 @@ Rectangle {
     signal openComfortDna()
     signal requestFactoryReset()
 
-    property string osVersionName: "YUNSH OS v3.0.1"
+    property string osVersionName: "YUNSH OS v3.0.2"
     property string selectedLanguageDisplay: "简体中文 · 拼音"
     property int autoLockSeconds: 120
     signal requestAutoLockSeconds(int seconds)
@@ -164,7 +164,7 @@ Rectangle {
         
         Text {
             anchors.centerIn: parent; text: "设置"
-            color: "#FFFFFF"; font.pixelSize: 20; font.weight: Font.Bold
+            color: "#17212A"; font.pixelSize: 20; font.weight: Font.Bold
         }
     }
     
@@ -572,8 +572,8 @@ Rectangle {
         Rectangle {
             anchors.centerIn: parent
             width: 420; height: 260; radius: 32
-            color: Qt.rgba(15/255, 15/255, 32/255, 0.5)
-            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04); border.width: 1
+            color: Qt.rgba(248/255, 252/255, 255/255, 0.94)
+            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.94); border.width: 1
             
             Column {
                 anchors.centerIn: parent; spacing: 16
@@ -594,7 +594,7 @@ Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: 340; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
                     text: "这将清除所有用户数据，重置激活状态。\n系统文件和 UI 组件不会被删除。"
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.4); font.pixelSize: 13
+                    color: "#61707C"; font.pixelSize: 13
                 }
                 
                 Row {
@@ -602,8 +602,8 @@ Rectangle {
                     
                     Rectangle {
                         width: 140; height: 44; radius: 22
-                        color: Qt.rgba(255/255, 255/255, 255/255, 0.03)
-                        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04); border.width: 1
+                        color: Qt.rgba(255/255, 255/255, 255/255, 0.68)
+                        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.88); border.width: 1
                         Text { anchors.centerIn: parent; text: "取消"; color: "#8888A0"; font.pixelSize: 14 }
                         MouseArea {
                             anchors.fill: parent; hoverEnabled: true
@@ -613,7 +613,7 @@ Rectangle {
                     
                     Rectangle {
                         width: 160; height: 44; radius: 22
-                        color: Qt.rgba(255/255, 255/255, 255/255, 0.05)
+                        color: Qt.rgba(255/255, 255/255, 255/255, 0.68)
                         border.color: "#FF5252"; border.width: 1
                         Text { anchors.centerIn: parent; text: "恢复出厂设置"; color: "#FF5252"; font.pixelSize: 14 }
                         MouseArea {

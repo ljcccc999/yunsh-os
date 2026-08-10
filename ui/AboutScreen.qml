@@ -8,7 +8,7 @@ GlassPanel {
     id: aboutScreen
     anchors.fill: parent
     visible: true
-    glassOpacity: 0.3
+    glassOpacity: 0.86
     cornerRadius: 28
     blurRadius: 28
     shadowDepth: 16
@@ -55,7 +55,7 @@ GlassPanel {
         Text {
             anchors.centerIn: parent
             text: "关于本机"
-            color: "#FFFFFF"
+            color: "#17212A"
             font.pixelSize: 20
             font.weight: Font.Bold
         }
@@ -86,8 +86,8 @@ GlassPanel {
                 Rectangle {
                     anchors.centerIn: parent
                     width: 100; height: 100; radius: 50
-                    color: Qt.rgba(18/255, 18/255, 32/255, 0.5)
-                    border.color: Qt.rgba(0/255, 212/255, 255/255, 0.15)
+                    color: Qt.rgba(255/255, 255/255, 255/255, 0.66)
+                    border.color: Qt.rgba(0/255, 142/255, 170/255, 0.24)
                     border.width: 1
                     
                     // Glow effect
@@ -116,7 +116,7 @@ GlassPanel {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "YUNSH V1"
-                color: "#FFFFFF"
+                color: "#17212A"
                 font.pixelSize: 30
                 font.weight: Font.Bold
                 font.letterSpacing: 2
@@ -125,7 +125,7 @@ GlassPanel {
             // OS version
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "YUNSH OS v3.0.1"
+                text: "YUNSH OS v3.0.2"
                 color: "#8888A0"
                 font.pixelSize: 15
                 font.weight: Font.Medium
@@ -138,7 +138,7 @@ GlassPanel {
             Rectangle {
                 width: parent.width * 0.4
                 height: 1
-                color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+                color: Qt.rgba(23/255, 33/255, 42/255, 0.12)
                 anchors.horizontalCenter: parent.horizontalCenter
             }
             
@@ -161,7 +161,7 @@ GlassPanel {
                     height: 36
                     radius: 12
                     anchors.horizontalCenter: parent.horizontalCenter
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.02)
+                    color: Qt.rgba(255/255, 255/255, 255/255, 0.58)
                     
                     Row {
                         anchors.fill: parent
@@ -177,7 +177,7 @@ GlassPanel {
                         
                         Text {
                             text: modelData.value
-                            color: "#FFFFFF"
+                            color: "#17212A"
                             font.pixelSize: 13
                             font.weight: Font.Medium
                         }
@@ -192,7 +192,7 @@ GlassPanel {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: "© 2024 YUNSH Technology"
-                color: Qt.rgba(255/255, 255/255, 255/255, 0.25)
+                color: Qt.rgba(23/255, 33/255, 42/255, 0.42)
                 font.pixelSize: 11
             }
         }

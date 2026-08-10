@@ -1,4 +1,4 @@
-// YUNSH OS v3.0.1 - Home Indicator
+// YUNSH OS v3.0.2 - Home Indicator
 // Bottom screen pill for mouse gesture: swipe up → Task Switcher
 // Like iPhone home bar, but for mouse
 
@@ -34,14 +34,14 @@ Item {
         onPressed: function(mouse) {
             pressY = mouse.y
             isDragging = false
-            pill.opacity = 0.8
+            pill.opacity = 0.92
         }
 
         onPositionChanged: function(mouse) {
             // Detect swipe up
             if (pressed && (pressY - mouse.y > dragThreshold)) {
                 isDragging = true
-                pill.opacity = 0.3
+                pill.opacity = 0.56
                 homeIndicator.swipeUpTriggered()
                 // Reset to prevent repeated triggers
                 pressY = mouse.y + 100
@@ -49,14 +49,14 @@ Item {
 
             // Hover effect
             if (!pressed) {
-                pill.opacity = containsMouse ? 0.6 : 0.4
+                pill.opacity = containsMouse ? 0.90 : 0.72
                 pill.scale = containsMouse ? 1.15 : 1.0
             }
         }
 
         onReleased: {
             isDragging = false
-            pill.opacity = containsMouse ? 0.6 : 0.4
+            pill.opacity = containsMouse ? 0.90 : 0.72
             pill.scale = containsMouse ? 1.15 : 1.0
 
             // If it wasn't a drag, it's a click
@@ -66,7 +66,7 @@ Item {
         }
 
         onExited: {
-            pill.opacity = 0.4
+            pill.opacity = 0.72
             pill.scale = 1.0
         }
     }
@@ -82,8 +82,8 @@ Item {
         height: pillHeight
         radius: pillHeight / 2
 
-        color: Qt.rgba(255/255, 255/255, 255/255, 0.4)
-        opacity: 0.4
+        color: Qt.rgba(248/255, 252/255, 255/255, 0.84)
+        opacity: 0.72
 
         // Inner glow
         Rectangle {

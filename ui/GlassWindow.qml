@@ -27,16 +27,16 @@ Rectangle {
 
         // White liquid-glass background remains visible when optical black is
         // transparent. Content keeps its high-contrast light treatment.
-        color: Qt.rgba(245/255, 249/255, 255/255, 0.20)
+        color: Qt.rgba(248/255, 252/255, 255/255, 0.82)
 
         // Frost layer
         Rectangle {
             anchors.fill: parent; radius: 32
-            color: Qt.rgba(255/255, 255/255, 255/255, 0.02)
+            color: Qt.rgba(210/255, 240/255, 255/255, 0.12)
         }
 
         // Border
-        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.28)
+        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.88)
         border.width: 1
 
         // Top rim highlight (visionOS signature edge light)
@@ -46,7 +46,7 @@ Rectangle {
             anchors.right: parent.right; anchors.rightMargin: 20
             height: 1
             radius: 1
-            color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
+            color: Qt.rgba(255/255, 255/255, 255/255, 0.80)
         }
 
         // Bottom rim shadow
@@ -85,7 +85,7 @@ Rectangle {
         anchors.horizontalCenter: windowPanel.horizontalCenter
         anchors.top: windowPanel.top; anchors.topMargin: 8
         width: 40; height: 4; radius: 2
-        color: Qt.rgba(255/255, 255/255, 255/255, 0.12)
+        color: Qt.rgba(24/255, 35/255, 44/255, 0.28)
         z: 100
     }
 }

@@ -108,12 +108,15 @@ SPATIAL_DEFAULTS = {
     "reduceTransparency": False,
     "highContrast": False,
     "focusMode": False,
+    "appIconsManuallyHidden": False,
+    "autoLockSeconds": 120.0,
 }
 SPATIAL_RANGES = {
     "ipdMm": (50.0, 75.0),
     "eyeShiftPx": (-40.0, 40.0),
     "fieldOfView": (30.0, 80.0),
     "trackingSmoothing": (0.0, 0.9),
+    "autoLockSeconds": (0.0, 3600.0),
 }
 
 

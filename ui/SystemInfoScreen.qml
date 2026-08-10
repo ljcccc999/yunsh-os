@@ -12,7 +12,7 @@ Rectangle {
     visible: true
     z: 60
 
-    property string osVersion: "YUNSH OS v3.0.1"
+    property string osVersion: "YUNSH OS v3.0.2"
     property string buildNumber: ""
     property string deviceModel: ""
     property string cpuInfo: ""
@@ -38,7 +38,7 @@ Rectangle {
                 return
             try {
                 var values = JSON.parse(xhr.responseText || "{}")
-                osVersion = "YUNSH OS " + (values.version || "v3.0.1")
+                osVersion = "YUNSH OS " + (values.version || "v3.0.2")
                 buildNumber = values.build || ""
                 deviceModel = values.model || "Raspberry Pi"
                 cpuInfo = values.cpu || "ARM processor"
@@ -98,7 +98,7 @@ Rectangle {
 
         Text {
             anchors.centerIn: parent; text: "关于本机"
-            color: "#FFFFFF"; font.pixelSize: 20; font.weight: Font.Bold
+            color: "#17212A"; font.pixelSize: 20; font.weight: Font.Bold
         }
     }
 
@@ -153,7 +153,7 @@ Rectangle {
                 width: parent.width - 32
                 height: 6; radius: 3
                 anchors.horizontalCenter: parent.horizontalCenter
-                color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+                color: Qt.rgba(70/255, 88/255, 102/255, 0.18)
 
                 Rectangle {
                     width: parent.width * Math.min(memoryPct, 1.0)
@@ -177,7 +177,7 @@ Rectangle {
                 width: parent.width - 32
                 height: 6; radius: 3
                 anchors.horizontalCenter: parent.horizontalCenter
-                color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+                color: Qt.rgba(70/255, 88/255, 102/255, 0.18)
 
                 Rectangle {
                     width: parent.width * Math.min(storagePct, 1.0)
@@ -217,8 +217,8 @@ Rectangle {
         width: parent.width
         height: 48
         radius: 12
-        color: Qt.rgba(255/255, 255/255, 255/255, 0.02)
-        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.03)
+        color: Qt.rgba(255/255, 255/255, 255/255, 0.62)
+        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.86)
         border.width: 1
 
         property alias title: titleText.text
@@ -228,7 +228,7 @@ Rectangle {
             id: titleText
             anchors.left: parent.left; anchors.leftMargin: 16
             anchors.verticalCenter: parent.verticalCenter
-            color: Qt.rgba(255/255, 255/255, 255/255, 0.6)
+            color: "#61707C"
             font.pixelSize: 14
         }
 
@@ -236,7 +236,7 @@ Rectangle {
             id: valueText
             anchors.right: parent.right; anchors.rightMargin: 16
             anchors.verticalCenter: parent.verticalCenter
-            color: "#FFFFFF"
+            color: "#17212A"
             font.pixelSize: 14
             font.weight: Font.Medium
         }

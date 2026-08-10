@@ -164,7 +164,7 @@ Rectangle {
         Text {
             anchors.centerIn: parent
             text: "网络"
-            color: "#FFFFFF"
+            color: "#17212A"
             font.pixelSize: 20
             font.weight: Font.Bold
         }
@@ -175,8 +175,8 @@ Rectangle {
             anchors.rightMargin: 16
             anchors.verticalCenter: parent.verticalCenter
             width: 32; height: 32; radius: 8
-            color: Qt.rgba(255/255, 255/255, 255/255, 0.05)
-            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+            color: Qt.rgba(255/255, 255/255, 255/255, 0.62)
+            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.86)
             border.width: 1
             
             Text {
@@ -264,8 +264,8 @@ Rectangle {
             Rectangle {
                 anchors.fill: parent
                 radius: 14
-                color: Qt.rgba(255/255, 255/255, 255/255, 0.03)
-                border.color: Qt.rgba(255/255, 255/255, 255/255, 0.04)
+                color: Qt.rgba(255/255, 255/255, 255/255, 0.62)
+                border.color: Qt.rgba(255/255, 255/255, 255/255, 0.86)
                 border.width: 1
                 
                 // Signal strength indicator
@@ -292,7 +292,7 @@ Rectangle {
                     
                     Text {
                         text: modelData.netSSID
-                        color: "#FFFFFF"
+                        color: "#17212A"
                         font.pixelSize: 15
                         font.weight: Font.Medium
                     }
@@ -323,7 +323,7 @@ Rectangle {
                     anchors.fill: parent
                     hoverEnabled: true
                     onEntered: parent.color = Qt.rgba(0/255, 212/255, 255/255, 0.08)
-                    onExited: parent.color = Qt.rgba(255/255, 255/255, 255/255, 0.03)
+                    onExited: parent.color = Qt.rgba(255/255, 255/255, 255/255, 0.62)
                     onClicked: {
                         if (modelData.netLocked) {
                             passwordDialog.ssid = modelData.netSSID
@@ -376,8 +376,8 @@ Rectangle {
             width: 360
             height: 220
             radius: 24
-            color: Qt.rgba(20/255, 20/255, 40/255, 0.85)
-            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+            color: Qt.rgba(248/255, 252/255, 255/255, 0.94)
+            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.94)
             border.width: 1
             
             Column {
@@ -387,7 +387,7 @@ Rectangle {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "连接到 " + passwordDialog.ssid
-                    color: "#FFFFFF"
+                    color: "#17212A"
                     font.pixelSize: 16
                     font.weight: Font.Bold
                 }
@@ -395,7 +395,7 @@ Rectangle {
                 Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: 300; height: 40; radius: 12
-                    color: Qt.rgba(255/255, 255/255, 255/255, 0.05)
+                    color: Qt.rgba(255/255, 255/255, 255/255, 0.68)
                     border.color: Qt.rgba(0/255, 212/255, 255/255, 0.2)
                     border.width: 1
                     
@@ -403,7 +403,7 @@ Rectangle {
                         id: passwordInput
                         anchors.fill: parent
                         anchors.margins: 12
-                        color: "#FFFFFF"
+                        color: "#17212A"
                         font.pixelSize: 14
                         echoMode: TextInput.Password
                         placeholderText: "输入Wi-Fi密码"
@@ -419,7 +419,7 @@ Rectangle {
                     // Cancel
                     Rectangle {
                         width: 130; height: 40; radius: 20
-                        color: Qt.rgba(255/255, 255/255, 255/255, 0.05)
+                        color: Qt.rgba(255/255, 255/255, 255/255, 0.68)
                         
                         Text {
                             anchors.centerIn: parent
@@ -477,8 +477,8 @@ Rectangle {
         Rectangle {
             anchors.centerIn: parent
             width: 300; height: 140; radius: 24
-            color: Qt.rgba(20/255, 20/255, 40/255, 0.85)
-            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+            color: Qt.rgba(248/255, 252/255, 255/255, 0.94)
+            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.94)
             border.width: 1
             
             Column {
@@ -488,7 +488,7 @@ Rectangle {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     text: "断开 " + currentSSID + "?"
-                    color: "#FFFFFF"
+                    color: "#17212A"
                     font.pixelSize: 16
                 }
                 
@@ -498,7 +498,7 @@ Rectangle {
                     
                     Rectangle {
                         width: 120; height: 40; radius: 20
-                        color: Qt.rgba(255/255, 255/255, 255/255, 0.05)
+                        color: Qt.rgba(255/255, 255/255, 255/255, 0.68)
                         Text { anchors.centerIn: parent; text: "取消"; color: "#8888A0"; font.pixelSize: 14 }
                         MouseArea { anchors.fill: parent; onClicked: disconnectConfirm.visible = false }
                     }

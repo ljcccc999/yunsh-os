@@ -67,7 +67,7 @@ Rectangle {
         Text {
             anchors.centerIn: parent
             text: "空间显示"
-            color: "#FFFFFF"
+            color: "#17212A"
             font.pixelSize: 20
             font.weight: Font.Bold
         }

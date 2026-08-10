@@ -11,6 +11,10 @@ Item {
     property bool showStatusBar: true
     property bool stereoEnabled: false
     property bool headTrackingConnected: false
+    property bool appIconsVisible: true
+    property bool appIconsManuallyHidden: false
+    property bool desktopIconToggleEnabled: false
+    property bool reduceMotion: false
     
     signal openSettings()
     signal openAbout()
@@ -29,6 +33,8 @@ Item {
     signal openAndroidApp(string packageName)
     signal showControlCenter()
     signal takeScreenshot()
+    signal desktopActivated()
+    signal appShelfInteracted()
 
     // ─── App Model (dynamic, auto-paginates) ────────────
     property var coreAppList: [
@@ -63,9 +69,9 @@ Item {
 
     // A calm, evenly spaced spatial grid. The visual rhythm is inspired by
     // modern spatial operating systems while retaining YUNSH iconography.
-    readonly property var rowPattern: [4, 4, 4]
-    readonly property var rowOffsets: [0, 4, 8]
-    readonly property int appsPerPage: 12
+    readonly property var rowPattern: [4, 5, 4]
+    readonly property var rowOffsets: [0, 4, 9]
+    readonly property int appsPerPage: 13
 
     function appCount() { return appList.length }
     function pageCount() { return Math.ceil(appList.length / appsPerPage) }
@@ -102,6 +108,16 @@ Item {
         height: parent.height * 0.4
         radius: width / 2
         color: Qt.rgba(0/255, 100/255, 255/255, 0.02)
+    }
+
+    // With a visible app window, exposed desktop space toggles the temporary
+    // icon shelf. This target sits below icon pages and app windows, so it does
+    // not steal icon, window, or menu input.
+    MouseArea {
+        anchors.fill: parent
+        enabled: homeScreen.desktopIconToggleEnabled
+            && !homeScreen.appIconsManuallyHidden
+        onClicked: homeScreen.desktopActivated()
     }
 
     // Status Bar
@@ -283,14 +299,34 @@ Item {
 
             // ── Dynamic App Pages ──
             Item {
+                id: appShelf
                 width: parent.width
                 height: parent.height - 162
+                enabled: homeScreen.appIconsVisible
+                visible: opacity > 0
+                opacity: homeScreen.appIconsVisible ? 1 : 0
+                scale: homeScreen.appIconsVisible ? 1 : 0.94
+                transformOrigin: Item.Center
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: homeScreen.reduceMotion ? 70 : 180
+                        easing.type: Easing.OutCubic
+                    }
+                }
+                Behavior on scale {
+                    NumberAnimation {
+                        duration: homeScreen.reduceMotion ? 70 : 240
+                        easing.type: Easing.OutCubic
+                    }
+                }
 
                 SwipeView {
                     id: swipeView
                     anchors.fill: parent
                     interactive: true
                     clip: true
+                    onCurrentIndexChanged: homeScreen.appShelfInteracted()
 
                     Repeater {
                         model: pageCount()
@@ -341,8 +377,10 @@ Item {
                                                         var b = parseInt(c.substring(5,7), 16)
                                                         return Qt.rgba(r/255, g/255, b/255, 0.5)
                                                     }
-                                                    onClicked: handleAppAction(
-                                                        appList[appIndex].action)
+                                                    onClicked: {
+                                                        homeScreen.appShelfInteracted()
+                                                        handleAppAction(appList[appIndex].action)
+                                                    }
                                                 }
                                             }
                                         }
@@ -355,7 +393,7 @@ Item {
                                 anchors.bottom: parent.bottom
                                 anchors.bottomMargin: 16
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: "YUNSH OS v3.0.1"
+                                text: "YUNSH OS v3.0.2"
                                 color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
                                 font.pixelSize: 11
                                 visible: pageIndex === 0

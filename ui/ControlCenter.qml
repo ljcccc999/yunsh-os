@@ -22,6 +22,7 @@ Item {
     property bool focusMode: false
     property bool stereoEnabled: false
     property bool reduceMotion: false
+    property bool appIconsManuallyHidden: false
 
     signal dismissPanel()
     signal openNetwork()
@@ -36,6 +37,7 @@ Item {
     signal toggleBluetooth()
     signal toggleKeyboard()
     signal toggleFocusMode()
+    signal toggleAppIcons()
     signal openSpatialDisplay()
     signal requestLock()
     signal requestSystemAction(string action)
@@ -156,6 +158,8 @@ Item {
             toggleRecording()
         } else if (action === "focus") {
             toggleFocusMode()
+        } else if (action === "apps") {
+            toggleAppIcons()
         } else if (action === "display") {
             openSpatialDisplay()
         } else if (action === "photos") {
@@ -174,6 +178,7 @@ Item {
         if (action === "bluetooth") return bluetoothOn
         if (action === "record") return recording
         if (action === "focus") return focusMode
+        if (action === "apps") return !appIconsManuallyHidden
         if (action === "display") return stereoEnabled
         return false
     }
@@ -313,6 +318,7 @@ Item {
                             {label: "区域截图", icon: "screenshot.svg", action: "region"},
                             {label: recording ? "停止录屏" : "录屏", icon: "screen-relay.svg", action: "record"},
                             {label: "专注", icon: "metaverse.svg", action: "focus"},
+                            {label: appIconsManuallyHidden ? "显示 App" : "隐藏 App", icon: "appstore.svg", action: "apps"},
                             {label: "显示", icon: "display.svg", action: "display"},
                             {label: "相册", icon: "photos.svg", action: "photos"},
                             {label: "设置", icon: "settings.svg", action: "settings"},

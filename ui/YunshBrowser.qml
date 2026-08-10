@@ -106,11 +106,11 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         height: 56
-        color: Qt.rgba(12/255, 12/255, 25/255, 0.85)
+        color: Qt.rgba(248/255, 252/255, 255/255, 0.86)
 
         Rectangle {
             anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right
-            height: 1; color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+            height: 1; color: Qt.rgba(255/255, 255/255, 255/255, 0.88)
         }
 
         // Back button (close browser)
@@ -133,8 +133,8 @@ Item {
             anchors.right: parent.right; anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
             height: 36; radius: 18
-            color: Qt.rgba(40/255, 40/255, 55/255, 0.5)
-            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.08); border.width: 1
+            color: Qt.rgba(255/255, 255/255, 255/255, 0.62)
+            border.color: Qt.rgba(255/255, 255/255, 255/255, 0.88); border.width: 1
 
             Row { anchors.fill: parent; spacing: 0
 
@@ -143,7 +143,7 @@ Item {
                     width: 36; height: parent.height; color: "transparent"
                     Text {
                         anchors.centerIn: parent
-                        text: "◀"; color: webView.canGoBack ? "#FFFFFF" : "#555"
+                        text: "◀"; color: webView.canGoBack ? "#17212A" : "#8A969F"
                         font.pixelSize: 13
                     }
                     MouseArea {
@@ -157,7 +157,7 @@ Item {
                     width: 36; height: parent.height; color: "transparent"
                     Text {
                         anchors.centerIn: parent
-                        text: "▶"; color: webView.canGoForward ? "#FFFFFF" : "#555"
+                        text: "▶"; color: webView.canGoForward ? "#17212A" : "#8A969F"
                         font.pixelSize: 13
                     }
                     MouseArea {
@@ -172,7 +172,7 @@ Item {
                     Text {
                         anchors.centerIn: parent
                         text: isLoading ? "✕" : "⟳"
-                        color: "#FFFFFF"; font.pixelSize: isLoading ? 14 : 16
+                        color: "#17212A"; font.pixelSize: isLoading ? 14 : 16
                     }
                     MouseArea {
                         anchors.fill: parent
@@ -187,18 +187,18 @@ Item {
                 Rectangle {
                     width: parent.width - 220; height: 26; radius: 13
                     anchors.verticalCenter: parent.verticalCenter
-                    color: Qt.rgba(0/255, 0/255, 0/255, 0.3)
-                    border.color: Qt.rgba(255/255, 255/255, 255/255, 0.05)
+                    color: Qt.rgba(225/255, 244/255, 250/255, 0.70)
+                    border.color: Qt.rgba(255/255, 255/255, 255/255, 0.86)
 
                     EditableInput {
                         id: urlInput
                         anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 4
                         anchors.verticalCenter: parent.verticalCenter
-                        color: "#FFFFFF"; font.pixelSize: 12
+                        color: "#17212A"; font.pixelSize: 12
                         verticalAlignment: TextInput.AlignVCenter
                         text: webView.url.toString() === "about:blank" ? "" : webView.url.toString()
                         placeholderText: "搜索或输入网址..."
-                        placeholderTextColor: Qt.rgba(255/255, 255/255, 255/255, 0.15)
+                        placeholderTextColor: Qt.rgba(23/255, 33/255, 42/255, 0.36)
 
                         onAccepted: {
                             var text = urlInput.text.trim()
@@ -317,8 +317,8 @@ Item {
         width: Math.min(parent.width - 40, 520)
         height: downloadStatus.length > 0 ? 52 : 0
         radius: 18
-        color: Qt.rgba(12/255, 12/255, 25/255, 0.94)
-        border.color: Qt.rgba(0/255, 212/255, 255/255, 0.20)
+        color: Qt.rgba(248/255, 252/255, 255/255, 0.92)
+        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.94)
         visible: downloadStatus.length > 0
         z: 20
 
@@ -333,7 +333,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 text: downloadStatus
                 elide: Text.ElideMiddle
-                color: "#FFFFFF"
+                color: "#17212A"
                 font.pixelSize: 13
             }
 
@@ -361,11 +361,11 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         height: 44
-        color: Qt.rgba(12/255, 12/255, 25/255, 0.85)
+        color: Qt.rgba(248/255, 252/255, 255/255, 0.86)
 
         Rectangle {
             anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
-            height: 1; color: Qt.rgba(255/255, 255/255, 255/255, 0.06)
+            height: 1; color: Qt.rgba(255/255, 255/255, 255/255, 0.88)
         }
 
         Row {
@@ -441,7 +441,7 @@ Item {
         padding: 4
 
         background: Rectangle {
-            color: Qt.rgba(12/255, 12/255, 25/255, 0.92)
+            color: Qt.rgba(248/255, 252/255, 255/255, 0.94)
             radius: 12
             border.color: Qt.rgba(0/255, 212/255, 255/255, 0.12)
         }
@@ -464,7 +464,7 @@ Item {
                         anchors.fill: parent; anchors.leftMargin: 10
                         spacing: 10
                         Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.icon; color: "#A0B0C0"; font.pixelSize: 14 }
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.label; color: "#FFFFFF"; font.pixelSize: 13 }
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.label; color: "#17212A"; font.pixelSize: 13 }
                     }
 
                     MouseArea {

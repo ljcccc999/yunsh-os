@@ -1,4 +1,4 @@
-// YUNSH OS v3.0.1 - Main QML Entry Point
+// YUNSH OS v3.0.2 - Main QML Entry Point
 // Apple-style glass system + Task Switcher + Home Indicator
 
 import QtQuick 2.15
@@ -61,6 +61,60 @@ ApplicationWindow {
     property string activeAppId: ""
     property string androidTarget: "appstore"
     property string lastUiCommandId: ""
+    // A manual hide choice survives desktop clicks. App-driven automatic
+    // hiding remains temporary and can be reversed from exposed desktop space.
+    property bool appIconsManuallyHidden: false
+
+    Timer {
+        id: appIconsIdleTimer
+        interval: 30000
+        repeat: false
+        onTriggered: {
+            if (!yunshOS.appIconsManuallyHidden
+                    && homeScreen.appIconsVisible
+                    && yunshOS.hasVisibleAppWindows()) {
+                homeScreen.appIconsVisible = false
+                yunshOS.showToast("App 图标已自动隐藏")
+            }
+        }
+    }
+
+    function hasVisibleAppWindows() {
+        var windows = allWindows()
+        for (var i = 0; i < windows.length; i++) {
+            if (windows[i] && windows[i].visible && !windows[i].isMinimized)
+                return true
+        }
+        return false
+    }
+
+    function hideAppIconsForWindow() {
+        homeScreen.appIconsVisible = false
+        appIconsIdleTimer.stop()
+    }
+
+    function showAppIconsTemporarily() {
+        if (appIconsManuallyHidden)
+            return
+        homeScreen.appIconsVisible = true
+        if (hasVisibleAppWindows())
+            appIconsIdleTimer.restart()
+        else
+            appIconsIdleTimer.stop()
+    }
+
+    function noteAppShelfInteraction() {
+        if (!appIconsManuallyHidden && homeScreen.appIconsVisible
+                && hasVisibleAppWindows())
+            appIconsIdleTimer.restart()
+    }
+
+    function resolveAppIconVisibility() {
+        if (appIconsManuallyHidden || hasVisibleAppWindows())
+            hideAppIconsForWindow()
+        else
+            showAppIconsTemporarily()
+    }
 
     // Native QML apps share the system spatial keyboard. Browser and Android
     // surfaces keep using their input-method bridges because their editable
@@ -128,7 +182,9 @@ ApplicationWindow {
         if (activeAppId === appId)
             activeAppId = ""
         updateWindowFocus()
-        if (openApps.length === 0) homeScreen.visible = true
+        if (openApps.length === 0)
+            homeScreen.visible = true
+        resolveAppIconVisibility()
     }
 
     function closeWindowById(appId) {
@@ -182,12 +238,14 @@ ApplicationWindow {
                 activationDone = true
                 activationScreen.visible = false
                 homeScreen.visible = true
+                homeScreen.appIconsVisible = !yunshOS.appIconsManuallyHidden
                 saveActivationFlag()
             }
             onSkipActivation: {
                 activationDone = true
                 activationScreen.visible = false
                 homeScreen.visible = true
+                homeScreen.appIconsVisible = !yunshOS.appIconsManuallyHidden
                 saveActivationFlag()
             }
         }
@@ -200,6 +258,9 @@ ApplicationWindow {
             showStatusBar: false
             stereoEnabled: yunshOS.stereoEnabled
             headTrackingConnected: yunshOS.headTrackingEnabled
+            reduceMotion: yunshOS.reduceMotion
+            appIconsManuallyHidden: yunshOS.appIconsManuallyHidden
+            desktopIconToggleEnabled: yunshOS.hasVisibleAppWindows()
             onOpenSettings: switchTo(settingsWindow, "settings")
             onOpenAbout: switchTo(systemInfoWindow, "systeminfo")
             onOpenAppStore: launchApp("appstore")
@@ -217,6 +278,20 @@ ApplicationWindow {
             onOpenScreenRelay: switchTo(screenRelayWindow, "screenrelay")
             onShowControlCenter: controlCenter.show()
             onTakeScreenshot: takeScreenshot()
+            onDesktopActivated: {
+                if (yunshOS.appIconsManuallyHidden
+                        || !yunshOS.hasVisibleAppWindows())
+                    return
+                if (homeScreen.appIconsVisible) {
+                    homeScreen.appIconsVisible = false
+                    appIconsIdleTimer.stop()
+                    yunshOS.showToast("App 图标已隐藏")
+                } else {
+                    yunshOS.showAppIconsTemporarily()
+                    yunshOS.showToast("App 图标已显示 · 30 秒后自动隐藏")
+                }
+            }
+            onAppShelfInteracted: yunshOS.noteAppShelfInteraction()
         }
 
         // ===== IPHONE SCREEN RELAY =====
@@ -290,6 +365,7 @@ ApplicationWindow {
             recording: yunshOS.recordingActive
             stereoEnabled: yunshOS.stereoEnabled
             reduceMotion: yunshOS.reduceMotion
+            appIconsManuallyHidden: yunshOS.appIconsManuallyHidden
             onOpenNetwork: { controlCenter.hide(); switchTo(networkWindow, "network") }
             onOpenBluetooth: { controlCenter.hide(); switchTo(bluetoothWindow, "bluetooth") }
             onOpenSettings: { controlCenter.hide(); switchTo(settingsWindow, "settings") }
@@ -310,6 +386,19 @@ ApplicationWindow {
             onToggleFocusMode: {
                 yunshOS.focusMode = !yunshOS.focusMode
                 saveSpatialPreferences()
+            }
+            onToggleAppIcons: {
+                yunshOS.appIconsManuallyHidden = !yunshOS.appIconsManuallyHidden
+                if (yunshOS.appIconsManuallyHidden) {
+                    homeScreen.appIconsVisible = false
+                    appIconsIdleTimer.stop()
+                } else {
+                    yunshOS.showAppIconsTemporarily()
+                }
+                spatialPreferenceSaveTimer.restart()
+                controlCenter.hide()
+                yunshOS.showToast(!yunshOS.appIconsManuallyHidden
+                    ? "App 图标已显示" : "App 图标已隐藏")
             }
             onOpenSpatialDisplay: {
                 controlCenter.hide()
@@ -765,10 +854,10 @@ ApplicationWindow {
             height: 42
             radius: 21
             color: yunshOS.reduceTransparency
-                ? "#20202A" : Qt.rgba(22/255, 22/255, 35/255, 0.86)
+                ? "#F8FCFF" : Qt.rgba(248/255, 252/255, 255/255, 0.88)
             border.width: 1
             border.color: yunshOS.highContrast
-                ? Qt.rgba(1, 1, 1, 0.5) : Qt.rgba(1, 1, 1, 0.12)
+                ? Qt.rgba(75/255, 91/255, 103/255, 0.46) : Qt.rgba(1, 1, 1, 0.94)
             opacity: 0
             visible: opacity > 0
             z: 6000
@@ -777,7 +866,7 @@ ApplicationWindow {
                 id: toastLabel
                 anchors.centerIn: parent
                 text: ""
-                color: "#FFFFFF"
+                color: "#17212A"
                 font.pixelSize: 14
                 font.weight: Font.Medium
             }
@@ -982,6 +1071,7 @@ ApplicationWindow {
         if (!window || !window.visible)
             return
         activeAppId = appId
+        hideAppIconsForWindow()
         window.z = 60 + (++windowCount)
         updateWindowFocus()
     }
@@ -992,11 +1082,13 @@ ApplicationWindow {
         if (activeAppId === appId)
             activeAppId = ""
         homeScreen.visible = true
+        resolveAppIconVisibility()
         updateWindowFocus()
     }
 
     function switchTo(window, appId) {
         if (!window.visible) homeScreen.visible = true
+        hideAppIconsForWindow()
         window.visible = true
         window.isMinimized = false
         windowCount++
@@ -1023,6 +1115,7 @@ ApplicationWindow {
         activeAppId = ""
         updateWindowFocus()
         homeScreen.visible = true
+        resolveAppIconVisibility()
     }
 
     function openWorld() {
@@ -1044,7 +1137,10 @@ ApplicationWindow {
 
     function hideTaskSwitcher() {
         taskSwitcher.hide()
-        if (yunshOS.openApps.length === 0) homeScreen.visible = true
+        if (yunshOS.openApps.length === 0) {
+            homeScreen.visible = true
+            resolveAppIconVisibility()
+        }
     }
 
     function takeScreenshot() {
@@ -1177,6 +1273,8 @@ ApplicationWindow {
             state: {
                 activeAppId: activeAppId,
                 homeVisible: homeScreen.visible,
+                appIconsVisible: homeScreen.appIconsVisible,
+                appIconsManuallyHidden: appIconsManuallyHidden,
                 worldVisible: worldLayer.visible,
                 focusMode: focusMode,
                 recording: recordingActive,
@@ -1280,6 +1378,7 @@ ApplicationWindow {
 
         var restoredActiveWindow = null
         var restoredCount = 0
+        var restoredWindowVisible = false
         for (var j = 0; j < capsule.windows.length; j++) {
             var item = capsule.windows[j]
             var window = getWindowById(item.appId)
@@ -1299,6 +1398,8 @@ ApplicationWindow {
             window.pinMode = item.pinMode
             window.isMinimized = item.minimized
             window.visible = item.visible && !item.minimized
+            if (window.visible)
+                restoredWindowVisible = true
             window.z = 60 + Math.max(0, item.order)
             windowCount = Math.max(windowCount, item.order)
 
@@ -1310,6 +1411,10 @@ ApplicationWindow {
         }
 
         homeScreen.visible = true
+        if (restoredWindowVisible)
+            hideAppIconsForWindow()
+        else
+            resolveAppIconVisibility()
         if (capsule.activeAppId && restoredActiveWindow) {
             activeAppId = capsule.activeAppId
             activateWindow(restoredActiveWindow, capsule.activeAppId)
@@ -1447,7 +1552,8 @@ ApplicationWindow {
             reduceTransparency: reduceTransparency,
             highContrast: highContrast,
             focusMode: focusMode,
-            autoLockSeconds: autoLockSeconds
+            autoLockSeconds: autoLockSeconds,
+            appIconsManuallyHidden: appIconsManuallyHidden
         }
     }
 
@@ -1472,6 +1578,9 @@ ApplicationWindow {
             focusMode = data.focusMode
         if (typeof data.autoLockSeconds === "number")
             autoLockSeconds = Math.max(0, Math.min(3600, Math.round(data.autoLockSeconds)))
+        if (typeof data.appIconsManuallyHidden === "boolean")
+            appIconsManuallyHidden = data.appIconsManuallyHidden
+        resolveAppIconVisibility()
         applyWindowPreferences()
         updateWindowFocus()
     }
@@ -1542,6 +1651,7 @@ ApplicationWindow {
         } else {
             activationScreen.visible = false
             homeScreen.visible = true
+            homeScreen.appIconsVisible = !appIconsManuallyHidden
         }
     }
 
@@ -1617,6 +1727,8 @@ ApplicationWindow {
         w.y = 80 + (windowCount % 3) * 30
         w.visible = true
         w.isMinimized = false
+        homeScreen.visible = true
+        hideAppIconsForWindow()
         w.z = 60 + (++windowCount)
         activeAppId = appId
         trackAppOpen(appId)
@@ -1772,7 +1884,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        console.log("YUNSH OS UI v3.0.1")
+        console.log("YUNSH OS UI v3.0.2")
         checkFirstBoot()
         showFullScreen()
         applyWindowPreferences()

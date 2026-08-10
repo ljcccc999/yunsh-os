@@ -106,7 +106,7 @@ Rectangle {
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
             text: targetApp === "files" ? "Files" : "Android Apps"
-            color: "#FFFFFF"
+            color: "#17212A"
             font.pixelSize: 26
             font.weight: Font.DemiBold
         }
@@ -117,7 +117,7 @@ Rectangle {
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
             text: statusError.length > 0 ? statusError : statusMessage
-            color: statusError.length > 0 ? "#FF8A80" : Qt.rgba(1, 1, 1, 0.62)
+            color: statusError.length > 0 ? "#C43D4A" : Qt.rgba(23/255, 33/255, 42/255, 0.64)
             font.pixelSize: 14
         }
 
@@ -125,7 +125,7 @@ Rectangle {
             width: parent.width
             height: 6
             radius: 3
-            color: Qt.rgba(1, 1, 1, 0.08)
+            color: Qt.rgba(70/255, 88/255, 102/255, 0.18)
             visible: !runtimeReady
 
             Rectangle {
@@ -145,13 +145,13 @@ Rectangle {
                 width: 170
                 height: 46
                 enabled: runtimeReady && !requestBusy
-                bgColor: Qt.rgba(0/255, 212/255, 255/255, 0.16)
+                bgColor: Qt.rgba(0/255, 212/255, 255/255, 0.24)
                 onClicked: openTarget()
                 Text {
                     anchors.centerIn: parent
                     text: requestBusy ? "正在打开…" :
                         (targetApp === "files" ? "打开文件" : "打开 F-Droid")
-                    color: "#FFFFFF"
+                    color: "#17212A"
                     font.pixelSize: 14
                     font.weight: Font.Medium
                 }
@@ -180,7 +180,7 @@ Rectangle {
             text: runtimeReady
                 ? "应用在隔离的 Android 容器中运行"
                 : "系统桌面可以正常使用；Android 镜像会在后台下载并自动重试"
-            color: Qt.rgba(1, 1, 1, 0.28)
+            color: Qt.rgba(23/255, 33/255, 42/255, 0.46)
             font.pixelSize: 12
         }
     }

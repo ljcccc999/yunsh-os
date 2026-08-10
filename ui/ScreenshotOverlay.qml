@@ -1,6 +1,5 @@
 // YUNSH OS v1.0 - Screenshot Region Selector
 import QtQuick 2.15
-import QtQuick.Controls 2.15
 
 Item {
     id: screenshotOverlay
@@ -23,15 +22,16 @@ Item {
     // Selection rectangle
     Rectangle {
         id: selectionRect
-        color: Qt.rgba(0, 212, 255, 0.05)
+        color: Qt.rgba(0, 212/255, 1, 0.05)
         border.color: "#00D4FF"
         border.width: 2
         visible: false
+        z: 1
         
         Rectangle {
             anchors.fill: parent; anchors.margins: -1
             color: "transparent"
-            border.color: Qt.rgba(255, 255, 255, 0.3); border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.3); border.width: 1
         }
         
         // Size indicator
@@ -49,17 +49,18 @@ Item {
         anchors.bottom: parent.bottom; anchors.bottomMargin: 40
         anchors.horizontalCenter: parent.horizontalCenter
         width: 260; height: 52; radius: 26
-        color: Qt.rgba(20, 20, 30, 0.6)
-        border.color: Qt.rgba(255, 255, 255, 0.1); border.width: 1
+        z: 2
+        color: Qt.rgba(248/255, 252/255, 255/255, 0.80)
+        border.color: Qt.rgba(1, 1, 1, 0.88); border.width: 1
         
         Row {
             anchors.centerIn: parent; spacing: 20
             
             Rectangle {
                 width: 100; height: 36; radius: 18
-                color: Qt.rgba(0, 212, 255, 0.2)
-                border.color: Qt.rgba(0, 212, 255, 0.3); border.width: 1
-                Text { anchors.centerIn: parent; text: "📷 截图"; color: "#00D4FF"; font.pixelSize: 13 }
+                color: Qt.rgba(0, 212/255, 1, 0.22)
+                border.color: Qt.rgba(0, 142/255, 170/255, 0.38); border.width: 1
+                Text { anchors.centerIn: parent; text: "📷 截图"; color: "#007D96"; font.pixelSize: 13 }
                 MouseArea {
                     anchors.fill: parent
                     onClicked: {
@@ -85,9 +86,9 @@ Item {
             
             Rectangle {
                 width: 80; height: 36; radius: 18
-                color: Qt.rgba(255, 60, 60, 0.1)
-                border.color: Qt.rgba(255, 60, 60, 0.2); border.width: 1
-                Text { anchors.centerIn: parent; text: "取消"; color: "#FF6B6B"; font.pixelSize: 13 }
+                color: Qt.rgba(1, 95/255, 87/255, 0.16)
+                border.color: Qt.rgba(196/255, 61/255, 74/255, 0.26); border.width: 1
+                Text { anchors.centerIn: parent; text: "取消"; color: "#B83242"; font.pixelSize: 13 }
                 MouseArea {
                     anchors.fill: parent
                     onClicked: screenshotOverlay.cancelled()
@@ -98,26 +99,28 @@ Item {
 
     // Mouse area for region selection
     MouseArea {
+        id: selectionMouse
         anchors.fill: parent
+        z: 0
         cursorShape: Qt.CrossCursor
 
-        onPressed: {
-            startX = mouse.x
-            startY = mouse.y
-            selectionRect.x = startX
-            selectionRect.y = startY
+        onPressed: function(mouse) {
+            screenshotOverlay.startX = mouse.x
+            screenshotOverlay.startY = mouse.y
+            selectionRect.x = screenshotOverlay.startX
+            selectionRect.y = screenshotOverlay.startY
             selectionRect.width = 0
             selectionRect.height = 0
             selectionRect.visible = true
         }
 
-        onPositionChanged: {
-            if(pressed) {
+        onPositionChanged: function(mouse) {
+            if(selectionMouse.pressed) {
                 // Normalize coordinates: handle dragging in any direction
-                var x1 = Math.min(startX, mouse.x)
-                var y1 = Math.min(startY, mouse.y)
-                var x2 = Math.max(startX, mouse.x)
-                var y2 = Math.max(startY, mouse.y)
+                var x1 = Math.min(screenshotOverlay.startX, mouse.x)
+                var y1 = Math.min(screenshotOverlay.startY, mouse.y)
+                var x2 = Math.max(screenshotOverlay.startX, mouse.x)
+                var y2 = Math.max(screenshotOverlay.startY, mouse.y)
                 selectionRect.x = x1
                 selectionRect.y = y1
                 selectionRect.width = x2 - x1
