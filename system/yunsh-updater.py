@@ -234,6 +234,7 @@ def install_bundle(bundle_path: str) -> dict:
                     "orbit.service",
                     "orbit-voice-setup.service",
                     "yunsh-media-setup.service",
+                    "yunsh-time-sync.service",
                 ):
                     if os.path.exists(os.path.join("/etc/systemd/system", unit)):
                         subprocess.run(["systemctl", "enable", unit], check=False)

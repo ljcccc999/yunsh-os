@@ -78,23 +78,30 @@ Rectangle {
     
     // Text content
     Column {
+        id: textColumn
         anchors.left: parent.left
         anchors.leftMargin: iconSource.length > 0 ? 56 : 18
+        anchors.right: parent.right
+        anchors.rightMargin: isToggle ? 76 : (showArrow ? 44 : 18)
         anchors.verticalCenter: parent.verticalCenter
         spacing: 2
         
         Text {
+            width: parent.width
             text: title
             color: titleColor
             font.pixelSize: 15
             font.weight: Font.Medium
+            elide: Text.ElideRight
         }
         
         Text {
+            width: parent.width
             text: subtitle
             color: "#61707C"
             font.pixelSize: 12
             visible: subtitle.length > 0
+            elide: Text.ElideRight
         }
     }
     

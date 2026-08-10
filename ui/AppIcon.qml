@@ -16,6 +16,7 @@ Item {
     property bool pressedState: false
 
     signal clicked()
+    signal reorderRequested(int direction)
 
     width: 88
     height: 100
@@ -124,14 +125,32 @@ Item {
 
     // Click + hover
     MouseArea {
+        id: iconMouse
         anchors.fill: parent
-        onClicked: appIcon.clicked()
-        onPressed: appIcon.pressedState = true
-        onReleased: appIcon.pressedState = false
-        onCanceled: appIcon.pressedState = false
+        property real pressX: 0
+        property bool dragged: false
+        drag.target: appIcon
+        drag.axis: Drag.XAxis
+        drag.threshold: 12
+        onClicked: { if (!dragged) appIcon.clicked() }
+        onPressed: { pressX = appIcon.x; dragged = false; appIcon.pressedState = true }
+        onPositionChanged: { if (pressed && Math.abs(appIcon.x - pressX) > 14) dragged = true }
+        onReleased: {
+            var delta = appIcon.x - pressX
+            appIcon.pressedState = false
+            appIcon.x = pressX
+            if (dragged && Math.abs(delta) > 36)
+                appIcon.reorderRequested(delta > 0 ? 1 : -1)
+        }
+        onCanceled: { appIcon.pressedState = false; appIcon.x = pressX }
         hoverEnabled: true
 
         onEntered: appIcon.hovered = true
         onExited: appIcon.hovered = false
+    }
+
+    Behavior on x {
+        enabled: !iconMouse.pressed
+        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
     }
 }

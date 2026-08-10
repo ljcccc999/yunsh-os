@@ -102,8 +102,14 @@ check_binder_support() {
         grep -qw binder /proc/filesystems 2>/dev/null
 }
 
+runtime_initialized() {
+    [ -s "$WAYDROID_DATA_DIR/waydroid.cfg" ] &&
+        [ -s "$WAYDROID_DATA_DIR/images/system.img" ] &&
+        [ -s "$WAYDROID_DATA_DIR/images/vendor.img" ]
+}
+
 setup_runtime() {
-    if [ -f "$WAYDROID_DATA_DIR/waydroid.cfg" ]; then
+    if runtime_initialized; then
         touch "$READY_FILE"
         write_state "ready" 100 "Android runtime is ready"
         systemctl enable waydroid-container.service >/dev/null 2>&1 || true
@@ -119,16 +125,19 @@ setup_runtime() {
         return 1
     fi
 
-    # FOSS is an officially supported Waydroid system type. Only one bounded
-    # initialization attempt is made per service run; systemd handles retries.
+    # VANILLA is the default official Waydroid image channel. FOSS is accepted
+    # by the CLI but currently returns "No images found on system channel" on
+    # the Raspberry Pi arm64 runtime, leaving only a misleading waydroid.cfg.
+    # Force initialization so an earlier partial config cannot be mistaken for
+    # complete Android system/vendor images.
     write_state "initializing" 35 "Downloading the Android system image"
-    if ! timeout 1800 waydroid init -s FOSS </dev/null; then
+    if ! timeout 1800 waydroid init -f -s VANILLA </dev/null; then
         write_state "error" 35 "Android image setup did not complete" \
             "The image server may be unavailable; retry from Android Apps"
         return 1
     fi
 
-    [ -f "$WAYDROID_DATA_DIR/waydroid.cfg" ] || {
+    runtime_initialized || {
         write_state "error" 35 "Android image setup did not complete" \
             "Waydroid did not create its runtime configuration"
         return 1
@@ -156,12 +165,12 @@ trigger_setup_retry() {
 }
 
 status_json() {
-    python3 - "$STATE_FILE" "$READY_FILE" "$WAYDROID_DATA_DIR/waydroid.cfg" <<'PY'
+    python3 - "$STATE_FILE" "$READY_FILE" "$WAYDROID_DATA_DIR" "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" <<'PY'
 import json
 import os
 import sys
 
-state_path, ready_path, config_path = sys.argv[1:]
+state_path, ready_path, data_path, wayland_path = sys.argv[1:]
 try:
     with open(state_path, encoding="utf-8") as handle:
         data = json.load(handle)
@@ -172,17 +181,30 @@ except (OSError, ValueError):
         "message": "Android setup has not started",
         "error": None,
     }
-initialized = os.path.isfile(config_path)
+initialized = all(
+    os.path.isfile(os.path.join(data_path, relative)) and
+    os.path.getsize(os.path.join(data_path, relative)) > 0
+    for relative in ("waydroid.cfg", "images/system.img", "images/vendor.img")
+)
 ready = initialized and os.path.isfile(ready_path)
-if initialized:
+display_ready = os.path.exists(wayland_path)
+if initialized and display_ready:
     data.update({
         "state": "ready",
         "progress": 100,
         "message": "Android runtime is ready",
         "error": None,
     })
-data["ready"] = ready or initialized
+elif initialized and not display_ready:
+    data.update({
+        "state": "display_unavailable",
+        "progress": 100,
+        "message": "Android needs the Wayland graphics session",
+        "error": "The system is using framebuffer fallback; DRM/Weston is unavailable",
+    })
+data["ready"] = bool((ready or initialized) and display_ready)
 data["initialized"] = initialized
+data["display_ready"] = display_ready
 print(json.dumps(data, ensure_ascii=False))
 PY
 }
@@ -203,7 +225,7 @@ ensure_runtime() {
         echo "Android runtime is still being installed" >&2
         return 1
     }
-    [ -f "$WAYDROID_DATA_DIR/waydroid.cfg" ] || {
+    runtime_initialized || {
         trigger_setup_retry || true
         echo "Android system image is still being prepared" >&2
         return 1

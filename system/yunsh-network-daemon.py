@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+import re
 
 SOCKET_PATH = "/tmp/yunsh-network.sock"
 STATUS_PATH = "/tmp/yunsh-network-status.json"
@@ -29,6 +30,42 @@ logging.basicConfig(
     ]
 )
 log = logging.getLogger("yunsh-network")
+
+
+def configure_wifi_country():
+    """Set the persisted regulatory domain and clear Raspberry Pi soft block."""
+    country = os.environ.get("YUNSH_WIFI_COUNTRY", "")
+    try:
+        if not country:
+            with open("/etc/yunsh/wifi-country.conf", encoding="utf-8") as handle:
+                for line in handle:
+                    if line.startswith("COUNTRY="):
+                        country = line.split("=", 1)[1].strip()
+                        break
+    except OSError:
+        pass
+    country = country.upper() or "CN"
+    if not re.fullmatch(r"[A-Z]{2}", country):
+        country = "CN"
+    try:
+        os.makedirs("/etc/yunsh", exist_ok=True)
+        with open("/etc/yunsh/wifi-country.conf.tmp", "w", encoding="utf-8") as handle:
+            handle.write(f"COUNTRY={country}\n")
+        os.replace(
+            "/etc/yunsh/wifi-country.conf.tmp", "/etc/yunsh/wifi-country.conf"
+        )
+    except OSError as exc:
+        log.warning("Could not persist Wi-Fi country: %s", exc)
+    for command in (
+        ["raspi-config", "nonint", "do_wifi_country", country],
+        ["iw", "reg", "set", country],
+        ["rfkill", "unblock", "wifi"],
+    ):
+        try:
+            subprocess.run(command, capture_output=True, timeout=15, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return country
 
 
 def run_nmcli(args, timeout=15):
@@ -83,6 +120,7 @@ def split_nmcli(line):
 
 def scan_wifi():
     """Scan Wi-Fi networks"""
+    run_nmcli(["radio", "wifi", "on"], timeout=10)
     success, text = run_nmcli([
         "-t", "-e", "yes", "-f", "SSID,SIGNAL,SECURITY,BARS,CHAN",
         "device", "wifi", "list", "--rescan", "yes",
@@ -112,6 +150,9 @@ def get_status():
     wifi_enabled = False
     ssid = ""
     ip = ""
+    ethernet_connected = False
+    ethernet_interface = ""
+    ethernet_ip = ""
     
     radio_ok, radio_state = run_nmcli(["radio", "wifi"])
     if radio_ok:
@@ -141,18 +182,37 @@ def get_status():
                 and parts[2] in {"connected", "connected (externally)"}
             ):
                 interface = parts[0]
-                break
+            elif (
+                len(parts) >= 3
+                and parts[1] in {"ethernet", "802-3-ethernet"}
+                and parts[2] in {"connected", "connected (externally)"}
+            ):
+                ethernet_connected = True
+                ethernet_interface = parts[0]
     if interface:
         s4, d4 = run_nmcli(["-g", "IP4.ADDRESS", "device", "show", interface])
         if s4 and d4.strip():
             ip = d4.strip().splitlines()[0].split("/", 1)[0]
+    if ethernet_interface:
+        s5, d5 = run_nmcli([
+            "-g", "IP4.ADDRESS", "device", "show", ethernet_interface
+        ])
+        if s5 and d5.strip():
+            ethernet_ip = d5.strip().splitlines()[0].split("/", 1)[0]
     
     return {
         "connected": wifi_connected,
+        "online": wifi_connected or ethernet_connected,
         "enabled": wifi_enabled,
         "ssid": ssid,
         "ip_address": ip,
-        "interface": interface
+        "interface": interface,
+        "connection_type": "ethernet" if ethernet_connected else (
+            "wifi" if wifi_connected else "none"
+        ),
+        "ethernet_connected": ethernet_connected,
+        "ethernet_interface": ethernet_interface,
+        "ethernet_ip_address": ethernet_ip,
     }
 
 
@@ -172,17 +232,71 @@ def set_powered(on=True):
 
 def connect_wifi(ssid, password=None):
     """Connect to a Wi-Fi network"""
-    if not isinstance(ssid, str) or not ssid:
+    if (
+        not isinstance(ssid, str)
+        or not ssid
+        or len(ssid.encode("utf-8")) > 32
+        or any(character in ssid for character in "\r\n\x00")
+    ):
         return {"success": False, "message": "SSID is required"}
+    if password is not None and not isinstance(password, str):
+        return {"success": False, "message": "Password must be text"}
+
+    run_nmcli(["radio", "wifi", "on"], timeout=10)
+    # Refresh scan results before connecting. NetworkManager otherwise may
+    # report a correct nearby SSID as unavailable when its cache is stale.
+    run_nmcli(["device", "wifi", "rescan"], timeout=20)
+
+    interface = ""
+    ok, devices = run_nmcli([
+        "-t", "-e", "yes", "-f", "DEVICE,TYPE,STATE", "device", "status"
+    ])
+    if ok:
+        for line in devices.splitlines():
+            fields = split_nmcli(line)
+            if len(fields) >= 2 and fields[1] == "wifi":
+                interface = fields[0]
+                break
+    if not interface:
+        return {"success": False, "message": "No Wi-Fi adapter was detected"}
+
+    command = ["device", "wifi", "connect", ssid, "ifname", interface]
     if password:
-        success, output = run_nmcli([
-            "device", "wifi", "connect", ssid,
-            "password", password
+        command += ["password", password]
+    success, output = run_nmcli(command, timeout=45)
+    if not success:
+        # A profile created by an earlier failed password attempt can retain
+        # stale credentials. Remove only the profile whose connection id is
+        # exactly the selected SSID, then make one clean retry.
+        profile_ok, profiles = run_nmcli([
+            "-t", "-e", "yes", "-f", "NAME,TYPE", "connection", "show"
         ])
-    else:
-        success, output = run_nmcli([
-            "device", "wifi", "connect", ssid
-        ])
+        if profile_ok:
+            for line in profiles.splitlines():
+                fields = split_nmcli(line)
+                if len(fields) >= 2 and fields[0] == ssid and fields[1] in {
+                    "wifi", "802-11-wireless"
+                }:
+                    run_nmcli(["connection", "delete", "id", ssid], timeout=15)
+                    success, output = run_nmcli(command, timeout=45)
+                    break
+
+    if success:
+        # nmcli can return before DHCP has supplied an address. Verify the
+        # selected SSID instead of showing a false success in activation.
+        for _ in range(15):
+            status = get_status()
+            if status.get("connected") and status.get("ssid") == ssid:
+                save_status()
+                return {
+                    "success": True,
+                    "message": f"Connected to {ssid}",
+                    "ssid": ssid,
+                    "ip_address": status.get("ip_address", ""),
+                }
+            time.sleep(1)
+        success = False
+        output = "Connection activated but IP configuration did not complete"
     return {
         "success": success,
         "message": output.strip() if not success else f"Connected to {ssid}"
@@ -276,6 +390,9 @@ def socket_server():
 
 def main():
     log.info("YUNSH Network Daemon starting...")
+    country = configure_wifi_country()
+    log.info("Wi-Fi regulatory country: %s", country)
+    run_nmcli(["radio", "wifi", "on"], timeout=10)
     
     # Initial status save
     save_status()

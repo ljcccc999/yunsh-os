@@ -1,0 +1,6 @@
+#!/bin/sh
+# Enable network time on every boot without becoming a desktop dependency.
+timedatectl set-timezone Asia/Shanghai >/dev/null 2>&1 || true
+timedatectl set-ntp true >/dev/null 2>&1 || true
+systemctl try-restart systemd-timesyncd.service >/dev/null 2>&1 || true
+exit 0

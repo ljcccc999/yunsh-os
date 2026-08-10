@@ -28,6 +28,7 @@ draw_frame() {
     local status_text=$2
     local step_num=$3
     local total_steps=$4
+    local detail_text=${5:-}
     
     printf "\e[2J\e[1;1H"
     
@@ -61,6 +62,9 @@ draw_frame() {
     
     # Status text
     printf "%*s\e[97m  %s\e[0m\n" $(( (term_width - ${#status_text} - 2) / 2 )) "" "$status_text"
+    if [ -n "$detail_text" ]; then
+        printf "%*s\e[2m  %s\e[0m\n" $(( (term_width - ${#detail_text} - 2) / 2 )) "" "$detail_text"
+    fi
     printf "\n"
     
     # Progress bar

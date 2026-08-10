@@ -21,10 +21,12 @@ Rectangle {
     signal openComfortDna()
     signal requestFactoryReset()
 
-    property string osVersionName: "YUNSH OS v3.0.2"
+    property string osVersionName: "YUNSH OS v3.0.3"
     property string selectedLanguageDisplay: "简体中文 · 拼音"
     property int autoLockSeconds: 120
+    property bool lockPasswordEnabled: true
     signal requestAutoLockSeconds(int seconds)
+    signal requestLockPasswordEnabled(bool enabled)
 
     function autoLockLabel() {
         if (autoLockSeconds <= 0) return "永不自动熄屏"
@@ -288,8 +290,19 @@ Rectangle {
                 width: parent.width; height: 60
                 iconSource: "/usr/share/yunsh/icons/lock.svg"
                 iconSize: 18
+                title: "锁屏需要密码"
+                subtitle: lockPasswordEnabled ? "已开启 · 不影响终端与 SSH 密码" : "已关闭 · 锁屏点击即可唤醒"
+                isToggle: true
+                toggleState: lockPasswordEnabled
+                onToggled: function(state) { settingsScreen.requestLockPasswordEnabled(state) }
+            }
+
+            GlassCard {
+                width: parent.width; height: 60
+                iconSource: "/usr/share/yunsh/icons/lock.svg"
+                iconSize: 18
                 title: "本机锁定密码"
-                subtitle: "仅修改 Linux 用户 yunsh 的本机密码"
+                subtitle: "修改 Linux 用户 yunsh 的终端与 SSH 密码"
                 showArrow: true
                 onClicked: {
                     passwordError = ""

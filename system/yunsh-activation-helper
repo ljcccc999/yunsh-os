@@ -52,6 +52,9 @@ LINK_STATUS_PATH = os.environ.get(
 UI_COMMAND_PATH = os.environ.get(
     "YUNSH_UI_COMMAND_PATH", "/tmp/yunsh-ui-command.json"
 )
+LOCK_STATE_PATH = os.environ.get(
+    "YUNSH_LOCK_STATE_PATH", "/run/yunsh/screen-lock.json"
+)
 SCREEN_RELAY_STATUS_PATH = os.environ.get(
     "YUNSH_SCREEN_STATUS_PATH", "/run/yunsh/screen-relay-status.json"
 )
@@ -109,6 +112,7 @@ SPATIAL_DEFAULTS = {
     "highContrast": False,
     "focusMode": False,
     "appIconsManuallyHidden": False,
+    "lockPasswordEnabled": True,
     "autoLockSeconds": 120.0,
 }
 SPATIAL_RANGES = {
@@ -124,7 +128,9 @@ def socket_command(name, payload):
     path = SOCKETS[name]
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-            sock.settimeout(30)
+            # Wi-Fi association plus DHCP and one stale-profile retry can take
+            # longer than a simple status command on congested networks.
+            sock.settimeout(120)
             sock.connect(path)
             sock.sendall((json.dumps(payload) + "\n").encode())
             data = b""
@@ -143,16 +149,15 @@ def connect_wifi(payload):
     password = payload.get("password", "")
     if not ssid:
         return {"success": False, "error": "SSID is required"}
-    cmd = ["nmcli", "device", "wifi", "connect", ssid]
-    if password:
-        cmd += ["password", password]
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        if result.returncode == 0:
-            return {"success": True, "ssid": ssid}
-        return {"success": False, "error": result.stderr.strip() or result.stdout.strip()}
-    except Exception as exc:
-        return {"success": False, "error": str(exc)}
+    result = socket_command("network", {
+        "command": "connect", "ssid": ssid, "password": password,
+    })
+    if result.get("success"):
+        return result
+    return {
+        "success": False,
+        "error": result.get("error") or result.get("message") or "Wi-Fi connection failed",
+    }
 
 
 def configure_activation(payload):
@@ -235,19 +240,27 @@ def configure_activation(payload):
 
 
 def verify_linux_password(username, password):
-    """Verify a local Linux password without ever returning its stored hash."""
+    """Verify a local Linux password through PAM without exposing credentials."""
     if not password:
         return False
     try:
-        import crypt
-        import spwd
-
-        encoded = spwd.getspnam(username).sp_pwdp
-        if not encoded or encoded.startswith(("!", "*")):
-            return False
-        candidate = crypt.crypt(password, encoded)
-        return bool(candidate) and secrets.compare_digest(candidate, encoded)
-    except (ImportError, KeyError, PermissionError, OSError):
+        import PAM
+        def conversation(_auth, queries, _data):
+            responses = []
+            for _prompt, style in queries:
+                if style in (PAM.PAM_PROMPT_ECHO_ON, PAM.PAM_PROMPT_ECHO_OFF):
+                    responses.append((password, 0))
+                else:
+                    responses.append(("", 0))
+            return responses
+        checker = PAM.pam()
+        checker.start("login")
+        checker.set_item(PAM.PAM_USER, username)
+        checker.set_item(PAM.PAM_CONV, conversation)
+        checker.authenticate()
+        checker.acct_mgmt()
+        return True
+    except Exception:
         return False
 
 
@@ -267,7 +280,7 @@ def change_boot_password(payload):
         return {"success": False, "error": "当前开机密码不正确"}
     try:
         changed = subprocess.run(
-            ["chpasswd"],
+            ["chpasswd", "-c", "SHA512"],
             input=f"yunsh:{new_password}\n",
             capture_output=True,
             text=True,
@@ -341,6 +354,23 @@ def read_json(path, default=None):
             return json.load(handle)
     except (OSError, ValueError):
         return default or {}
+
+
+def set_lock_state(payload):
+    """Publish graphical lock state for local Agent/runtime gating."""
+    locked = bool(payload.get("locked"))
+    if locked:
+        os.makedirs(os.path.dirname(LOCK_STATE_PATH), exist_ok=True)
+        temporary = f"{LOCK_STATE_PATH}.tmp.{os.getpid()}"
+        with open(temporary, "w", encoding="utf-8") as handle:
+            json.dump({"locked": True, "updatedAt": time.time()}, handle)
+        os.replace(temporary, LOCK_STATE_PATH)
+    else:
+        try:
+            os.unlink(LOCK_STATE_PATH)
+        except FileNotFoundError:
+            pass
+    return {"success": True, "locked": locked}
 
 
 def sanitize_spatial_preferences(payload):
@@ -1009,9 +1039,11 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/api/update-"):
             self._send(update_response(self.path, {}))
         elif self.path == "/api/network-status":
-            self._send(read_json("/tmp/yunsh-network-status.json", {"connected": False}))
+            # Query the daemon directly so activation does not display a stale
+            # Ethernet/Wi-Fi state from the periodic status file.
+            self._send(socket_command("network", {"command": "status"}))
         elif self.path == "/api/bluetooth-status":
-            self._send(read_json("/tmp/yunsh-bluetooth-status.json", {"powered": False}))
+            self._send(socket_command("bluetooth", {"command": "status"}))
         elif self.path == "/api/glasses-status":
             self._send(read_json(GLASSES_STATUS_PATH, {"connected": False}))
         elif self.path == "/api/power-status":
@@ -1090,6 +1122,8 @@ class Handler(BaseHTTPRequestHandler):
             result = create_link_pairing_code()
         elif self.path == "/api/boot-password":
             result = change_boot_password(payload)
+        elif self.path == "/api/lock-state":
+            result = set_lock_state(payload)
         elif self.path == "/api/verify-boot-password":
             result = verify_boot_password(payload)
         else:

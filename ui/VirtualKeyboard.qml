@@ -7,7 +7,8 @@ import QtQuick.Controls 2.15
 Item {
     id: keyboardPanel
     visible: false
-    z: 200
+    // Always stay above fullscreen apps and global shell controls.
+    z: 8000
     width: 1920
     height: 1080
 
@@ -15,18 +16,17 @@ Item {
     MouseArea {
         id: dismissArea
         anchors.fill: parent
-        enabled: keyboardPanel.visible
-        onClicked: {
-            var localPoint = panelBody.mapFromItem(keyboardPanel, mouseX, mouseY)
-            if (!panelBody.contains(localPoint))
-                keyboardPanel.hide()
-        }
+        // A movable spatial keyboard closes only through its explicit X.
+        // Outside taps must not race with a tilted drag gesture.
+        enabled: false
     }
 
     // ─── Public API ────────────────────────────
     property var targetItem: null
     property bool shiftActive: false
     property bool capsActive: false
+    property bool symbolsActive: false
+    property bool emojiActive: false
     property bool reduceMotion: false
     property bool tilted: true
     property string pinMode: "following" // following, pinned
@@ -54,12 +54,41 @@ Item {
     signal spacePressed()
     signal dismissKeyboard()
 
-    onVisibleChanged: { if (!visible) targetItem = null }
+    Timer {
+        id: backspaceHoldDelay
+        interval: 360
+        repeat: false
+        onTriggered: backspaceRepeat.start()
+    }
+
+    Timer {
+        id: backspaceRepeat
+        interval: 70
+        repeat: true
+        onTriggered: keyboardPanel.backspacePressed()
+    }
+
+    function beginBackspace() {
+        backspacePressed()
+        backspaceHoldDelay.restart()
+    }
+
+    function endBackspace() {
+        backspaceHoldDelay.stop()
+        backspaceRepeat.stop()
+    }
+
+    onVisibleChanged: {
+        if (!visible) {
+            endBackspace()
+            targetItem = null
+        }
+    }
 
     // ─── Floating panel ────────────────────────
     // Movable like visionOS — drag to reposition anywhere
-    property real panelWidth: 840
-    property real panelHeight: 340
+    property real panelWidth: 900
+    property real panelHeight: 380
 
     // Slide-in/out animation (disabled during drag)
     property bool animating: true
@@ -160,17 +189,17 @@ Item {
             z: 5
 
             Rectangle {
-                width: 72; height: 28; radius: 14
-                color: tiltMouse.pressed ? Qt.rgba(0, 0.83, 1, 0.34)
-                    : Qt.rgba(1, 1, 1, 0.58)
+                width: 88; height: 34; radius: 17
+                color: tiltMouse.pressed ? Qt.rgba(0, 0.83, 1, 0.42)
+                    : Qt.rgba(1, 1, 1, 0.94)
                 border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.82)
+                border.color: "#FFFFFF"
                 Text {
                     anchors.centerIn: parent
                     text: keyboardPanel.tilted ? "倾斜" : "正向"
                     color: "#17212A"
-                    font.pixelSize: 11
-                    font.weight: Font.DemiBold
+                    font.pixelSize: 14
+                    font.weight: Font.Bold
                 }
                 MouseArea {
                     id: tiltMouse
@@ -180,17 +209,17 @@ Item {
             }
 
             Rectangle {
-                width: 80; height: 28; radius: 14
-                color: pinMouse.pressed ? Qt.rgba(0, 0.83, 1, 0.34)
-                    : Qt.rgba(1, 1, 1, 0.58)
+                width: 104; height: 34; radius: 17
+                color: pinMouse.pressed ? Qt.rgba(0, 0.83, 1, 0.42)
+                    : Qt.rgba(1, 1, 1, 0.94)
                 border.width: 1
-                border.color: Qt.rgba(1, 1, 1, 0.82)
+                border.color: "#FFFFFF"
                 Text {
                     anchors.centerIn: parent
                     text: keyboardPanel.pinMode === "pinned" ? "固定" : "跟随视线"
                     color: "#17212A"
-                    font.pixelSize: 11
-                    font.weight: Font.DemiBold
+                    font.pixelSize: 14
+                    font.weight: Font.Bold
                 }
                 MouseArea {
                     id: pinMouse
@@ -254,7 +283,8 @@ Item {
         Rectangle {
             anchors.top: parent.top; anchors.topMargin: 10
             anchors.right: parent.right; anchors.rightMargin: 14
-            width: 28; height: 28; radius: 14
+            width: 48; height: 48; radius: 24
+            z: 30
             color: closeBtn.containsMouse
                 ? Qt.rgba(255/255, 95/255, 87/255, 0.3)  // red tint on hover
                 : Qt.rgba(255/255, 255/255, 255/255, 0.60)
@@ -266,8 +296,8 @@ Item {
                 color: closeBtn.containsMouse
                     ? "#FF5F57"
                     : Qt.rgba(23/255, 33/255, 42/255, 0.55)
-                font.pixelSize: 12
-                font.weight: Font.Light
+                font.pixelSize: 18
+                font.weight: Font.DemiBold
             }
 
             MouseArea {
@@ -309,13 +339,16 @@ Item {
                     { primary: "9", shift: "(" }, { primary: "0", shift: ")" },
                     { primary: "-", shift: "_" }, { primary: "=", shift: "+" }
                 ]
+                symbolKeys: ["~", "!", "@", "#", "$", "%", "^", "&", "*", "(", ")", "_", "+"]
+                emojiKeys: ["😀", "😂", "🥰", "😍", "😊", "😭", "😡", "🤔", "😎", "🥳"]
                 lastKey: "⌫"
                 onKeyClicked: {
                     keyboardPanel.keyPressed(k)
                     if (keyboardPanel.shiftActive && !keyboardPanel.capsActive)
                         keyboardPanel.shiftActive = false
                 }
-                onSpecialClicked: keyboardPanel.backspacePressed()
+                onSpecialPressed: keyboardPanel.beginBackspace()
+                onSpecialReleased: keyboardPanel.endBackspace()
             }
 
             // Row 1: QWERTY
@@ -328,11 +361,22 @@ Item {
                     { primary: "u", shift: "U" }, { primary: "i", shift: "I" },
                     { primary: "o", shift: "O" }, { primary: "p", shift: "P" }
                 ]
+                symbolKeys: ["[", "]", "{", "}", "<", ">", "=", "+", "-", "_"]
+                emojiKeys: ["👍", "👎", "👏", "🙏", "💪", "👀", "❤️", "💙", "✨", "🔥"]
+                lastKey: "["
+                extraKey: "]"
+                last3Key: "\\"
                 onKeyClicked: {
                     keyboardPanel.keyPressed(k)
                     if (keyboardPanel.shiftActive && !keyboardPanel.capsActive)
                         keyboardPanel.shiftActive = false
                 }
+                onSpecialClicked: keyboardPanel.keyPressed(
+                    keyboardPanel.shiftActive || keyboardPanel.capsActive ? "{" : "[")
+                onExtraClicked: keyboardPanel.keyPressed(
+                    keyboardPanel.shiftActive || keyboardPanel.capsActive ? "}" : "]")
+                onExtra2Clicked: keyboardPanel.keyPressed(
+                    keyboardPanel.shiftActive || keyboardPanel.capsActive ? "|" : "\\")
             }
 
             // Row 2: ASDF
@@ -345,6 +389,8 @@ Item {
                     { primary: "j", shift: "J" }, { primary: "k", shift: "K" },
                     { primary: "l", shift: "L" }
                 ]
+                symbolKeys: ["/", "\\", "|", ":", ";", "'", "\"", "?", "!"]
+                emojiKeys: ["🎉", "🚀", "💡", "✅", "❌", "⚠️", "📱", "💻", "🥽"]
                 lastKey: ";"
                 extraKey: "'"
                 onKeyClicked: {
@@ -365,6 +411,8 @@ Item {
                     { primary: "b", shift: "B" }, { primary: "n", shift: "N" },
                     { primary: "m", shift: "M" }
                 ]
+                symbolKeys: ["`", "~", ",", ".", "…", "·", "、"]
+                emojiKeys: ["🌍", "🌙", "☀️", "⭐", "☁️", "🌈", "🎵"]
                 lastKey: ","
                 extraKey: "."
                 last3Key: "/"
@@ -375,13 +423,37 @@ Item {
                 }
                 onSpecialClicked: { keyboardPanel.keyPressed(keyboardPanel.shiftActive || keyboardPanel.capsActive ? "<" : ",") }
                 onExtraClicked: { keyboardPanel.keyPressed(keyboardPanel.shiftActive || keyboardPanel.capsActive ? ">" : ".") }
-                onExtra2Clicked: { keyboardPanel.keyPressed("?") }
+                onExtra2Clicked: { keyboardPanel.keyPressed(keyboardPanel.shiftActive || keyboardPanel.capsActive ? "?" : "/") }
             }
 
             // Row 4: Space row
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 8
+
+                RoundKey {
+                    label: keyboardPanel.symbolsActive ? "ABC" : "#+="
+                    width: 64
+                    accent: keyboardPanel.symbolsActive
+                    onClicked: {
+                        keyboardPanel.symbolsActive = !keyboardPanel.symbolsActive
+                        keyboardPanel.emojiActive = false
+                        keyboardPanel.shiftActive = false
+                        keyboardPanel.capsActive = false
+                    }
+                }
+
+                RoundKey {
+                    label: "😊"
+                    width: 52
+                    accent: keyboardPanel.emojiActive
+                    onClicked: {
+                        keyboardPanel.emojiActive = !keyboardPanel.emojiActive
+                        keyboardPanel.symbolsActive = false
+                        keyboardPanel.shiftActive = false
+                        keyboardPanel.capsActive = false
+                    }
+                }
 
                 RoundKey { label: keyboardPanel.shiftActive || keyboardPanel.capsActive ? "⇪" : "⇧"; width: 64; accent: keyboardPanel.shiftActive || keyboardPanel.capsActive
                     onClicked: {
@@ -391,11 +463,26 @@ Item {
                     }
                 }
 
-                RoundKey { label: "🌐"; width: 52; }
+                RoundKey { label: "⇤"; width: 48
+                    onClicked: {
+                        if (keyboardPanel.targetItem)
+                            keyboardPanel.targetItem.cursorPosition = Math.max(0,
+                                keyboardPanel.targetItem.cursorPosition - 1)
+                    }
+                }
+
+                RoundKey { label: "⇥"; width: 48
+                    onClicked: {
+                        if (keyboardPanel.targetItem)
+                            keyboardPanel.targetItem.cursorPosition = Math.min(
+                                keyboardPanel.targetItem.text.length,
+                                keyboardPanel.targetItem.cursorPosition + 1)
+                    }
+                }
 
                 Rectangle {
                     width: 180; height: 48; radius: 24
-                    color: kma.containsMouse ? Qt.rgba(225/255, 248/255, 255/255, 0.88) : Qt.rgba(255/255, 255/255, 255/255, 0.62)
+                    color: kma.pressed ? Qt.rgba(0/255, 212/255, 255/255, 0.34) : Qt.rgba(255/255, 255/255, 255/255, 0.62)
                     border.color: Qt.rgba(255/255, 255/255, 255/255, 0.86); border.width: 1
                     Text { anchors.centerIn: parent; text: "space"; color: Qt.rgba(23/255,33/255,42/255,0.62); font.pixelSize: 13; font.weight: Font.Light }
                     MouseArea { id: kma; anchors.fill: parent; hoverEnabled: true
@@ -403,7 +490,7 @@ Item {
                 }
 
                 RoundKey { label: "🎤"; width: 52; opacity: 0.3 }
-                RoundKey { label: "⏎"; width: 68; accent: true
+                RoundKey { label: "⏎"; width: 68
                     onClicked: keyboardPanel.enterPressed() }
             }
         }
@@ -415,16 +502,20 @@ Item {
     component RoundKey: Rectangle {
         id: roundKey
         width: 48; height: 48; radius: width / 2
-        color: kArea.containsMouse
+        // Ordinary keys flash only while physically pressed. `accent` is
+        // reserved for latched state keys such as Shift/Caps Lock.
+        color: kArea.pressed
             ? (accent ? Qt.rgba(0/255, 212/255, 255/255, 0.38) : Qt.rgba(225/255, 248/255, 255/255, 0.90))
-            : (accent ? Qt.rgba(0/255, 212/255, 255/255, 0.24) : Qt.rgba(255/255, 255/255, 255/255, 0.62))
-        border.color: kArea.containsMouse || accent
-            ? Qt.rgba(0/255, 212/255, 255/255, kArea.containsMouse ? 0.25 : 0.18)
+            : (accent ? Qt.rgba(0/255, 212/255, 255/255, 0.30) : Qt.rgba(255/255, 255/255, 255/255, keyboardPanel.tilted ? 0.94 : 0.76))
+        border.color: kArea.pressed || accent
+            ? Qt.rgba(0/255, 212/255, 255/255, kArea.pressed ? 0.25 : 0.18)
             : Qt.rgba(255/255, 255/255, 255/255, 0.86)
         border.width: 1
         property alias label: keyText.text
         property bool accent: false
         signal clicked()
+        signal pressed()
+        signal released()
 
         Rectangle {
             anchors.fill: parent; radius: parent.radius
@@ -433,13 +524,17 @@ Item {
 
         Text {
             id: keyText; anchors.centerIn: parent
-            color: accent ? "#008EAA" : "#17212A"
-            font.pixelSize: 16; font.weight: accent ? Font.Bold : Font.Light
+            color: accent ? "#007F99" : (keyboardPanel.tilted ? "#071116" : "#17212A")
+            font.pixelSize: keyboardPanel.tilted ? 18 : 16
+            font.weight: accent ? Font.Bold : (keyboardPanel.tilted ? Font.DemiBold : Font.Medium)
         }
 
         MouseArea {
             id: kArea; anchors.fill: parent; hoverEnabled: true
             onClicked: roundKey.clicked()
+            onPressed: roundKey.pressed()
+            onReleased: roundKey.released()
+            onCanceled: roundKey.released()
         }
 
         Behavior on color { ColorAnimation { duration: 80 } }
@@ -453,12 +548,15 @@ Item {
         width: keyboardPanel.panelWidth - 40
         height: 48
         property var keys: []
+        property var symbolKeys: []
+        property var emojiKeys: []
         property real perspectiveScale: 1.0
         property string lastKey: ""; property string extraKey: ""
         property string last3Key: ""
 
         signal keyClicked(string k)
         signal specialClicked(); signal extraClicked(); signal extra2Clicked()
+        signal specialPressed(); signal specialReleased()
 
         Row {
             anchors.horizontalCenter: parent.horizontalCenter
@@ -467,16 +565,21 @@ Item {
             transformOrigin: Item.Bottom
 
             Repeater {
-                model: keyRow.keys
+                model: keyboardPanel.emojiActive ? keyRow.emojiKeys
+                    : (keyboardPanel.symbolsActive ? keyRow.symbolKeys : keyRow.keys)
                 delegate: RoundKey {
                     width: 46; height: 46
-                    label: keyboardPanel.shiftActive || keyboardPanel.capsActive ? modelData.shift : modelData.primary
-                    onClicked: keyRow.keyClicked(keyboardPanel.shiftActive || keyboardPanel.capsActive ? modelData.shift : modelData.primary)
+                    label: keyboardPanel.emojiActive || keyboardPanel.symbolsActive ? String(modelData)
+                        : (keyboardPanel.shiftActive || keyboardPanel.capsActive ? modelData.shift : modelData.primary)
+                    onClicked: keyRow.keyClicked(keyboardPanel.emojiActive || keyboardPanel.symbolsActive ? String(modelData)
+                        : (keyboardPanel.shiftActive || keyboardPanel.capsActive ? modelData.shift : modelData.primary))
                 }
             }
 
-            RoundKey { width: 46; height: 46; label: keyRow.lastKey; visible: keyRow.lastKey !== ""; accent: keyRow.lastKey === "⌫"
-                onClicked: keyRow.specialClicked() }
+            RoundKey { width: 46; height: 46; label: keyRow.lastKey; visible: keyRow.lastKey !== ""
+                onClicked: keyRow.specialClicked()
+                onPressed: keyRow.specialPressed()
+                onReleased: keyRow.specialReleased() }
             RoundKey { width: 46; height: 46; label: keyRow.extraKey; visible: keyRow.extraKey !== ""
                 onClicked: keyRow.extraClicked() }
             RoundKey { width: 46; height: 46; label: keyRow.last3Key; visible: keyRow.last3Key !== ""
@@ -507,7 +610,11 @@ Item {
         }
     }
     onEnterPressed: {
-        if (targetItem) targetItem.focus = false
-        hide()
+        if (targetItem && typeof targetItem.submit === "function")
+            targetItem.submit()
+        else if (targetItem && typeof targetItem.accepted === "function")
+            targetItem.accepted()
+        else if (targetItem)
+            targetItem.focus = false
     }
 }

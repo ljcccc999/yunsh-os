@@ -366,7 +366,15 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         height: 44
+        radius: 28
         color: Qt.rgba(255/255, 255/255, 255/255, 0.60)
+
+        // Keep the seam to the output square while preserving the two visible
+        // bottom corners of the containing liquid-glass window.
+        Rectangle {
+            anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
+            height: 28; color: parent.color
+        }
 
         // Prompt
         Text {

@@ -13,12 +13,15 @@ Rectangle {
     z: 60
     
     property string photosDir: "file:///home/yunsh/Pictures/Screenshots"
+    property string activeFolder: photosDir
+    property string activeAlbum: "photos" // photos, albums, deleted, hidden
     property bool showGrid: true
     property string currentPhoto: ""
+    property bool deleteConfirmationVisible: false
     
     signal backToHome()
 
-    function deleteCurrentPhoto() {
+    function manageCurrentPhoto(mode) {
         if (currentPhoto.length === 0)
             return
         var xhr = new XMLHttpRequest()
@@ -32,14 +35,30 @@ Rectangle {
                 if (result.status === "ok") {
                     currentPhoto = ""
                     showGrid = true
-                    headerText.text = "相册"
+                    headerText.text = activeAlbum === "deleted" ? "最近删除" : (activeAlbum === "hidden" ? "隐藏" : "照片")
                 }
             } catch (error) {}
         }
         xhr.send(JSON.stringify({
             action: "delete_screenshot",
-            path: currentPhoto
+            path: currentPhoto,
+            mode: mode
         }))
+    }
+
+    function openAlbum(name) {
+        activeAlbum = name
+        showGrid = true
+        if (name === "deleted") {
+            activeFolder = photosDir + "/.RecentlyDeleted"
+            headerText.text = "最近删除"
+        } else if (name === "hidden") {
+            activeFolder = photosDir + "/.Hidden"
+            headerText.text = "隐藏"
+        } else {
+            activeFolder = photosDir
+            headerText.text = "照片"
+        }
     }
     
     // ─── Header ────────────────────────────────────
@@ -83,7 +102,7 @@ Rectangle {
 
         Text {
             id: headerText
-            anchors.centerIn: parent; text: "相册"
+            anchors.centerIn: parent; text: "照片"
             color: "#17212A"; font.pixelSize: 20; font.weight: Font.Bold
         }
 
@@ -114,7 +133,7 @@ Rectangle {
 
         model: FolderListModel {
             id: folderModel
-            folder: photosDir
+            folder: activeFolder
             nameFilters: ["*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp"]
             sortField: FolderListModel.Time
             sortReversed: true
@@ -169,7 +188,7 @@ Rectangle {
                     onClicked: {
                         currentPhoto = folderModel.get(index, "filePath") || ""
                         showGrid = false
-                        headerText.text = "预览"
+                        headerText.text = activeAlbum === "deleted" ? "最近删除" : (activeAlbum === "hidden" ? "隐藏" : "预览")
                     }
                 }
             }
@@ -215,7 +234,7 @@ Rectangle {
 
         // Glass toolbar at bottom
         Rectangle {
-            anchors.bottom: parent.bottom
+        anchors.bottom: bottomLiquidBar.top
             anchors.bottomMargin: 32
             anchors.horizontalCenter: parent.horizontalCenter
             width: 200; height: 44; radius: 22
@@ -235,13 +254,22 @@ Rectangle {
                 spacing: 28
 
                 Text {
-                    text: "删除"
+                    text: activeAlbum === "deleted" ? "彻底删除" : "删除"
                     font.pixelSize: 14
                     color: "#FF5252"
                     MouseArea {
                         anchors.fill: parent
                         anchors.margins: -10
-                        onClicked: photosScreen.deleteCurrentPhoto()
+                        onClicked: deleteConfirmationVisible = true
+                    }
+                }
+                Text {
+                    text: activeAlbum === "deleted" ? "恢复" : (activeAlbum === "hidden" ? "取消隐藏" : "隐藏")
+                    font.pixelSize: 14
+                    color: "#00A9CC"
+                    MouseArea {
+                        anchors.fill: parent; anchors.margins: -10
+                        onClicked: photosScreen.manageCurrentPhoto(activeAlbum === "deleted" ? "restore" : (activeAlbum === "hidden" ? "unhide" : "hide"))
                     }
                 }
                 Text {
@@ -267,6 +295,80 @@ Rectangle {
             onClicked: {
                 showGrid = true
                 headerText.text = "相册"
+            }
+        }
+    }
+
+    // Album landing page. The English product nouns remain concise while the
+    // descriptions follow the Simplified Chinese system UI.
+    Column {
+        anchors.centerIn: parent
+        spacing: 16
+        visible: showGrid && activeAlbum === "albums"
+        Repeater {
+            model: [
+                {key: "deleted", title: "最近删除", subtitle: "删除的照片保留在这里，彻底删除需再次确认"},
+                {key: "hidden", title: "隐藏", subtitle: "隐藏照片不会出现在照片流中"}
+            ]
+            Rectangle {
+                width: 560; height: 92; radius: 26
+                color: Qt.rgba(248/255, 252/255, 255/255, 0.94)
+                border.width: 1; border.color: "#FFFFFF"
+                Column {
+                    anchors.left: parent.left; anchors.leftMargin: 24; anchors.verticalCenter: parent.verticalCenter; spacing: 5
+                    Text { text: modelData.title; color: "#17212A"; font.pixelSize: 18; font.weight: Font.DemiBold }
+                    Text { text: modelData.subtitle; color: "#61707C"; font.pixelSize: 12 }
+                }
+                Text { anchors.right: parent.right; anchors.rightMargin: 24; anchors.verticalCenter: parent.verticalCenter; text: "›"; color: "#53616C"; font.pixelSize: 28 }
+                MouseArea { anchors.fill: parent; onClicked: photosScreen.openAlbum(modelData.key) }
+            }
+        }
+    }
+
+    Rectangle {
+        id: bottomLiquidBar
+        anchors.bottom: parent.bottom; anchors.bottomMargin: 16
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: 300; height: 54; radius: 27; z: 40
+        color: Qt.rgba(248/255, 253/255, 255/255, 0.96)
+        border.width: 1; border.color: "#FFFFFF"
+        visible: showGrid
+        Row {
+            anchors.centerIn: parent; spacing: 8
+            Repeater {
+                model: [{key: "photos", label: "照片"}, {key: "albums", label: "相簿"}]
+                Rectangle {
+                    width: 132; height: 40; radius: 20
+                    color: (activeAlbum === modelData.key || (modelData.key === "albums" && (activeAlbum === "deleted" || activeAlbum === "hidden"))) ? Qt.rgba(0, 0.83, 1, 0.22) : "transparent"
+                    Text { anchors.centerIn: parent; text: modelData.label; color: "#17212A"; font.pixelSize: 14; font.weight: Font.DemiBold }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            if (modelData.key === "photos") photosScreen.openAlbum("photos")
+                            else { activeAlbum = "albums"; showGrid = true; headerText.text = "相簿" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        anchors.fill: parent; z: 100
+        visible: deleteConfirmationVisible
+        color: Qt.rgba(0, 0, 0, 0.48)
+        Rectangle {
+            anchors.centerIn: parent; width: 430; height: 210; radius: 30
+            color: Qt.rgba(250/255, 254/255, 1, 0.98); border.width: 1; border.color: "#FFFFFF"
+            Column {
+                anchors.centerIn: parent; spacing: 18
+                Text { anchors.horizontalCenter: parent.horizontalCenter; text: activeAlbum === "deleted" ? "确定彻底删除这张照片？" : "确定删除这张照片？"; color: "#17212A"; font.pixelSize: 18; font.weight: Font.DemiBold }
+                Text { anchors.horizontalCenter: parent.horizontalCenter; text: activeAlbum === "deleted" ? "此操作无法撤销" : "照片将移到最近删除"; color: "#61707C"; font.pixelSize: 13 }
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter; spacing: 14
+                    Rectangle { width: 150; height: 42; radius: 21; color: "#EDF4F6"; Text { anchors.centerIn: parent; text: "取消"; color: "#17212A" } MouseArea { anchors.fill: parent; onClicked: deleteConfirmationVisible = false } }
+                    Rectangle { width: 150; height: 42; radius: 21; color: "#FF5F57"; Text { anchors.centerIn: parent; text: "删除"; color: "white" } MouseArea { anchors.fill: parent; onClicked: { deleteConfirmationVisible = false; photosScreen.manageCurrentPhoto(activeAlbum === "deleted" ? "permanent" : "trash") } } }
+                }
             }
         }
     }

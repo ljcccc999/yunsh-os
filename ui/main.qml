@@ -1,4 +1,4 @@
-// YUNSH OS v3.0.2 - Main QML Entry Point
+// YUNSH OS v3.0.3 - Main QML Entry Point
 // Apple-style glass system + Task Switcher + Home Indicator
 
 import QtQuick 2.15
@@ -53,6 +53,9 @@ ApplicationWindow {
     // 0 disables automatic screen-off/lock. Values are persisted with the
     // local spatial preferences because this is a per-device comfort setting.
     property int autoLockSeconds: 120
+    // This controls only the graphical lock screen. It never changes the
+    // independent Linux/terminal/SSH password.
+    property bool lockPasswordEnabled: true
     property string pendingSystemAction: ""
     property int systemActionConfirmStage: 0
     property string factoryResetPassword: ""
@@ -132,9 +135,34 @@ ApplicationWindow {
         }
     }
 
+    function syncLockState(locked) {
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/lock-state", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 800
+        xhr.send(JSON.stringify({locked: !!locked}))
+    }
+
     onActiveFocusItemChanged: {
         if (isNativeEditableItem(activeFocusItem))
             virtualKeyboard.showFor(activeFocusItem)
+    }
+
+    // Some nested MouseAreas and popup transitions restore focus one event
+    // loop after the first click, so activeFocusItemChanged is not guaranteed
+    // to fire at the moment the user expects the keyboard. Reconcile the
+    // focused editor with the system keyboard without reopening it after the
+    // editor has actually lost focus.
+    Timer {
+        interval: 250
+        running: true
+        repeat: true
+        onTriggered: {
+            var editor = yunshOS.activeFocusItem
+            if (yunshOS.isNativeEditableItem(editor)
+                    && (!virtualKeyboard.visible || virtualKeyboard.targetItem !== editor))
+                virtualKeyboard.showFor(editor)
+        }
     }
 
     property var openApps: []
@@ -157,16 +185,18 @@ ApplicationWindow {
         "updatehistory": { name: "更新历史", icon: "/usr/share/yunsh/icons/update.svg", color: "#607D8B" }
     })
 
-    function trackAppOpen(appId) {
+    function trackAppOpen(appId, fallbackName) {
         for (var i = 0; i < openApps.length; i++) {
             if (openApps[i].appId === appId) return
         }
-        var info = appInfo[appId]
-        if (info) {
-            var updated = openApps.slice()
-            updated.push({ appId: appId, name: info.name, icon: info.icon, color: info.color })
-            openApps = updated
+        var info = appInfo[appId] || {
+            name: fallbackName || (appId.indexOf("android:") === 0 ? "Android App" : appId),
+            icon: "/usr/share/yunsh/icons/android-app.svg",
+            color: "#7C77A8"
         }
+        var updated = openApps.slice()
+        updated.push({ appId: appId, name: info.name, icon: info.icon, color: info.color, minimized: false })
+        openApps = updated
     }
 
     function closeAppFromSwitcher(appId) {
@@ -283,9 +313,9 @@ ApplicationWindow {
                         || !yunshOS.hasVisibleAppWindows())
                     return
                 if (homeScreen.appIconsVisible) {
-                    homeScreen.appIconsVisible = false
-                    appIconsIdleTimer.stop()
-                    yunshOS.showToast("App 图标已隐藏")
+                    // A second desktop click keeps the temporary shelf alive;
+                    // it must not invert the rule and hide icons immediately.
+                    appIconsIdleTimer.restart()
                 } else {
                     yunshOS.showAppIconsTemporarily()
                     yunshOS.showToast("App 图标已显示 · 30 秒后自动隐藏")
@@ -406,7 +436,7 @@ ApplicationWindow {
             }
             onRequestLock: {
                 controlCenter.hide()
-                screensaver_item.passwordRequired = true
+                screensaver_item.passwordRequired = yunshOS.lockPasswordEnabled
                 screensaver_item.show()
             }
             onRequestSystemAction: function(action) {
@@ -431,6 +461,7 @@ ApplicationWindow {
             SettingsScreen {
                 anchors.fill: parent
                 autoLockSeconds: yunshOS.autoLockSeconds
+                lockPasswordEnabled: yunshOS.lockPasswordEnabled
                 onBackToHome: switchToHome()
                 onOpenUpdatePage: switchTo(updateWindow, "update")
                 onOpenUpdateHistory: switchTo(updateHistoryWindow, "updatehistory")
@@ -443,6 +474,10 @@ ApplicationWindow {
                 onRequestAutoLockSeconds: function(seconds) {
                     yunshOS.autoLockSeconds = seconds
                     idleTimer.restart()
+                    yunshOS.saveSpatialPreferences()
+                }
+                onRequestLockPasswordEnabled: function(enabled) {
+                    yunshOS.lockPasswordEnabled = enabled
                     yunshOS.saveSpatialPreferences()
                 }
                 onRequestFactoryReset: yunshOS.beginSystemActionConfirmation("factory_reset")
@@ -673,6 +708,7 @@ ApplicationWindow {
                 id: browserScreen
                 anchors.fill: parent
                 onBackToHome: switchToHome()
+                onRequestVirtualKeyboard: function(target) { virtualKeyboard.showFor(target) }
             }
         }
 
@@ -794,7 +830,15 @@ ApplicationWindow {
             }
             onUnlocked: {
                 screensaver_item.hideScreen()
+                yunshOS.syncLockState(false)
                 idleTimer.restart()
+            }
+            onVisibleChanged: yunshOS.syncLockState(visible && passwordRequired)
+            onPasswordRequiredChanged: {
+                if (visible) yunshOS.syncLockState(visible && passwordRequired)
+            }
+            onRequestVirtualKeyboard: function(target) {
+                virtualKeyboard.showFor(target)
             }
         }
 
@@ -806,9 +850,7 @@ ApplicationWindow {
             repeat: false
             onTriggered: {
                 if (!screensaver_item.visible) {
-                    // Automatic screen-off is intentionally frictionless;
-                    // explicit Lock remains password-protected.
-                    screensaver_item.passwordRequired = false
+                    screensaver_item.passwordRequired = yunshOS.lockPasswordEnabled
                     screensaver_item.show()
                 }
             }
@@ -1046,6 +1088,10 @@ ApplicationWindow {
             orbitActivityText: orbitPanel.statusText
             reduceMotion: yunshOS.reduceMotion
             recordingActive: yunshOS.recordingActive
+            fullscreenMode: {
+                var active = yunshOS.getWindowById(yunshOS.activeAppId)
+                return active ? active.isFullscreen : false
+            }
             onOpenSystemMenu: controlCenter.show()
             onOpenWorld: yunshOS.openWorld()
             onOpenOrbit: orbitPanel.openPanel()
@@ -1077,6 +1123,9 @@ ApplicationWindow {
     }
 
     function minimizeWindow(window, appId) {
+        // A minimized window remains a running app and must stay in the App
+        // Switcher even when it arrived through a dynamic Android entry.
+        trackAppOpen(appId, window && window.appTitle ? window.appTitle : "")
         window.visible = false
         window.isMinimized = true
         if (activeAppId === appId)
@@ -1516,7 +1565,8 @@ ApplicationWindow {
                         virtualKeyboard.visible
                             ? virtualKeyboard.hide() : virtualKeyboard.show()
                     } else if (action === "lock") {
-                        screensaver_item.visible = true
+                        screensaver_item.passwordRequired = yunshOS.lockPasswordEnabled
+                        screensaver_item.show()
                     }
                 }
             } catch (error) {}
@@ -1552,6 +1602,7 @@ ApplicationWindow {
             reduceTransparency: reduceTransparency,
             highContrast: highContrast,
             focusMode: focusMode,
+            lockPasswordEnabled: lockPasswordEnabled,
             autoLockSeconds: autoLockSeconds,
             appIconsManuallyHidden: appIconsManuallyHidden
         }
@@ -1576,6 +1627,8 @@ ApplicationWindow {
             highContrast = data.highContrast
         if (typeof data.focusMode === "boolean")
             focusMode = data.focusMode
+        if (typeof data.lockPasswordEnabled === "boolean")
+            lockPasswordEnabled = data.lockPasswordEnabled
         if (typeof data.autoLockSeconds === "number")
             autoLockSeconds = Math.max(0, Math.min(3600, Math.round(data.autoLockSeconds)))
         if (typeof data.appIconsManuallyHidden === "boolean")
@@ -1596,6 +1649,7 @@ ApplicationWindow {
             reduceTransparency: settings.reduceTransparency,
             highContrast: settings.highContrast,
             focusMode: settings.focusMode,
+            lockPasswordEnabled: settings.lockPasswordEnabled,
             autoLockSeconds: settings.autoLockSeconds
         })
         spatialPreferenceSaveTimer.restart()
@@ -1884,7 +1938,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        console.log("YUNSH OS UI v3.0.2")
+        console.log("YUNSH OS UI v3.0.3")
         checkFirstBoot()
         showFullScreen()
         applyWindowPreferences()

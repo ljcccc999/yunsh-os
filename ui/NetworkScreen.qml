@@ -16,6 +16,9 @@ Rectangle {
     property bool connected: false
     property string currentSSID: ""
     property string currentIP: ""
+    property bool ethernetConnected: false
+    property string ethernetInterface: ""
+    property string ethernetIP: ""
     property var networks: []
     property var savedNetworks: []
     
@@ -30,6 +33,15 @@ Rectangle {
         repeat: true
         onTriggered: pollStatus()
     }
+
+    Timer {
+        id: automaticScanTimer
+        interval: 15000
+        running: networkScreen.visible
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: scanNetworks()
+    }
     
     // Read network status through the local privileged bridge.
     function pollStatus() {
@@ -42,6 +54,9 @@ Rectangle {
                     connected = data.connected || false
                     currentSSID = data.ssid || ""
                     currentIP = data.ip_address || ""
+                    ethernetConnected = data.ethernet_connected === true
+                    ethernetInterface = data.ethernet_interface || ""
+                    ethernetIP = data.ethernet_ip_address || ""
                 } catch(e) {}
             }
         }
@@ -81,14 +96,6 @@ Rectangle {
             }
         }
         xhr.send(JSON.stringify({command: "scan"}))
-    }
-    
-    Timer {
-        id: scanTimer
-        interval: 2000
-        onTriggered: {
-            scanning = false
-        }
     }
     
     // Connect to a network
@@ -206,15 +213,18 @@ Rectangle {
         iconSize: 32
         
         iconSource: "/usr/share/yunsh/icons/wifi.svg"
-        title: connected ? currentSSID : "未连接"
-        subtitle: connected ? ("IP: " + currentIP) : "点击下方网络进行连接"
+        title: ethernetConnected ? "有线网络已连接"
+            : (connected ? currentSSID : "未连接")
+        subtitle: ethernetConnected
+            ? ((ethernetInterface || "Ethernet") + " · IP: " + (ethernetIP || "获取中"))
+            : (connected ? ("IP: " + currentIP) : "点击下方网络进行连接")
         
         Rectangle {
             anchors.right: parent.right
             anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
             width: 10; height: 10; radius: 5
-            color: connected ? "#00E676" : "#FF5252"
+            color: connected || ethernetConnected ? "#00E676" : "#FF5252"
         }
         
         MouseArea {
@@ -552,5 +562,6 @@ Rectangle {
     // Component ready
     Component.onCompleted: {
         pollStatus()
+        scanNetworks()
     }
 }

@@ -235,6 +235,9 @@ def classify_device_class(bt_class):
 
 def scan_devices(timeout=12):
     """Scan for discoverable Bluetooth devices nearby"""
+    subprocess.run(["rfkill", "unblock", "bluetooth"], capture_output=True)
+    btctl(["power", "on"])
+    btctl(["pairable", "on"])
     btctl(["scan", "off"])
     success, _ = btctl(["scan", "on"])
     if not success:
@@ -496,6 +499,7 @@ def socket_server():
 
 def main():
     log.info("YUNSH Bluetooth Daemon starting...")
+    subprocess.run(["rfkill", "unblock", "bluetooth"], capture_output=True)
     btctl(["power", "on"])
     # The Pi adapter can report bluetooth.service as active before the
     # controller is ready. Retry pairability so phone pairing is not lost to

@@ -22,6 +22,7 @@ Rectangle {
     property bool phoneLinked: false
     property bool phoneAuthenticated: false
     property string phonePairingCode: ""
+    property bool automaticScanStarted: false
 
     // ── Signals ────────────────────────────────────────
     signal backToSettings()
@@ -60,6 +61,10 @@ Rectangle {
                     var data = JSON.parse(xhr.responseText)
                     bluetoothOn = data.powered || false
                     pairedDevices = data.paired_devices || []
+                    if (bluetoothOn && !automaticScanStarted) {
+                        automaticScanStarted = true
+                        startScan()
+                    }
                 } catch(e) {}
             }
         }

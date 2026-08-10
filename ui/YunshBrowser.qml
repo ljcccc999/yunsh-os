@@ -10,8 +10,10 @@ Item {
     anchors.fill: parent
     visible: true
     z: 90
+    clip: true
 
     signal backToHome()
+    signal requestVirtualKeyboard(var target)
 
     property url currentUrl: "https://www.bing.com"
     property bool isLoading: false
@@ -23,6 +25,85 @@ Item {
     property bool downloadBusy: false
     property bool desktopMode: false
     property string defaultUserAgent: ""
+    property double keyboardSuppressedUntil: 0
+    property int activeTabIndex: 0
+
+    ListModel {
+        id: browserTabs
+        ListElement { title: "新标签页"; address: "https://www.bing.com" }
+    }
+
+    function newTab(address) {
+        var target = address && String(address).length ? String(address) : "about:blank"
+        browserTabs.append({title: "新标签页", address: target})
+        activeTabIndex = browserTabs.count - 1
+        webView.url = target
+        if (target === "about:blank")
+            Qt.callLater(function() { urlInput.text = ""; urlInput.forceActiveFocus() })
+    }
+
+    function switchTab(index) {
+        if (index < 0 || index >= browserTabs.count || index === activeTabIndex) return
+        browserTabs.setProperty(activeTabIndex, "address", webView.url.toString())
+        browserTabs.setProperty(activeTabIndex, "title", webView.title || "标签页")
+        activeTabIndex = index
+        webView.url = browserTabs.get(index).address
+    }
+
+    function closeTab(index) {
+        if (browserTabs.count === 1) {
+            browserTabs.set(0, {title: "新标签页", address: "https://www.bing.com"})
+            activeTabIndex = 0; webView.url = "https://www.bing.com"; return
+        }
+        browserTabs.remove(index)
+        activeTabIndex = Math.max(0, Math.min(activeTabIndex, browserTabs.count - 1))
+        webView.url = browserTabs.get(activeTabIndex).address
+    }
+
+    QtObject {
+        id: webInputProxy
+        property string text: ""
+        property int cursorPosition: 0
+        property bool focus: true
+        property bool syncing: false
+        onFocusChanged: {
+            if (!focus) {
+                browserScreen.keyboardSuppressedUntil = Date.now() + 1200
+                webView.runJavaScript("(function(){var e=document.activeElement;if(e&&e.blur)e.blur();})()")
+            }
+        }
+        function submit() {
+            webView.runJavaScript("(function(){var e=document.activeElement;if(!e)return;var t=(e.tagName||'').toLowerCase();if(t==='textarea'||e.isContentEditable){var s=e.selectionStart||0,v=e.value||'';e.value=v.slice(0,s)+'\\n'+v.slice(s);e.selectionStart=e.selectionEnd=s+1;e.dispatchEvent(new Event('input',{bubbles:true}));return;}e.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));if(e.form){if(e.form.requestSubmit)e.form.requestSubmit();else e.form.submit();}e.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));})()")
+        }
+        onTextChanged: {
+            if (syncing) return
+            var encoded = JSON.stringify(text)
+            webView.runJavaScript("(function(){var e=document.activeElement;if(!e)return;if('value' in e){e.value="
+                + encoded + ";e.selectionStart=e.selectionEnd=" + cursorPosition
+                + ";}else if(e.isContentEditable){e.textContent=" + encoded
+                + ";}e.dispatchEvent(new Event('input',{bubbles:true}));})()")
+        }
+        onCursorPositionChanged: {
+            if (!syncing)
+                webView.runJavaScript("(function(){var e=document.activeElement;if(e&&'selectionStart' in e)e.selectionStart=e.selectionEnd=" + cursorPosition + ";})()")
+        }
+    }
+
+    Timer {
+        interval: 300; repeat: true; running: browserScreen.visible
+        onTriggered: webView.runJavaScript(
+            "(function(){var e=document.activeElement;if(!e)return null;var t=(e.tagName||'').toLowerCase();if(t!=='input'&&t!=='textarea'&&!e.isContentEditable)return null;return {v:('value' in e?e.value:e.textContent)||'',p:('selectionStart' in e?e.selectionStart:(e.textContent||'').length)};})()",
+            function(value) {
+                if (!value) return
+                if (Date.now() < browserScreen.keyboardSuppressedUntil) return
+                webInputProxy.syncing = true
+                webInputProxy.text = value.v || ""
+                webInputProxy.cursorPosition = Math.max(0, value.p || 0)
+                webInputProxy.syncing = false
+                webInputProxy.focus = true
+                browserScreen.requestVirtualKeyboard(webInputProxy)
+            })
+    }
 
     function setDesktopMode(enabled) {
         desktopMode = enabled
@@ -242,8 +323,29 @@ Item {
 
     // ─── Loading Bar ──────────────────────────
     Rectangle {
+        id: tabBar
+        anchors.top: topBar.bottom; anchors.left: parent.left; anchors.right: parent.right
+        height: 38; color: Qt.rgba(244/255, 250/255, 252/255, 0.94)
+        Row {
+            anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; spacing: 6
+            Repeater {
+                model: browserTabs
+                Rectangle {
+                    width: Math.min(190, Math.max(110, (tabBar.width - 58) / Math.max(1, browserTabs.count)))
+                    height: 30; anchors.verticalCenter: parent.verticalCenter; radius: 15
+                    color: index === activeTabIndex ? "#FFFFFF" : Qt.rgba(1, 1, 1, 0.48)
+                    Text { anchors.left: parent.left; anchors.leftMargin: 14; anchors.right: closeTabText.left; anchors.verticalCenter: parent.verticalCenter; text: title || "标签页"; color: "#17212A"; font.pixelSize: 11; elide: Text.ElideRight }
+                    Text { id: closeTabText; anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: "×"; color: "#61707C"; font.pixelSize: 15; z: 2; MouseArea { anchors.fill: parent; anchors.margins: -8; onClicked: browserScreen.closeTab(index) } }
+                    MouseArea { anchors.fill: parent; z: 1; onClicked: browserScreen.switchTab(index) }
+                }
+            }
+            Rectangle { width: 32; height: 30; anchors.verticalCenter: parent.verticalCenter; radius: 15; color: Qt.rgba(0, 0.83, 1, 0.18); Text { anchors.centerIn: parent; text: "+"; color: "#008EAA"; font.pixelSize: 20 } MouseArea { anchors.fill: parent; onClicked: browserScreen.newTab("") } }
+        }
+    }
+
+    Rectangle {
         id: progressBar
-        anchors.top: topBar.bottom
+        anchors.top: tabBar.bottom
         anchors.left: parent.left
         height: 2
         width: parent.width * (loadProgress / 100.0)
@@ -267,6 +369,32 @@ Item {
         url: currentUrl
         profile: browserProfile
 
+        onNavigationRequested: function(request) {
+            if (request.navigationType !== WebEngineNavigationRequest.LinkClickedNavigation)
+                return
+            var target = request.url
+            var targetText = target.toString()
+            var scheme = targetText.indexOf(":") > 0
+                ? targetText.substring(0, targetText.indexOf(":")).toLowerCase() : ""
+            if (scheme !== "http" && scheme !== "https") {
+                // Web pages cannot directly launch privileged local apps.
+                request.action = WebEngineNavigationRequest.IgnoreRequest
+                browserScreen.downloadStatus = "该链接需要受支持的系统 App 才能打开"
+                return
+            }
+            var currentHost = String(webView.url.host).toLowerCase()
+            var targetHost = String(target.host).toLowerCase()
+            if (currentHost.length > 0 && targetHost.length > 0 && currentHost !== targetHost) {
+                request.action = WebEngineNavigationRequest.IgnoreRequest
+                browserScreen.newTab(target)
+            }
+        }
+
+        onUrlChanged: {
+            browserTabs.setProperty(browserScreen.activeTabIndex, "address", webView.url.toString())
+            urlInput.text = webView.url.toString() === "about:blank" ? "" : webView.url.toString()
+        }
+
         // Background color
         backgroundColor: "#000000"
 
@@ -277,6 +405,8 @@ Item {
                 browserScreen.isLoading = false
                 browserScreen.loadProgress = 100
                 pageTitle = webView.title
+                browserTabs.setProperty(activeTabIndex, "title", webView.title || "标签页")
+                browserTabs.setProperty(activeTabIndex, "address", webView.url.toString())
                 urlInput.text = webView.url.toString()
                 browserScreen._pendingDomain = ""
             } else if (loadRequest.status === WebEngineView.LoadFailedStatus) {
@@ -306,6 +436,7 @@ Item {
 
         // New window requests (open in same view)
         onNewWindowRequested: function(request) {
+            browserScreen.newTab(request.requestedUrl || "about:blank")
             request.openIn(webView)
         }
     }
@@ -361,7 +492,13 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         height: 44
+        radius: 28
         color: Qt.rgba(248/255, 252/255, 255/255, 0.86)
+
+        Rectangle {
+            anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
+            height: 28; color: parent.color
+        }
 
         Rectangle {
             anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right

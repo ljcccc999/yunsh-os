@@ -9,6 +9,9 @@ export QT_QUICK_CONTROLS_STYLE="${QT_QUICK_CONTROLS_STYLE:-Basic}"
 export QTWEBENGINE_DISABLE_SANDBOX=1
 export QTWEBENGINE_CHROMIUM_FLAGS="${QTWEBENGINE_CHROMIUM_FLAGS:---no-sandbox --disable-dev-shm-usage}"
 export QML_XHR_ALLOW_FILE_READ=1
+export QT_IM_MODULE="${QT_IM_MODULE:-fcitx}"
+export GTK_IM_MODULE="${GTK_IM_MODULE:-fcitx}"
+export XMODIFIERS="${XMODIFIERS:-@im=fcitx}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/yunsh-runtime}"
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
 LOG_DIR="/var/log"
@@ -17,6 +20,7 @@ WESTON_LOG="${LOG_DIR}/yunsh-weston.log"
 RECOVERY_QML="/usr/share/yunsh/ui/RecoveryScreen.qml"
 
 install -d -m 0700 "$XDG_RUNTIME_DIR"
+pgrep -x fcitx5 >/dev/null 2>&1 || fcitx5 -d --replace >/dev/null 2>&1 || true
 install -d -o yunsh -g yunsh \
     /home/yunsh/Pictures/Screenshots /home/yunsh/Downloads \
     /home/yunsh/.cache/yunsh-browser /home/yunsh/.local/share/yunsh-browser \

@@ -44,6 +44,9 @@ PENDING_LOCK = threading.Lock()
 UI_STATE_PATH = pathlib.Path(
     os.environ.get("YUNSH_UI_STATE_PATH", "/tmp/yunsh-ui-state.json")
 )
+LOCK_STATE_PATH = pathlib.Path(
+    os.environ.get("YUNSH_LOCK_STATE_PATH", "/run/yunsh/screen-lock.json")
+)
 VOICE_MODEL_DIR = STATE_DIR / "voice" / "vosk-model-small-cn-0.22"
 VOICE_CHOICES = {
     "sweet_female": {
@@ -528,6 +531,19 @@ def require_permission(config, permission):
         raise PermissionError(f"Orbit 的“{PERMISSION_LABELS[permission]}”权限已关闭")
 
 
+def screen_is_locked():
+    try:
+        state = json.loads(LOCK_STATE_PATH.read_text(encoding="utf-8"))
+        return bool(state.get("locked"))
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def require_screen_unlocked():
+    if screen_is_locked():
+        raise PermissionError("设备已锁定，请先在眼镜本机输入密码解锁")
+
+
 def clean_path(value):
     value = os.path.abspath(os.path.expanduser(str(value)))
     if "\0" in value:
@@ -903,7 +919,7 @@ def upstream_request(config, messages):
         headers={
             "Authorization": f"Bearer {config['apiKey']}",
             "Content-Type": "application/json",
-            "User-Agent": "Orbit-YUNSH-OS/3.0.2",
+            "User-Agent": "Orbit-YUNSH-OS/3.0.3",
         },
         method="POST",
     )
@@ -1142,7 +1158,7 @@ def approve(payload):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "Orbit/3.0.2"
+    server_version = "Orbit/3.0.3"
 
     def send_json(self, status, payload):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -1169,6 +1185,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(200, {
                     "success": True,
                     "running": True,
+                    "screenLocked": screen_is_locked(),
                     "name": "Orbit",
                     "scope": "system",
                     "agentMode": "plan-act-observe-verify",
@@ -1194,6 +1211,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
             payload = self.read_json()
+            if self.path in {
+                "/v1/config", "/v1/chat", "/v1/approve",
+                "/v1/voice/speak", "/v1/voice/listen",
+                "/v1/permissions/grant",
+            }:
+                require_screen_unlocked()
             if self.path == "/v1/config":
                 result = update_config(payload)
             elif self.path == "/v1/chat":

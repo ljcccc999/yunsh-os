@@ -98,6 +98,11 @@ TextInput {
 
         onPressAndHold: {
             var items = []
+            // Match desktop text editing: a long press on existing text makes
+            // it immediately copyable even when no selection existed yet.
+            if ((!input.selectedText || input.selectedText.length === 0)
+                    && input.text.length > 0)
+                input.selectAll()
             if (!input.readOnly) {
                 items.push({label: "粘贴", action: "paste"})
             }
@@ -119,6 +124,14 @@ TextInput {
         onPressed: {
             mouse.accepted = false
             input.forceActiveFocus()
+        }
+
+        onReleased: {
+            // A parent window/popup may update focus during the same pointer
+            // release. Reassert it on the next turn so the global keyboard
+            // watcher sees this editor reliably.
+            Qt.callLater(function() { input.forceActiveFocus() })
+            mouse.accepted = false
         }
     }
 

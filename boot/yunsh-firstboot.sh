@@ -25,6 +25,19 @@ OS_CODENAME="$(
     printf '%s' "${VERSION_CODENAME:-${DEBIAN_CODENAME:-stable}}"
 )"
 
+# Raspberry Pi OS soft-blocks the onboard radio until a regulatory domain is
+# selected. YUNSH OS currently ships for Tim's China deployment; keep the
+# value overrideable for future regional images instead of leaving phy0 in
+# country 00/DFS-UNSET where correct SSIDs and passwords can never connect.
+WIFI_COUNTRY="${YUNSH_WIFI_COUNTRY:-CN}"
+if [[ "$WIFI_COUNTRY" =~ ^[A-Z]{2}$ ]]; then
+    mkdir -p /etc/yunsh
+    printf 'COUNTRY=%s\n' "$WIFI_COUNTRY" > /etc/yunsh/wifi-country.conf
+    raspi-config nonint do_wifi_country "$WIFI_COUNTRY" >/dev/null 2>&1 || true
+    iw reg set "$WIFI_COUNTRY" >/dev/null 2>&1 || true
+    rfkill unblock wifi >/dev/null 2>&1 || true
+fi
+
 touch /etc/yunsh/.firstboot_partial
 sync
 
@@ -35,10 +48,21 @@ echo "  +------------------------------------------+"
 
 source /usr/bin/yunsh-install-progress.sh 2>/dev/null || true
 
-TOTAL=21; CUR=0
+TOTAL=22; CUR=0; CURRENT_PROGRESS=0; CURRENT_STATUS="Preparing first setup"
 pct() { CUR=$((CUR+1)); local P=$((CUR*100/TOTAL)); [ "$P" -gt "$1" ] && P=$1
+    CURRENT_PROGRESS="$P"; CURRENT_STATUS="$2"
     if type draw_frame &>/dev/null 2>&1; then draw_frame "$P" "$2" "$CUR" "$TOTAL"
     else echo "  [$P%] $2"; fi
+}
+
+progress_detail() {
+    local status="$1" detail="${2:-}"
+    CURRENT_STATUS="$status"
+    if type draw_frame &>/dev/null 2>&1; then
+        draw_frame "$CURRENT_PROGRESS" "$status" "$CUR" "$TOTAL" "$detail"
+    else
+        echo "  [$CURRENT_PROGRESS%] $status${detail:+ — $detail}"
+    fi
 }
 
 # The Linux service account exists before any package transaction or desktop
@@ -84,6 +108,48 @@ network_ready() {
         https://deb.debian.org/debian/README &>/dev/null ||
     curl -fsI --connect-timeout 2 --max-time 4 \
         "https://mirrors.tuna.tsinghua.edu.cn/debian/dists/${OS_CODENAME}/InRelease" &>/dev/null
+}
+
+APT_OPTIONS=(
+    -o Acquire::Retries=3
+    -o Acquire::http::Timeout=15
+    -o Acquire::https::Timeout=15
+    -o Acquire::ftp::Timeout=15
+    -o DPkg::Lock::Timeout=60
+)
+
+wait_for_network() {
+    local tries="${1:-18}" i=0
+    while [ "$i" -lt "$tries" ]; do
+        network_ready && return 0
+        i=$((i + 1))
+        sleep 5
+    done
+    return 1
+}
+
+# Package installation can replace or reconfigure the network stack. Recover
+# it inside firstboot instead of waiting forever for APT or requiring a power
+# cycle. Starting NetworkManager is safe once its package exists; older base
+# images can temporarily fall back to their original network service.
+recover_network() {
+    network_ready && return 0
+    progress_detail "Restoring network connection..." "Automatic recovery"
+    apt_services_on 2>/dev/null || true
+    if command -v nmcli >/dev/null 2>&1; then
+        systemctl enable NetworkManager 2>/dev/null || true
+        systemctl restart NetworkManager 2>/dev/null || true
+        nmcli networking on 2>/dev/null || true
+        nmcli connection reload 2>/dev/null || true
+    fi
+    systemctl restart systemd-networkd 2>/dev/null || true
+    systemctl restart dhcpcd 2>/dev/null || true
+    if wait_for_network 18; then
+        apt_services_off 2>/dev/null || true
+        return 0
+    fi
+    apt_services_off 2>/dev/null || true
+    return 1
 }
 while ! network_ready; do
     WAIT=$((WAIT+1))
@@ -171,7 +237,64 @@ apt_repair() {
     # group; otherwise every later apt invocation fails immediately and the
     # desktop marker is never written.
     dpkg --configure -a >>/var/log/yunsh-apt.log 2>&1 || true
-    apt-get -f install -yqq --no-install-recommends >>/var/log/yunsh-apt.log 2>&1 || true
+    apt-get "${APT_OPTIONS[@]}" -f install -yqq --no-install-recommends >>/var/log/yunsh-apt.log 2>&1 || true
+}
+
+apt_download_manifest() {
+    local manifest="$1"; shift
+    : > "$manifest"
+    apt-get "${APT_OPTIONS[@]}" --print-uris -y --no-install-recommends install "$@" \
+        2>>/var/log/yunsh-apt.log |
+        awk '$1 ~ /^\047/ && $3 ~ /^[0-9]+$/ { print $2 "\t" $3 }' > "$manifest"
+}
+
+downloaded_bytes() {
+    local manifest="$1" filename expected path actual total=0
+    while IFS=$'\t' read -r filename expected; do
+        [ -n "$filename" ] || continue
+        path="/var/cache/apt/archives/$filename"
+        [ -f "$path" ] || path="/var/cache/apt/archives/partial/$filename"
+        if [ -f "$path" ]; then
+            actual="$(stat -c%s "$path" 2>/dev/null || echo 0)"
+            [ "$actual" -gt "$expected" ] 2>/dev/null && actual="$expected"
+            total=$((total + actual))
+        fi
+    done < "$manifest"
+    printf '%s' "$total"
+}
+
+format_mb() {
+    awk -v bytes="${1:-0}" 'BEGIN { printf "%.1f", bytes / 1048576 }'
+}
+
+download_apt_group() {
+    local name="$1"; shift
+    local manifest="/run/yunsh-apt-download-${$}.tsv"
+    local total downloaded pid rc total_mb downloaded_mb
+    apt_download_manifest "$manifest" "$@"
+    total="$(awk -F '\t' '{ total += $2 } END { printf "%.0f", total }' "$manifest")"
+    [ -n "$total" ] || total=0
+    if [ "$total" -le 0 ]; then
+        progress_detail "Download complete: $name" "Already cached or installed"
+        rm -f "$manifest"
+        return 0
+    fi
+
+    total_mb="$(format_mb "$total")"
+    apt-get "${APT_OPTIONS[@]}" --download-only -y --no-install-recommends install "$@" \
+        >>/var/log/yunsh-apt.log 2>&1 &
+    pid=$!
+    while kill -0 "$pid" 2>/dev/null; do
+        downloaded="$(downloaded_bytes "$manifest")"
+        downloaded_mb="$(format_mb "$downloaded")"
+        progress_detail "Downloading: $name" "${downloaded_mb} MB / ${total_mb} MB"
+        sleep 2
+    done
+    wait "$pid"; rc=$?
+    downloaded="$(downloaded_bytes "$manifest")"
+    progress_detail "Downloading: $name" "$(format_mb "$downloaded") MB / ${total_mb} MB"
+    rm -f "$manifest"
+    return "$rc"
 }
 
 install_apt() {
@@ -180,7 +303,13 @@ install_apt() {
     local attempt=1
     local installed=1
     while [ "$attempt" -le 3 ]; do
-        if apt-get install -yqq --no-install-recommends "$@" >>/var/log/yunsh-apt.log 2>&1; then
+        if ! network_ready && ! recover_network; then
+            echo "  [WARN] Network unavailable before package group: $name" | tee -a /var/log/yunsh-apt.log
+        fi
+        if download_apt_group "$name" "$@"; then
+            progress_detail "Unpacking and configuring: $name" "Downloaded packages are being installed"
+        fi
+        if apt-get "${APT_OPTIONS[@]}" --no-download install -yqq --no-install-recommends "$@" >>/var/log/yunsh-apt.log 2>&1; then
             installed=0
             break
         fi
@@ -298,13 +427,27 @@ install_apt 20 "WebEngine" qt6-webengine-dev libqt6webenginequick6 qml6-module-q
 # is already prepared asynchronously by yunsh-android-setup.service.
 install_apt 24 "Android display runtime" python3-dbus python3-gi weston libwayland-client0 qml6-module-qtwayland-compositor qt6-wayland
 install_apt 32 "Network & BT" network-manager wpasupplicant bluez
+# NetworkManager is needed by the final OS and its package installation can
+# alter the currently active link. Start it immediately, verify real Internet
+# access, and let systemd retry firstboot automatically if the handoff fails.
+apt_services_on
+progress_detail "Activating NetworkManager..." "Keeping first-boot downloads online"
+systemctl enable NetworkManager 2>/dev/null || true
+systemctl restart NetworkManager 2>/dev/null || true
+nmcli networking on 2>/dev/null || true
+nmcli connection reload 2>/dev/null || true
+if ! wait_for_network 18 && ! recover_network; then
+    echo "  [ERROR] NetworkManager handoff failed; firstboot will retry automatically." | tee -a /var/log/yunsh-apt.log
+    exit 1
+fi
+apt_services_off
 install_apt 38 "System tools" openssh-server avahi-daemon avahi-utils openssl iptables i2c-tools curl wget git unzip python3-pil psmisc util-linux
-install_apt 44 "Chinese fonts" fonts-noto-cjk
+install_apt 44 "Chinese input and emoji" fonts-noto-cjk fonts-noto-color-emoji fcitx5 fcitx5-chinese-addons fcitx5-frontend-qt6 python3-pam
 # Audio packages are optional for the first desktop frame and can trigger
 # debconf contention on a fresh image. Prepare them asynchronously after
 # firstboot, alongside the media runtime.
 echo "[TRACE] before audio scheduling line=${LINENO}"
-pct 50 "Scheduling audio runtime..."
+install_apt 50 "Bluetooth audio speakers" pulseaudio pulseaudio-module-bluetooth
 echo "[TRACE] after audio scheduling line=${LINENO}"
 # Screen capture, recording, and OCR are optional and can contend with
 # cloud-init's debconf database on a fresh image. Prepare all of them
@@ -372,7 +515,7 @@ pct 92 "Preparing Android application store..."
 # status check below is the authoritative gate.
 
 pct 98 "Cleaning up..."
-CORE_PACKAGES="linux-image-rpi-2712 raspi-firmware raspi-utils-core qml-qt6 qt6-svg-plugins libqt6opengl6 qml6-module-qtqml qml6-module-qtqml-workerscript qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-virtualkeyboard qml6-module-qtquick-templates qml6-module-qt-labs-qmlmodels qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtwebengine qt6-wayland weston network-manager wpasupplicant bluez openssh-server avahi-daemon avahi-utils openssl iptables i2c-tools curl wget git unzip python3-pil python3-cryptography python3-smbus2 python3-dbus python3-gi libegl1 libgl1-mesa-dri mesa-vulkan-drivers psmisc util-linux"
+CORE_PACKAGES="linux-image-rpi-2712 raspi-firmware raspi-utils-core qml-qt6 qt6-svg-plugins libqt6opengl6 qml6-module-qtqml qml6-module-qtqml-workerscript qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-virtualkeyboard qml6-module-qtquick-templates qml6-module-qt-labs-qmlmodels qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtwebengine qt6-wayland weston network-manager wpasupplicant bluez openssh-server avahi-daemon avahi-utils openssl iptables i2c-tools curl wget git unzip python3-pil python3-cryptography python3-smbus2 python3-dbus python3-gi python3-pam libegl1 libgl1-mesa-dri mesa-vulkan-drivers psmisc util-linux fonts-noto-cjk fonts-noto-color-emoji fcitx5 fcitx5-chinese-addons fcitx5-frontend-qt6 pulseaudio pulseaudio-module-bluetooth"
 CORE_MISSING=""
 for package in $CORE_PACKAGES; do
     dpkg-query -W -f='${Status}' "$package" 2>/dev/null |

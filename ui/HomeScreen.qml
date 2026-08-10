@@ -76,6 +76,17 @@ Item {
     function appCount() { return appList.length }
     function pageCount() { return Math.ceil(appList.length / appsPerPage) }
 
+    function reorderApp(fromIndex, direction) {
+        var toIndex = Math.max(0, Math.min(appList.length - 1, fromIndex + direction))
+        if (toIndex === fromIndex) return
+        var next = appList.slice(0)
+        var moved = next[fromIndex]
+        next[fromIndex] = next[toIndex]
+        next[toIndex] = moved
+        appList = next
+        appShelfInteracted()
+    }
+
     function handleAppAction(action) {
         switch(action) {
             case "settings":    homeScreen.openSettings(); break
@@ -381,6 +392,9 @@ Item {
                                                         homeScreen.appShelfInteracted()
                                                         handleAppAction(appList[appIndex].action)
                                                     }
+                                                    onReorderRequested: function(direction) {
+                                                        homeScreen.reorderApp(appIndex, direction)
+                                                    }
                                                 }
                                             }
                                         }
@@ -393,7 +407,7 @@ Item {
                                 anchors.bottom: parent.bottom
                                 anchors.bottomMargin: 16
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: "YUNSH OS v3.0.2"
+                                text: "YUNSH OS v3.0.3"
                                 color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
                                 font.pixelSize: 11
                                 visible: pageIndex === 0

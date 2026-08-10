@@ -1,4 +1,4 @@
-// YUNSH OS v3.0.2 - touch-first activation experience.
+// YUNSH OS v3.0.3 - touch-first activation experience.
 // Physical keyboard input is never required.
 
 import QtQuick 2.15
@@ -35,6 +35,10 @@ Rectangle {
     property bool wifiConnecting: false
     property bool wifiConnected: false
     property string wifiStatusText: ""
+    property bool wifiScanning: false
+    property var wifiNetworks: []
+    property bool ethernetConnected: false
+    property string ethernetStatusText: ""
     property var glassesDevices: []
     property string selectedGlassesMac: ""
     property string selectedGlassesName: ""
@@ -54,6 +58,64 @@ Rectangle {
     property bool orbitSaving: false
     property int helloIndex: 0
     readonly property var helloWords: ["你好", "Hello", "Bonjour", "こんにちは", "안녕하세요"]
+
+    function scanNearbyWifi() {
+        if (wifiScanning)
+            return
+        wifiScanning = true
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/network", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 30000
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return
+            wifiScanning = false
+            try {
+                var response = JSON.parse(xhr.responseText || "{}")
+                wifiNetworks = response.success ? (response.networks || []) : []
+                if (!response.success)
+                    wifiStatusText = response.error || response.message || "无法搜索附近网络"
+            } catch (error) {
+                wifiNetworks = []
+                wifiStatusText = "Wi-Fi 搜索服务暂时不可用"
+            }
+        }
+        xhr.send(JSON.stringify({command: "scan"}))
+    }
+
+    function detectActiveNetwork() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", "http://127.0.0.1:8591/api/network-status", true)
+        xhr.timeout = 3000
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE || xhr.status !== 200)
+                return
+            try {
+                var response = JSON.parse(xhr.responseText || "{}")
+                ethernetConnected = response.ethernet_connected === true
+                ethernetStatusText = ethernetConnected
+                    ? "有线网络已连接 · " + (response.ethernet_ip_address || "正在获取 IP")
+                    : ""
+            } catch (error) {}
+        }
+        xhr.send()
+    }
+
+    Timer {
+        interval: 15000
+        running: activationScreen.visible && currentStep === 2
+        repeat: true
+        onTriggered: scanNearbyWifi()
+    }
+
+    Timer {
+        interval: 3000
+        running: activationScreen.visible && currentStep === 2
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: detectActiveNetwork()
+    }
 
     function scanForGlasses() {
         if (glassesPairingState === "scanning" || glassesPairingState === "pairing")
@@ -367,7 +429,7 @@ Rectangle {
                 // Version
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "v3.0.2"
+                    text: "v3.0.3"
                     color: Qt.rgba(16/255, 32/255, 42/255, 0.28)
                     font.pixelSize: 11
                 }
@@ -461,6 +523,29 @@ Rectangle {
                         MouseArea {
                             anchors.fill: parent
                             onClicked: { selectedLanguage = "简体中文"; selectedKeyboard = "拼音" }
+                        }
+                    }
+
+                    // English
+                    Rectangle {
+                        width: 360; height: 48; radius: 14
+                        color: selectedLanguage === "繁體中文" ? Qt.rgba(210/255, 247/255, 255/255, 0.86) : Qt.rgba(255/255, 255/255, 255/255, 0.60)
+                        border.color: selectedLanguage === "繁體中文" ? Qt.rgba(0/255, 142/255, 170/255, 0.42) : Qt.rgba(255/255, 255/255, 255/255, 0.84)
+                        border.width: 1
+                        Row {
+                            anchors.left: parent.left; anchors.leftMargin: 16
+                            anchors.verticalCenter: parent.verticalCenter; spacing: 12
+                            Text { text: "🇨🇳"; font.pixelSize: 20; anchors.verticalCenter: parent.verticalCenter }
+                            Text { text: "繁體中文"; color: "#17212A"; font.pixelSize: 15; anchors.verticalCenter: parent.verticalCenter }
+                        }
+                        Rectangle {
+                            anchors.right: parent.right; anchors.rightMargin: 16; anchors.verticalCenter: parent.verticalCenter
+                            width: 16; height: 16; radius: 8
+                            color: selectedLanguage === "繁體中文" ? "#00D4FF" : Qt.rgba(70/255, 88/255, 102/255, 0.18)
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: { selectedLanguage = "繁體中文"; selectedKeyboard = "注音" }
                         }
                     }
 
@@ -569,10 +654,18 @@ Rectangle {
     Item {
         anchors.fill: parent
         visible: currentStep === 2
+
+        onVisibleChanged: {
+            if (visible)
+                Qt.callLater(function() {
+                    detectActiveNetwork()
+                    scanNearbyWifi()
+                })
+        }
         
         Rectangle {
             anchors.centerIn: parent
-            width: 480; height: 420
+            width: 520; height: Math.min(590, parent.height - 100)
             radius: 32
             color: Qt.rgba(248/255, 252/255, 255/255, 0.90)
             border.color: Qt.rgba(255/255, 255/255, 255/255, 0.92)
@@ -594,6 +687,89 @@ Rectangle {
                     text: "连接互联网以完成设置"
                     color: "#61707C"
                     font.pixelSize: 12
+                }
+
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: ethernetStatusText
+                    color: "#138A63"
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                    visible: ethernetStatusText.length > 0
+                }
+
+                Row {
+                    width: 400
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 10
+
+                    Text {
+                        width: 326
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: wifiScanning ? "正在搜索附近网络…"
+                            : (wifiNetworks.length > 0
+                                ? "附近网络（" + wifiNetworks.length + "）"
+                                : "未发现网络，可手动输入")
+                        color: "#52616C"
+                        font.pixelSize: 12
+                    }
+
+                    Rectangle {
+                        width: 64; height: 28; radius: 14
+                        color: Qt.rgba(0/255, 212/255, 255/255, 0.14)
+                        border.color: Qt.rgba(0/255, 174/255, 214/255, 0.22)
+                        Text {
+                            anchors.centerIn: parent
+                            text: wifiScanning ? "…" : "刷新"
+                            color: "#008EAA"; font.pixelSize: 11
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            enabled: !wifiScanning
+                            onClicked: scanNearbyWifi()
+                        }
+                    }
+                }
+
+                ListView {
+                    id: nearbyWifiList
+                    width: 400; height: 112
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    model: wifiNetworks
+                    spacing: 6
+                    clip: true
+
+                    delegate: Rectangle {
+                        width: nearbyWifiList.width; height: 34; radius: 12
+                        color: wifiSSIDInput.text === String(modelData.ssid || "")
+                            ? Qt.rgba(0/255, 212/255, 255/255, 0.18)
+                            : Qt.rgba(255/255, 255/255, 255/255, 0.62)
+                        border.color: Qt.rgba(255/255, 255/255, 255/255, 0.88)
+                        Text {
+                            anchors.left: parent.left; anchors.leftMargin: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: String(modelData.ssid || "")
+                            color: "#17212A"; font.pixelSize: 12
+                            elide: Text.ElideRight; width: 265
+                        }
+                        Text {
+                            anchors.right: parent.right; anchors.rightMargin: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: (String(modelData.security || "").length ? "🔒 " : "")
+                                + String(modelData.signal || 0) + "%"
+                            color: "#61707C"; font.pixelSize: 11
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                wifiSSIDInput.text = String(modelData.ssid || "")
+                                wifiPassInput.text = ""
+                                if (String(modelData.security || "").length)
+                                    Qt.callLater(function() { wifiPassInput.forceActiveFocus() })
+                            }
+                        }
+                    }
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
                 }
                 
                 // SSID input
@@ -688,7 +864,7 @@ Rectangle {
                                     var xhr = new XMLHttpRequest()
                                     xhr.open("POST", "http://127.0.0.1:8591/", true)
                                     xhr.setRequestHeader("Content-Type", "application/json")
-                                    xhr.timeout = 10000
+                                    xhr.timeout = 120000
                                     xhr.onreadystatechange = function() {
                                         if (xhr.readyState === XMLHttpRequest.DONE) {
                                             wifiConnecting = false

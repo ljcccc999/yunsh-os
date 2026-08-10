@@ -21,11 +21,17 @@ root_device="$(readlink -f "$root_device" 2>/dev/null || true)"
 }
 
 parent_name="$(lsblk -ndo PKNAME "$root_device" 2>/dev/null | head -n 1)"
-partition_number="$(lsblk -ndo PARTN "$root_device" 2>/dev/null | head -n 1)"
+partition_number="$(lsblk -ndo PARTN "$root_device" 2>/dev/null | head -n 1 | tr -d '[:space:]')"
 [ -n "$parent_name" ] && [ -n "$partition_number" ] || {
     log "Skipping expansion: root is not a normal disk partition"
     exit 0
 }
+case "$partition_number" in
+    *[!0-9]*|"")
+        log "Skipping expansion: invalid partition number"
+        exit 1
+        ;;
+esac
 parent_device="/dev/$parent_name"
 [ -b "$parent_device" ] || {
     log "Skipping expansion: parent device $parent_device is unavailable"
@@ -55,7 +61,8 @@ if [ "$remaining" -lt $((16 * 1024 * 1024)) ]; then
 else
     log "Growing partition $root_device into $remaining unused bytes"
     if ! timeout 120 growpart "$parent_device" "$partition_number"; then
-        log "WARNING: partition growth failed; checking ext4 size anyway"
+        log "ERROR: partition growth failed; retrying on the next boot"
+        exit 1
     fi
     command -v udevadm >/dev/null 2>&1 && udevadm settle --timeout=30 2>/dev/null || true
 fi

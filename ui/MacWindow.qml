@@ -218,6 +218,7 @@ Rectangle {
         id: windowGlass
         anchors.fill: parent
         radius: macWindow.radius
+        clip: true
         // AR optical displays treat black as transparent. All app windows use
         // a bright white liquid-glass base so they remain visible in glasses.
         color: macWindow.reduceTransparency
@@ -572,6 +573,10 @@ Rectangle {
             drag.axis: Drag.XAndYAxis
             cursorShape: Qt.OpenHandCursor
             onPressed: {
+                if (macWindow.state === "fullscreen") {
+                    macWindow.state = "normal"
+                    macWindow.isFullscreen = false
+                }
                 macWindow.z = 1000
                 cursorShape = Qt.ClosedHandCursor
                 if (!macWindow.reduceMotion)
@@ -728,7 +733,7 @@ Rectangle {
         },
         State {
             name: "normal"
-            PropertyChanges { target: macWindow; radius: 16 }
+            PropertyChanges { target: macWindow; radius: 28 }
         }
     ]
 

@@ -21,6 +21,11 @@ Rectangle {
 
     signal wake()
     signal unlocked()
+    // The lock screen is above the normal app surface and must explicitly
+    // request the shared spatial keyboard. Relying only on the root window's
+    // activeFocusItem watcher can miss the first focus transition when the
+    // screensaver is shown asynchronously.
+    signal requestVirtualKeyboard(var target)
 
     function attemptUnlock() {
         if (unlockBusy || unlockPassword.text.length === 0)
@@ -123,7 +128,7 @@ Rectangle {
         }
 
         Text {
-            text: "v3.0.2"
+            text: "v3.0.3"
             color: Qt.rgba(255/255, 255/255, 255/255, 0.3)
             font.pixelSize: 10
             anchors.verticalCenter: parent.verticalCenter
@@ -186,6 +191,10 @@ Rectangle {
                     verticalAlignment: TextInput.AlignVCenter
                     selectByMouse: true
                     clip: true
+                    onActiveFocusChanged: {
+                        if (activeFocus && screensaver.visible && screensaver.passwordRequired)
+                            screensaver.requestVirtualKeyboard(unlockPassword)
+                    }
                     onAccepted: screensaver.attemptUnlock()
                 }
             }
@@ -219,7 +228,10 @@ Rectangle {
         visible = true
         if (passwordRequired) {
             unlockError = ""
-            Qt.callLater(function() { unlockPassword.forceActiveFocus() })
+            Qt.callLater(function() {
+                unlockPassword.forceActiveFocus()
+                screensaver.requestVirtualKeyboard(unlockPassword)
+            })
         }
         // Quick fade in for reduced-motion compatibility (Apple: keep opacity/color changes)
         opacity = 1

@@ -8,6 +8,25 @@ Item {
     id: world
     anchors.fill: parent
     signal backToHome()
+    property string systemLanguage: "简体中文"
+    readonly property bool useSimplifiedChinese: systemLanguage === "简体中文"
+    readonly property bool useTraditionalChinese: systemLanguage === "繁體中文"
+
+    function localized(simplified, traditional, english) {
+        return useSimplifiedChinese ? simplified : (useTraditionalChinese ? traditional : english)
+    }
+
+    Component.onCompleted: {
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8590/launch", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE || xhr.status !== 200) return
+            try { world.systemLanguage = JSON.parse(xhr.responseText || "{}").language || "简体中文" }
+            catch (_error) {}
+        }
+        xhr.send(JSON.stringify({action: "system_settings"}))
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -46,7 +65,7 @@ Item {
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "Get Ready for YUNSH META Universe"
+                text: "YUNSH META Universe"
                 color: "#101820"
                 font.pixelSize: 34
                 font.weight: Font.DemiBold
@@ -56,7 +75,10 @@ Item {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: parent.width * 0.78
-                text: "A persistent world built into the operating system — identity, spaces, people, and experiences continue beyond any single window."
+                text: world.localized(
+                    "一个内置于操作系统的持续世界。身份、空间、人与体验不会随着单个窗口关闭而消失。",
+                    "一個內建於作業系統的持續世界。身分、空間、人與體驗不會隨單一視窗關閉而消失。",
+                    "A persistent world built into the operating system — identity, spaces, people, and experiences continue beyond any single window.")
                 color: "#5E6C77"
                 font.pixelSize: 15
                 lineHeight: 1.35
@@ -70,9 +92,9 @@ Item {
 
                 Repeater {
                     model: [
-                        {title: "Persistent Identity", subtitle: "Your presence follows you"},
-                        {title: "Living Spaces", subtitle: "Spaces remember and evolve"},
-                        {title: "Connected People", subtitle: "Share the same world"}
+                        {title: world.localized("持续身份", "持續身分", "Persistent Identity"), subtitle: world.localized("你的身份始终相随", "你的身分始終相隨", "Your presence follows you")},
+                        {title: world.localized("生长的空间", "成長的空間", "Living Spaces"), subtitle: world.localized("空间会记忆并演进", "空間會記憶並演進", "Spaces remember and evolve")},
+                        {title: world.localized("彼此连接", "彼此連結", "Connected People"), subtitle: world.localized("共同存在于同一世界", "共同存在於同一世界", "Share the same world")}
                     ]
                     Rectangle {
                         width: 220

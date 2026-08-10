@@ -6,6 +6,7 @@ Listens on localhost:8590 for app launch requests from QML UI.
 
 import json
 import os
+import shutil
 import subprocess
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -75,7 +76,7 @@ class AppHandler(BaseHTTPRequestHandler):
         elif action == "system_info":
             result = self.system_info()
         elif action == "delete_screenshot":
-            result = self.delete_screenshot(req.get("path", ""))
+            result = self.manage_screenshot(req.get("path", ""), req.get("mode", "trash"))
         elif action == "screen_recording":
             result = self.screen_recording(req.get("command", "status"))
         elif action == "system_action":
@@ -349,7 +350,7 @@ class AppHandler(BaseHTTPRequestHandler):
                 pass
             return values
 
-        version = read_values("/etc/yunsh/version.conf").get("VERSION", "v3.0.2")
+        version = read_values("/etc/yunsh/version.conf").get("VERSION", "v3.0.3")
         language = read_values("/etc/yunsh/language.conf")
         return {
             "status": "ok",
@@ -409,7 +410,7 @@ class AppHandler(BaseHTTPRequestHandler):
         model = read_text("/proc/device-tree/model").replace("\x00", "").strip()
         return {
             "status": "ok",
-            "version": version.get("VERSION", "v3.0.2"),
+            "version": version.get("VERSION", "v3.0.3"),
             "build": version.get("BUILD", ""),
             "model": model or "Raspberry Pi",
             "cpu": f"{cpu_name or 'ARM processor'} × {os.cpu_count() or 1}",
@@ -422,21 +423,42 @@ class AppHandler(BaseHTTPRequestHandler):
             "kernel": os.uname().release,
         }
 
-    def delete_screenshot(self, requested_path):
+    def manage_screenshot(self, requested_path, mode="trash"):
         try:
             value = str(requested_path)
             if value.startswith("file:"):
                 value = unquote(urlparse(value).path)
             path = os.path.realpath(value)
             screenshot_root = os.path.realpath(SCREENSHOT_DIR)
+            trash_root = os.path.join(screenshot_root, ".RecentlyDeleted")
+            hidden_root = os.path.join(screenshot_root, ".Hidden")
+            allowed_roots = (screenshot_root, trash_root, hidden_root)
             if (
-                os.path.commonpath((screenshot_root, path)) != screenshot_root
+                not any(os.path.commonpath((root, path)) == root for root in allowed_roots)
                 or not path.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
                 or not os.path.isfile(path)
             ):
                 return {"status": "error", "message": "Invalid screenshot path"}
-            os.remove(path)
-            return {"status": "ok", "message": "Screenshot deleted"}
+            if mode == "permanent":
+                if os.path.commonpath((trash_root, path)) != trash_root:
+                    return {"status": "error", "message": "Only recently deleted photos can be erased permanently"}
+                os.remove(path)
+                return {"status": "ok", "message": "Photo permanently deleted"}
+            if mode == "restore":
+                destination_root = screenshot_root
+            elif mode == "hide":
+                destination_root = hidden_root
+            elif mode == "unhide":
+                destination_root = screenshot_root
+            else:
+                destination_root = trash_root
+            os.makedirs(destination_root, mode=0o700, exist_ok=True)
+            destination = os.path.join(destination_root, os.path.basename(path))
+            if os.path.exists(destination):
+                stem, extension = os.path.splitext(destination)
+                destination = f"{stem}-{int(time.time())}{extension}"
+            shutil.move(path, destination)
+            return {"status": "ok", "message": "Photo updated", "path": destination}
         except (OSError, ValueError) as exc:
             return {"status": "error", "message": str(exc)}
 
@@ -451,11 +473,12 @@ class AppHandler(BaseHTTPRequestHandler):
                 if not status.get("ready"):
                     self.android_retry()
                     return {"status": "preparing", "message": status.get("message", "Android is being prepared")}
-                subprocess.Popen(
-                    ["/usr/bin/yunsh-android", "launch-package", package],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                    start_new_session=True,
-                )
+                with open("/var/log/yunsh-android.log", "a", encoding="utf-8") as log:
+                    subprocess.Popen(
+                        ["/usr/bin/yunsh-android", "launch-package", package],
+                        stdout=log, stderr=subprocess.STDOUT,
+                        start_new_session=True,
+                    )
                 return {"status": "ok", "message": "Launching Android app"}
             except OSError as exc:
                 return {"status": "error", "message": str(exc)}
@@ -475,12 +498,12 @@ class AppHandler(BaseHTTPRequestHandler):
                             "message", "Android is being prepared"
                         ),
                     }
-                subprocess.Popen(
-                    ["/usr/bin/yunsh-android", app["command"]],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    start_new_session=True,
-                )
+                with open("/var/log/yunsh-android.log", "a", encoding="utf-8") as log:
+                    subprocess.Popen(
+                        ["/usr/bin/yunsh-android", app["command"]],
+                        stdout=log, stderr=subprocess.STDOUT,
+                        start_new_session=True,
+                    )
                 return {
                     "status": "ok",
                     "message": f"Launching {app['name']}",

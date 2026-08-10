@@ -16,15 +16,16 @@ Rectangle {
     property string orbitActivityText: ""
     property bool reduceMotion: false
     property bool recordingActive: false
+    property bool fullscreenMode: false
     signal openSystemMenu()
     signal openWorld()
     signal openOrbit()
     signal orbitApprovalDecision(string decision)
 
     Rectangle {
-        anchors.left: parent.left
-        anchors.leftMargin: 18
-        anchors.verticalCenter: parent.verticalCenter
+        id: leftEntry
+        x: 18
+        y: 14
         width: 112
         height: 42
         radius: 21
@@ -73,7 +74,22 @@ Rectangle {
             hoverEnabled: true
             onClicked: menuBar.openSystemMenu()
         }
+        DragHandler {
+            enabled: menuBar.fullscreenMode
+            target: leftEntry
+            xAxis.minimum: 8
+            xAxis.maximum: Math.max(8, menuBar.width - leftEntry.width - 8)
+            yAxis.minimum: 4
+            yAxis.maximum: Math.max(4, menuBar.height - leftEntry.height - 4)
+        }
         Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+    }
+
+    onFullscreenModeChanged: {
+        if (!fullscreenMode) {
+            leftEntry.x = 18
+            leftEntry.y = 14
+        }
     }
 
     Rectangle {

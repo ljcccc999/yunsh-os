@@ -22,6 +22,10 @@ Item {
     property bool computerOperationActive: false
     property bool computerApprovalPending: false
     property bool voiceConversationActive: false
+    property bool voiceMicrophoneReady: false
+    property bool voiceRecognitionReady: false
+    property int voiceRequestToken: 0
+    readonly property bool voiceAvailable: configured && voiceMicrophoneReady && voiceRecognitionReady
     property bool configured: false
     property string configuredProvider: ""
     property string provider: "deepseek"
@@ -123,6 +127,14 @@ Item {
             customEndpoint.text = provider === "compatible"
                 ? (body.config.endpoint || "") : ""
             applyPermissionState(body.config.permissions || {})
+            refreshVoiceStatus()
+        })
+    }
+
+    function refreshVoiceStatus() {
+        request("GET", "/v1/voice/status", null, function(status, body) {
+            voiceMicrophoneReady = status === 200 && body.microphone === true
+            voiceRecognitionReady = status === 200 && body.recognitionReady === true
         })
     }
 
@@ -322,13 +334,18 @@ Item {
     }
 
     function listenForPrompt(approved) {
-        if (busy)
+        if (busy || !voiceAvailable) {
+            toastRequested("未检测到可用麦克风或中文识别组件")
             return
+        }
+        var requestToken = ++voiceRequestToken
         busy = true
         voiceConversationSettleTimer.stop()
         voiceConversationActive = true
         statusText = "正在聆听…"
         request("POST", "/v1/voice/listen", {approved: approved === true}, function(status, body) {
+            if (requestToken !== voiceRequestToken)
+                return
             busy = false
             refreshStatus()
             if (body.approvalRequired) {
@@ -349,6 +366,18 @@ Item {
             else
                 voiceConversationSettleTimer.restart()
         })
+    }
+
+    function stopVoiceConversation() {
+        voiceRequestToken++
+        voiceConversationSettleTimer.stop()
+        voiceConversationActive = false
+        pendingApprovalId = ""
+        computerApprovalPending = false
+        busy = false
+        statusText = configured
+            ? "系统级 · " + providerDisplayName() + " · " + modelName
+            : "系统级 · 等待配置 API"
     }
 
     Component.onCompleted: refreshStatus()
@@ -423,13 +452,13 @@ Item {
         z: 3
         visible: height > 0
         clip: true
-        opacity: expanded ? 0.97 : 0
+        opacity: expanded ? 1.0 : 0
         scale: expanded ? 1 : 0.94
         color: "transparent"
         gradient: Gradient {
-            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.86) }
-            GradientStop { position: 0.52; color: Qt.rgba(0.96, 0.99, 1, 0.72) }
-            GradientStop { position: 1.0; color: Qt.rgba(0.90, 0.97, 1, 0.66) }
+            GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.98) }
+            GradientStop { position: 0.52; color: Qt.rgba(0.97, 0.995, 1, 0.95) }
+            GradientStop { position: 1.0; color: Qt.rgba(0.93, 0.985, 1, 0.93) }
         }
         border.width: 1
         border.color: "#FFFFFF"
@@ -532,9 +561,17 @@ Item {
                     text: "完成"
                     flat: true
                     onClicked: {
+                        if (voiceConversationActive)
+                            stopVoiceConversation()
                         expanded = false
                         settingsVisible = false
                     }
+                }
+                Button {
+                    visible: !settingsVisible && voiceConversationActive
+                    text: "退出语音"
+                    flat: true
+                    onClicked: stopVoiceConversation()
                 }
             }
 
@@ -578,7 +615,7 @@ Item {
                                 radius: 18
                                 color: role === "user"
                                     ? Qt.rgba(0/255, 212/255, 255/255, 0.54)
-                                    : Qt.rgba(1, 1, 1, 0.66)
+                                    : Qt.rgba(1, 1, 1, 0.92)
                                 border.width: role === "user" ? 0 : 1
                                 border.color: "#DDECF1"
                                 Text {
@@ -688,7 +725,7 @@ Item {
                         Layout.fillWidth: true
                         height: 54
                         radius: 27
-                        color: Qt.rgba(1, 1, 1, 0.66)
+                        color: Qt.rgba(1, 1, 1, 0.94)
                         border.width: 1
                         border.color: promptField.activeFocus ? "#00D4FF" : "#D7E7ED"
 
@@ -711,20 +748,21 @@ Item {
                             anchors.leftMargin: 6
                             anchors.verticalCenter: parent.verticalCenter
                             width: 42; height: 42; radius: 21
+                            visible: voiceAvailable || voiceConversationActive
                             color: micMouse.pressed
                                 ? Qt.rgba(0.86, 0.97, 1, 0.92)
                                 : Qt.rgba(1, 1, 1, 0.58)
                             Text {
                                 anchors.centerIn: parent
-                                text: "●"
+                                text: voiceConversationActive ? "×" : "●"
                                 color: "#00A9CC"
                                 font.pixelSize: 15
                             }
                             MouseArea {
                                 id: micMouse
                                 anchors.fill: parent
-                                enabled: !busy && !pendingApprovalId.length
-                                onClicked: listenForPrompt()
+                                enabled: voiceConversationActive || (!busy && !pendingApprovalId.length && voiceAvailable)
+                                onClicked: voiceConversationActive ? stopVoiceConversation() : listenForPrompt()
                             }
                         }
                         Rectangle {
