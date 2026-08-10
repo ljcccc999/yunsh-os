@@ -223,10 +223,14 @@ ApplicationWindow {
         virtualKeyboard.hide()
         if (appId === "appstore" || appId === "files" || appId.indexOf("android:") === 0) {
             androidWindow.visible = false
+            androidWindow.isMinimized = false
             return
         }
         var w = getWindowById(appId)
-        if (w) w.visible = false
+        if (w) {
+            w.visible = false
+            w.isMinimized = false
+        }
     }
 
     function getWindowById(appId) {
