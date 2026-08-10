@@ -125,7 +125,7 @@ GlassPanel {
             // OS version
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "YUNSH OS v3.0.4"
+                text: "YUNSH OS v3.0.5"
                 color: "#8888A0"
                 font.pixelSize: 15
                 font.weight: Font.Medium

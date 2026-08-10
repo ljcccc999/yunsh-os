@@ -29,6 +29,7 @@ ALLOWED_PREFIXES = (
     "usr/share/yunsh/",
     "etc/systemd/system/",
     "etc/yunsh/version.conf",
+    "etc/yunsh/update.conf",
 )
 
 logger = logging.getLogger("yunsh-updater")
@@ -63,6 +64,38 @@ def _status(**fields):
     data = _read_json(STATUS_PATH)
     data.update(fields)
     _write_json(STATUS_PATH, data)
+
+
+def auto_reboot_enabled() -> bool:
+    """Read the image policy without affecting isolated OTA test roots."""
+    config_path = os.path.join(INSTALL_ROOT, "etc/yunsh/update.conf")
+    try:
+        with open(config_path, encoding="utf-8") as handle:
+            for line in handle:
+                key, separator, value = line.strip().partition("=")
+                if separator and key.strip() == "auto_reboot":
+                    return value.strip().lower() == "true"
+    except OSError:
+        pass
+    return False
+
+
+def schedule_reboot() -> bool:
+    """Reboot only after a verified, atomic OTA install has completed."""
+    try:
+        subprocess.Popen(
+            ["systemctl", "reboot", "--no-wall"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        _status(state="rebooting", progress_pct=100,
+                reboot_required=True, error=None)
+        return True
+    except OSError as exc:
+        logger.error("Could not schedule automatic reboot: %s", exc)
+        _status(state="restart_required", reboot_required=True, error=str(exc))
+        return False
 
 
 def download_bundle(url: str, dest: str, expected_sha256: str = "",
@@ -285,6 +318,9 @@ def auto_update() -> dict:
             api_download=bool(info.get("api_download")) or url.startswith("https://api.github.com/"),
         )
         result = install_bundle(DOWNLOAD_PATH)
+        if result.get("success") and auto_reboot_enabled():
+            result["reboot_scheduled"] = schedule_reboot()
+            _write_json(RESULT_PATH, result)
     except (OSError, ValueError, urllib.error.URLError) as exc:
         result = {"success": False, "error": str(exc), "timestamp": time.time()}
         _write_json(RESULT_PATH, result)

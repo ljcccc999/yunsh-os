@@ -8,7 +8,7 @@ BUILD_DIR="${YUNSH_DIR}/build"
 OUTPUT_DIR="${YUNSH_DIR}/output"
 VERSION_CONF="${BUILD_DIR}/yunsh-version.conf"
 if [ ! -f "${VERSION_CONF}" ]; then
-    printf 'VERSION=v3.0.4\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
+    printf 'VERSION=v3.0.5\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
 fi
 VERSION="$(awk -F= '$1 == "VERSION" { print $2; exit }' "${VERSION_CONF}")"
 BUILD_ID="${YUNSH_BUILD_ID:-$(date +%Y.%m.%d)}"
@@ -468,7 +468,8 @@ add_file "${YUNSH_DIR}/system/yunsh-splash" "/usr/bin/yunsh-splash"
 
 # Config files
 cat > "${BUILD_DIR}/yunsh-update.conf" << 'UC'
-auto_update=false
+auto_update=true
+auto_reboot=true
 wifi_only=true
 update_channel=stable
 UC

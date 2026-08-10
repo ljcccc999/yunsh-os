@@ -11,6 +11,8 @@ Item {
 
     property bool expanded: false
     property bool showTrigger: false
+    // Active local lock always takes precedence over the system agent.
+    property bool locked: false
     property bool settingsVisible: false
     property bool busy: false
     property bool keyboardVisible: false
@@ -59,6 +61,8 @@ Item {
     signal toastRequested(string message)
 
     function openPanel() {
+        if (locked)
+            return
         expanded = true
         refreshStatus()
         Qt.callLater(function() { promptField.forceActiveFocus() })
@@ -396,7 +400,7 @@ Item {
         border.width: 1
         border.color: "#BDEFFF"
         opacity: expanded ? 0 : 0.94
-        visible: showTrigger
+        visible: showTrigger && !locked
         scale: triggerMouse.pressed ? 0.97 : 1
 
         Row {

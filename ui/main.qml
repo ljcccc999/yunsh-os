@@ -1,4 +1,4 @@
-// YUNSH OS v3.0.4 - Main QML Entry Point
+// YUNSH OS v3.0.5 - Main QML Entry Point
 // Apple-style glass system + Task Switcher + Home Indicator
 
 import QtQuick 2.15
@@ -146,6 +146,9 @@ ApplicationWindow {
     onActiveFocusItemChanged: {
         if (isNativeEditableItem(activeFocusItem))
             virtualKeyboard.showFor(activeFocusItem)
+        else if (!screensaver_item.visible && virtualKeyboard.visible
+                 && !virtualKeyboard.targetHasFocus())
+            virtualKeyboard.hide()
     }
 
     // Some nested MouseAreas and popup transitions restore focus one event
@@ -159,9 +162,19 @@ ApplicationWindow {
         repeat: true
         onTriggered: {
             var editor = yunshOS.activeFocusItem
+            if (screensaver_item.visible) {
+                if (screensaver_item.passwordRequired
+                        && yunshOS.isNativeEditableItem(editor)
+                        && (!virtualKeyboard.visible
+                            || virtualKeyboard.targetItem !== editor))
+                    virtualKeyboard.showFor(editor)
+                return
+            }
             if (yunshOS.isNativeEditableItem(editor)
                     && (!virtualKeyboard.visible || virtualKeyboard.targetItem !== editor))
                 virtualKeyboard.showFor(editor)
+            else if (virtualKeyboard.visible && !virtualKeyboard.targetHasFocus())
+                virtualKeyboard.hide()
         }
     }
 
@@ -844,12 +857,23 @@ ApplicationWindow {
                 yunshOS.syncLockState(false)
                 idleTimer.restart()
             }
-            onVisibleChanged: yunshOS.syncLockState(visible && passwordRequired)
+            onVisibleChanged: {
+                yunshOS.syncLockState(visible && passwordRequired)
+                if (visible) {
+                    // Locking is a hard UI boundary: close agent, menus and
+                    // background switcher before the password surface shows.
+                    orbitPanel.expanded = false
+                    controlCenter.hide()
+                    taskSwitcher.hide()
+                    virtualKeyboard.hide()
+                }
+            }
             onPasswordRequiredChanged: {
                 if (visible) yunshOS.syncLockState(visible && passwordRequired)
             }
             onRequestVirtualKeyboard: function(target) {
-                virtualKeyboard.showFor(target)
+                if (visible && passwordRequired)
+                    virtualKeyboard.showFor(target)
             }
         }
 
@@ -1092,7 +1116,7 @@ ApplicationWindow {
             anchors.left: parent.left
             anchors.right: parent.right
             z: 7000
-            visible: !firstBoot || activationDone
+            visible: (!firstBoot || activationDone) && !screensaver_item.visible
             orbitConfigured: orbitPanel.configured
             orbitBusy: orbitPanel.computerOperationActive || orbitPanel.voiceConversationActive
             orbitAwaitingApproval: orbitPanel.computerApprovalPending
@@ -1116,8 +1140,9 @@ ApplicationWindow {
             id: orbitPanel
             anchors.fill: parent
             z: 7100
-            visible: !firstBoot || activationDone
+            visible: (!firstBoot || activationDone) && !screensaver_item.visible
             showTrigger: false
+            locked: screensaver_item.visible
             keyboardVisible: virtualKeyboard.visible
             reduceMotion: yunshOS.reduceMotion
             onToastRequested: function(message) { yunshOS.showToast(message) }
@@ -1142,6 +1167,14 @@ ApplicationWindow {
         trackAppOpen(appId, window && window.appTitle ? window.appTitle : "")
         window.visible = false
         window.isMinimized = true
+        var updatedApps = openApps.slice()
+        for (var i = 0; i < updatedApps.length; i++) {
+            if (updatedApps[i].appId === appId) {
+                updatedApps[i].minimized = true
+                break
+            }
+        }
+        openApps = updatedApps
         if (activeAppId === appId)
             activeAppId = ""
         homeScreen.visible = true
@@ -1997,7 +2030,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        console.log("YUNSH OS UI v3.0.4")
+        console.log("YUNSH OS UI v3.0.5")
         checkFirstBoot()
         showFullScreen()
         applyWindowPreferences()

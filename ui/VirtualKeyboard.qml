@@ -75,7 +75,6 @@ Item {
     }
 
     function toggleInputMethod() {
-        var requested = inputMethod === "pinyin" ? "latin" : "pinyin"
         var xhr = new XMLHttpRequest()
         xhr.open("POST", "http://127.0.0.1:8591/api/input-method", true)
         xhr.setRequestHeader("Content-Type", "application/json")
@@ -87,9 +86,14 @@ Item {
                 var body = JSON.parse(xhr.responseText || "{}")
                 if (body.success && (body.mode === "pinyin" || body.mode === "latin"))
                     keyboardPanel.inputMethod = body.mode
+                else
+                    keyboardPanel.refreshInputMethod()
             } catch (_error) {}
         }
-        xhr.send(JSON.stringify({mode: requested}))
+        // Let the daemon toggle its authoritative state instead of relying on
+        // a possibly stale local label after a restart or physical-keyboard
+        // switch.
+        xhr.send(JSON.stringify({mode: "toggle"}))
     }
 
     function insertDirect(key) {
@@ -202,6 +206,16 @@ Item {
             return
         targetItem = item
         show()
+    }
+
+    function targetHasFocus() {
+        if (!targetItem || targetItem.visible === false)
+            return false
+        if (targetItem.activeFocus !== undefined)
+            return targetItem.activeFocus === true
+        if (targetItem.focus !== undefined)
+            return targetItem.focus === true
+        return true
     }
 
     // ─── Glass panel body ──────────────────────

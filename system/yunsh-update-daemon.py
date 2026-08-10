@@ -45,7 +45,7 @@ GITHUB_REPO = "ljcccc999/yunsh-os"
 CHECK_INTERVAL_SEC = 6 * 3600  # 6 hours
 
 DEFAULT_CONFIG = {
-    "auto_update": False,
+    "auto_update": True,
     "wifi_only": True,
     "update_channel": "stable",  # "stable" | "beta"
     "allow_major_update": True,
@@ -148,7 +148,7 @@ def write_status(**fields):
         "update_available": False,
         "last_check_ts": 0,
         "error": None,
-        "auto_update": False,
+        "auto_update": True,
         "wifi_only": True,
         "update_channel": "stable",
     }
@@ -481,7 +481,7 @@ class UpdateDaemon:
             "latest_build": 0,
             "update_available": self._update_available,
             "last_check_ts": self._last_check_ts,
-            "auto_update": self._config.get("auto_update", False),
+            "auto_update": self._config.get("auto_update", True),
             "wifi_only": self._config.get("wifi_only", True),
             "update_channel": self._config.get("update_channel", "stable"),
         }
@@ -649,7 +649,7 @@ class UpdateDaemon:
             update_available=available,
             major_update=release.get("major_update", False),
             last_check_ts=self._last_check_ts,
-            auto_update=self._config.get("auto_update", False),
+            auto_update=self._config.get("auto_update", True),
             wifi_only=self._config.get("wifi_only", True),
             update_channel=self._config.get("update_channel", "stable"),
             allow_major_update=self._config.get("allow_major_update", True),
@@ -746,7 +746,7 @@ class UpdateDaemon:
         write_status(
             state="idle",
             current_version=current_version() or "3.0.0",
-            auto_update=self._config.get("auto_update", False),
+            auto_update=self._config.get("auto_update", True),
             wifi_only=self._config.get("wifi_only", True),
             update_channel=self._config.get("update_channel", "stable"),
         )

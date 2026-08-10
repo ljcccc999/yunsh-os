@@ -17,7 +17,7 @@ Item {
     signal backToHome()
 
     /* ---- State ---- */
-    property string currentVersion: "1.0.3"
+    property string currentVersion: "3.0.5"
     property string latestVersion: ""
     property bool updateAvailable: false
     property bool isChecking: false
@@ -25,7 +25,7 @@ Item {
     property int downloadProgress: 0
     property string downloadSpeed: ""
     property string downloadEta: ""
-    property bool autoUpdate: false
+    property bool autoUpdate: true
     property bool wifiOnly: true
     property string lastCheckTime: ""
     property string changelog: ""
@@ -41,7 +41,7 @@ Item {
             if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
                 try {
                     var data = JSON.parse(xhr.responseText);
-                    currentVersion = data.currentVersion || "1.0.3";
+                    currentVersion = data.currentVersion || "3.0.5";
                     latestVersion = data.latestVersion || "";
                     updateAvailable = data.updateAvailable || false;
                     autoUpdate = data.autoUpdate || false;
