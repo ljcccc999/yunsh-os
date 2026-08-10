@@ -20,6 +20,30 @@ WESTON_LOG="${LOG_DIR}/yunsh-weston.log"
 RECOVERY_QML="/usr/share/yunsh/ui/RecoveryScreen.qml"
 
 install -d -m 0700 "$XDG_RUNTIME_DIR"
+# Keep the graphical Fcitx5 profile deterministic: the globe key and the
+# YUNSH menu both switch between the normal US layout and Pinyin.  The profile
+# is created for the root-owned compositor session and for the fixed local
+# account so a later desktop restart does not lose Chinese input.
+for fcitx_home in /root /home/yunsh; do
+    install -d -m 0700 "$fcitx_home/.config/fcitx5"
+    if [ ! -f "$fcitx_home/.config/fcitx5/profile" ] ||
+       ! grep -q '^Name=pinyin$' "$fcitx_home/.config/fcitx5/profile" 2>/dev/null; then
+        cat > "$fcitx_home/.config/fcitx5/profile" <<'FCITX_PROFILE'
+[Groups/0]
+Name=Default
+Default Layout=us
+DefaultIM=keyboard-us
+
+[Groups/0/Items/0]
+Name=keyboard-us
+Layout=us
+
+[Groups/0/Items/1]
+Name=pinyin
+FCITX_PROFILE
+        chmod 0600 "$fcitx_home/.config/fcitx5/profile"
+    fi
+done
 pgrep -x fcitx5 >/dev/null 2>&1 || fcitx5 -d --replace >/dev/null 2>&1 || true
 install -d -o yunsh -g yunsh \
     /home/yunsh/Pictures/Screenshots /home/yunsh/Downloads \

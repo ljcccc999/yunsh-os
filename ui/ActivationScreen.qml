@@ -1,4 +1,4 @@
-// YUNSH OS v3.0.3 - touch-first activation experience.
+// YUNSH OS v3.0.4 - touch-first activation experience.
 // Physical keyboard input is never required.
 
 import QtQuick 2.15
@@ -429,7 +429,7 @@ Rectangle {
                 // Version
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "v3.0.3"
+                    text: "v3.0.4"
                     color: Qt.rgba(16/255, 32/255, 42/255, 0.28)
                     font.pixelSize: 11
                 }

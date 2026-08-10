@@ -1,4 +1,4 @@
-// YUNSH OS v3.0.3 - Main QML Entry Point
+// YUNSH OS v3.0.4 - Main QML Entry Point
 // Apple-style glass system + Task Switcher + Home Indicator
 
 import QtQuick 2.15
@@ -293,6 +293,7 @@ ApplicationWindow {
             headTrackingConnected: yunshOS.headTrackingEnabled
             reduceMotion: yunshOS.reduceMotion
             appIconsManuallyHidden: yunshOS.appIconsManuallyHidden
+            inputMethodLabel: virtualKeyboard.inputMethodLabel
             desktopIconToggleEnabled: yunshOS.hasVisibleAppWindows()
             onOpenSettings: switchTo(settingsWindow, "settings")
             onOpenAbout: switchTo(systemInfoWindow, "systeminfo")
@@ -407,6 +408,7 @@ ApplicationWindow {
             onToggleWifi: controlCenter.applyWifiPower()
             onToggleBluetooth: controlCenter.applyBluetoothPower()
             onToggleKeyboard: { controlCenter.hide(); virtualKeyboard.visible ? virtualKeyboard.hide() : virtualKeyboard.show() }
+            onToggleInputMethod: { virtualKeyboard.toggleInputMethod(); controlCenter.refreshSystemState() }
             onTakeScreenshot: {
                 controlCenter.hide()
                 Qt.callLater(function() { takeScreenshot() })
@@ -1943,7 +1945,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        console.log("YUNSH OS UI v3.0.3")
+        console.log("YUNSH OS UI v3.0.4")
         checkFirstBoot()
         showFullScreen()
         applyWindowPreferences()

@@ -23,6 +23,7 @@ Item {
     property bool stereoEnabled: false
     property bool reduceMotion: false
     property bool appIconsManuallyHidden: false
+    property string inputMethodLabel: "ABC"
 
     signal dismissPanel()
     signal openNetwork()
@@ -36,6 +37,7 @@ Item {
     signal toggleWifi()
     signal toggleBluetooth()
     signal toggleKeyboard()
+    signal toggleInputMethod()
     signal toggleFocusMode()
     signal toggleAppIcons()
     signal openSpatialDisplay()
@@ -150,6 +152,8 @@ Item {
             toggleBluetooth()
         } else if (action === "keyboard") {
             toggleKeyboard()
+        } else if (action === "input_method") {
+            toggleInputMethod()
         } else if (action === "screenshot") {
             takeScreenshot()
         } else if (action === "region") {
@@ -180,6 +184,7 @@ Item {
         if (action === "focus") return focusMode
         if (action === "apps") return !appIconsManuallyHidden
         if (action === "display") return stereoEnabled
+        if (action === "input_method") return inputMethodLabel === "中"
         return false
     }
 
@@ -314,6 +319,7 @@ Item {
                             {label: "Wi-Fi", icon: "wifi.svg", action: "wifi"},
                             {label: "蓝牙", icon: "bluetooth.svg", action: "bluetooth"},
                             {label: "键盘", icon: "keyboard.svg", action: "keyboard"},
+                            {label: "输入法 · " + inputMethodLabel, icon: "keyboard.svg", action: "input_method"},
                             {label: "全屏截图", icon: "screenshot.svg", action: "screenshot"},
                             {label: "区域截图", icon: "screenshot.svg", action: "region"},
                             {label: recording ? "停止录屏" : "录屏", icon: "screen-relay.svg", action: "record"},

@@ -8,7 +8,7 @@ BUILD_DIR="${YUNSH_DIR}/build"
 OUTPUT_DIR="${YUNSH_DIR}/output"
 VERSION_CONF="${BUILD_DIR}/yunsh-version.conf"
 if [ ! -f "${VERSION_CONF}" ]; then
-    printf 'VERSION=v3.0.3\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
+    printf 'VERSION=v3.0.4\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
 fi
 VERSION="$(awk -F= '$1 == "VERSION" { print $2; exit }' "${VERSION_CONF}")"
 BUILD_ID="${YUNSH_BUILD_ID:-$(date +%Y.%m.%d)}"
@@ -429,6 +429,7 @@ add_file "${YUNSH_DIR}/system/yunsh-time-sync" "/usr/bin/yunsh-time-sync"
 add_file "${YUNSH_DIR}/system/yunsh-factory-reset" "/usr/bin/yunsh-factory-reset"
 add_file "${YUNSH_DIR}/system/yunsh-install-progress.sh" "/usr/bin/yunsh-install-progress.sh"
 add_file "${YUNSH_DIR}/system/yunsh-inputd" "/usr/bin/yunsh-inputd"
+add_file "${YUNSH_DIR}/system/yunsh-keyinject" "/usr/bin/yunsh-keyinject"
 add_file "${YUNSH_DIR}/system/yunsh-powerd" "/usr/bin/yunsh-powerd"
 add_file "${YUNSH_DIR}/system/yunsh-activation-helper" "/usr/bin/yunsh-activation-helper"
 add_file "${YUNSH_DIR}/system/yunsh-appd.py" "/usr/bin/yunsh-appd"
@@ -956,7 +957,7 @@ for bin in yunsh-update-daemon yunsh-updater yunsh-network-daemon yunsh-bluetoot
            yunsh-screenshotd yunsh-factory-reset yunsh-install-progress.sh yunsh-inputd \
            yunsh-powerd yunsh-firstboot.sh yunsh-iptables.sh yunsh-ui-launcher yunsh-splash \
            yunsh-appd yunsh-terminal yunsh-disk-helper yunsh-headtracking yunsh-headtracking-sim \
-           yunsh-bno085-reader yunsh-activation-helper yunsh-android yunsh-recordingd yunsh-media-setup yunsh-grow-root yunsh-time-sync orbitd orbit-voice-setup; do
+           yunsh-bno085-reader yunsh-activation-helper yunsh-keyinject yunsh-android yunsh-recordingd yunsh-media-setup yunsh-grow-root yunsh-time-sync orbitd orbit-voice-setup; do
     echo "set_inode_field /usr/bin/${bin} mode 0100755" >> "${DEBUGFS_SCRIPT}"
 done
 echo "set_inode_field /etc/rc.local mode 0100755" >> "${DEBUGFS_SCRIPT}"

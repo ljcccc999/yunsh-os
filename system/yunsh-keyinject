@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+"""Send one physical-style key event through Linux uinput.
+
+The spatial keyboard normally inserts text directly into QML fields.  When
+Fcitx5 Chinese input is selected, letters must instead arrive as real key
+events so the Pinyin engine can compose candidates.  This tiny one-shot
+injector keeps that bridge local to the trusted YUNSH API.
+"""
+
+import argparse
+import fcntl
+import os
+import struct
+import time
+
+
+EV_SYN = 0x00
+EV_KEY = 0x01
+SYN_REPORT = 0
+BUS_USB = 0x03
+UI_SET_EVBIT = 1074025828
+UI_SET_KEYBIT = 1074025829
+UI_DEV_CREATE = 21761
+UI_DEV_DESTROY = 21762
+
+KEYS = {
+    "q": 16, "w": 17, "e": 18, "r": 19, "t": 20, "y": 21,
+    "u": 22, "i": 23, "o": 24, "p": 25,
+    "a": 30, "s": 31, "d": 32, "f": 33, "g": 34, "h": 35,
+    "j": 36, "k": 37, "l": 38,
+    "z": 44, "x": 45, "c": 46, "v": 47, "b": 48, "n": 49, "m": 50,
+    "1": 2, "2": 3, "3": 4, "4": 5, "5": 6, "6": 7,
+    "7": 8, "8": 9, "9": 10, "0": 11,
+    "-": 12, "=": 13, "[": 26, "]": 27, "\\": 43,
+    ";": 39, "'": 40, "`": 41, ",": 51, ".": 52, "/": 53,
+    " ": 57, "\n": 28, "\t": 15, "backspace": 14,
+    "left": 105, "right": 106, "up": 103, "down": 108,
+}
+SHIFTED = {
+    "!": "1", "@": "2", "#": "3", "$": "4", "%": "5",
+    "^": "6", "&": "7", "*": "8", "(": "9", ")": "0",
+    "_": "-", "+": "=", "{": "[", "}": "]", "|": "\\",
+    ":": ";", '"': "'", "~": "`", "<": ",", ">": ".",
+    "?": "/",
+}
+
+
+def emit(fd, event_type, code, value):
+    fd.write(struct.pack("llHHI", 0, 0, event_type, code, value))
+    fd.flush()
+
+
+def press(fd, code, value):
+    emit(fd, EV_KEY, code, value)
+    emit(fd, EV_SYN, SYN_REPORT, 0)
+
+
+def create_device():
+    fd = open("/dev/uinput", "wb", buffering=0)
+    fcntl.ioctl(fd, UI_SET_EVBIT, EV_KEY)
+    fcntl.ioctl(fd, UI_SET_EVBIT, EV_SYN)
+    for code in set(KEYS.values()) | {42}:
+        fcntl.ioctl(fd, UI_SET_KEYBIT, code)
+    payload = struct.pack(
+        "80sHHHHI" + "i" * 256,
+        b"YUNSH Spatial Keyboard",
+        BUS_USB, 0x594E, 0x5348, 1, 0,
+        *([0] * 256),
+    )
+    fd.write(payload)
+    fcntl.ioctl(fd, UI_DEV_CREATE)
+    time.sleep(0.025)
+    return fd
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("key")
+    args = parser.parse_args()
+    key = args.key
+    if len(key) == 1 and key.isalpha():
+        key = key.lower()
+    shifted = key in SHIFTED or (len(key) == 1 and key.isalpha() and args.key.isupper())
+    base = SHIFTED.get(key, key.lower() if len(key) == 1 else key)
+    code = KEYS.get(base)
+    if code is None:
+        raise SystemExit(2)
+    fd = create_device()
+    try:
+        if shifted:
+            press(fd, 42, 1)
+        press(fd, code, 1)
+        press(fd, code, 0)
+        if shifted:
+            press(fd, 42, 0)
+        time.sleep(0.015)
+    finally:
+        try:
+            fcntl.ioctl(fd, UI_DEV_DESTROY)
+        finally:
+            fd.close()
+
+
+if __name__ == "__main__":
+    main()

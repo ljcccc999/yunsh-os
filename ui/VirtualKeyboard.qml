@@ -27,6 +27,10 @@ Item {
     property bool capsActive: false
     property bool symbolsActive: false
     property bool emojiActive: false
+    // `latin` inserts text directly; `pinyin` sends physical-style key events
+    // through Fcitx5 so Chinese candidates work in every focused field.
+    property string inputMethod: "latin"
+    readonly property string inputMethodLabel: inputMethod === "pinyin" ? "中" : "ABC"
     property bool reduceMotion: false
     property bool tilted: true
     property string pinMode: "following" // following, pinned
@@ -53,6 +57,79 @@ Item {
     signal enterPressed()
     signal spacePressed()
     signal dismissKeyboard()
+
+    function refreshInputMethod() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", "http://127.0.0.1:8591/api/input-method", true)
+        xhr.timeout = 1200
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE || xhr.status !== 200)
+                return
+            try {
+                var body = JSON.parse(xhr.responseText || "{}")
+                if (body.mode === "pinyin" || body.mode === "latin")
+                    keyboardPanel.inputMethod = body.mode
+            } catch (_error) {}
+        }
+        xhr.send()
+    }
+
+    function toggleInputMethod() {
+        var requested = inputMethod === "pinyin" ? "latin" : "pinyin"
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/input-method", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 1500
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE || xhr.status !== 200)
+                return
+            try {
+                var body = JSON.parse(xhr.responseText || "{}")
+                if (body.success && (body.mode === "pinyin" || body.mode === "latin"))
+                    keyboardPanel.inputMethod = body.mode
+            } catch (_error) {}
+        }
+        xhr.send(JSON.stringify({mode: requested}))
+    }
+
+    function insertDirect(key) {
+        if (!targetItem)
+            return
+        var pos = targetItem.cursorPosition
+        targetItem.text = targetItem.text.substring(0, pos) + key + targetItem.text.substring(pos)
+        targetItem.cursorPosition = pos + key.length
+    }
+
+    function injectKey(key) {
+        var completed = false
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/input-key", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 900
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE || completed)
+                return
+            completed = true
+            var ok = false
+            try { ok = JSON.parse(xhr.responseText || "{}").success === true } catch (_error) {}
+            if (!ok)
+                insertDirect(key)
+        }
+        xhr.ontimeout = function() {
+            if (!completed) {
+                completed = true
+                insertDirect(key)
+            }
+        }
+        try {
+            xhr.send(JSON.stringify({key: key}))
+        } catch (_error) {
+            if (!completed) {
+                completed = true
+                insertDirect(key)
+            }
+        }
+    }
 
     Timer {
         id: backspaceHoldDelay
@@ -82,7 +159,7 @@ Item {
         if (!visible) {
             endBackspace()
             targetItem = null
-        }
+        } else refreshInputMethod()
     }
 
     // ─── Floating panel ────────────────────────
@@ -432,6 +509,13 @@ Item {
                 spacing: 8
 
                 RoundKey {
+                    label: keyboardPanel.inputMethod === "pinyin" ? "中" : "🌐"
+                    width: 56
+                    accent: keyboardPanel.inputMethod === "pinyin"
+                    onClicked: keyboardPanel.toggleInputMethod()
+                }
+
+                RoundKey {
                     label: keyboardPanel.symbolsActive ? "ABC" : "#+="
                     width: 64
                     accent: keyboardPanel.symbolsActive
@@ -465,7 +549,8 @@ Item {
 
                 RoundKey { label: "⇤"; width: 48
                     onClicked: {
-                        if (keyboardPanel.targetItem)
+                        if (keyboardPanel.inputMethod === "pinyin") keyboardPanel.injectKey("left")
+                        else if (keyboardPanel.targetItem)
                             keyboardPanel.targetItem.cursorPosition = Math.max(0,
                                 keyboardPanel.targetItem.cursorPosition - 1)
                     }
@@ -473,7 +558,8 @@ Item {
 
                 RoundKey { label: "⇥"; width: 48
                     onClicked: {
-                        if (keyboardPanel.targetItem)
+                        if (keyboardPanel.inputMethod === "pinyin") keyboardPanel.injectKey("right")
+                        else if (keyboardPanel.targetItem)
                             keyboardPanel.targetItem.cursorPosition = Math.min(
                                 keyboardPanel.targetItem.text.length,
                                 keyboardPanel.targetItem.cursorPosition + 1)
@@ -589,28 +675,36 @@ Item {
 
     // ─── Key event handlers ─────────────────────
     onKeyPressed: {
-        if (targetItem) {
+        if (inputMethod === "pinyin" && key.length <= 1 && key.charCodeAt(0) < 128)
+            injectKey(key)
+        else if (targetItem) {
             var pos = targetItem.cursorPosition
             targetItem.text = targetItem.text.substring(0, pos) + key + targetItem.text.substring(pos)
             targetItem.cursorPosition = pos + 1
         }
     }
     onBackspacePressed: {
-        if (targetItem && targetItem.cursorPosition > 0) {
+        if (inputMethod === "pinyin") {
+            injectKey("backspace")
+        } else if (targetItem && targetItem.cursorPosition > 0) {
             var pos = targetItem.cursorPosition
             targetItem.text = targetItem.text.substring(0, pos - 1) + targetItem.text.substring(pos)
             targetItem.cursorPosition = pos - 1
         }
     }
     onSpacePressed: {
-        if (targetItem) {
+        if (inputMethod === "pinyin") {
+            injectKey(" ")
+        } else if (targetItem) {
             var pos = targetItem.cursorPosition
             targetItem.text = targetItem.text.substring(0, pos) + " " + targetItem.text.substring(pos)
             targetItem.cursorPosition = pos + 1
         }
     }
     onEnterPressed: {
-        if (targetItem && typeof targetItem.submit === "function")
+        if (inputMethod === "pinyin") {
+            injectKey("\n")
+        } else if (targetItem && typeof targetItem.submit === "function")
             targetItem.submit()
         else if (targetItem && typeof targetItem.accepted === "function")
             targetItem.accepted()

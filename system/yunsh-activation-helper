@@ -61,6 +61,9 @@ SCREEN_RELAY_STATUS_PATH = os.environ.get(
 LINK_PAIRING_PATH = os.environ.get(
     "YUNSH_LINK_PAIRING_PATH", "/run/yunsh/link-pairing.json"
 )
+INPUT_METHOD_PATH = os.environ.get(
+    "YUNSH_INPUT_METHOD_PATH", "/run/yunsh/input-method.json"
+)
 CAPSULE_ALLOWED_APPS = {
     "settings",
     "browser",
@@ -141,6 +144,94 @@ def socket_command(name, payload):
                 data += chunk
         return json.loads(data.decode() or "{}")
     except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+def _fcitx_environment():
+    """Reuse the graphical Fcitx5 session bus owned by the UI launcher."""
+    environment = os.environ.copy()
+    try:
+        for entry in os.listdir("/proc"):
+            if not entry.isdigit():
+                continue
+            try:
+                with open(f"/proc/{entry}/comm", encoding="utf-8") as handle:
+                    if handle.read().strip() != "fcitx5":
+                        continue
+                with open(f"/proc/{entry}/environ", "rb") as handle:
+                    values = handle.read().split(b"\0")
+                for value in values:
+                    if b"=" not in value:
+                        continue
+                    name, content = value.split(b"=", 1)
+                    if name.decode(errors="ignore") in {
+                        "DBUS_SESSION_BUS_ADDRESS", "DISPLAY", "WAYLAND_DISPLAY",
+                        "XDG_RUNTIME_DIR", "XDG_SESSION_TYPE",
+                    }:
+                        environment[name.decode()] = content.decode(errors="ignore")
+                break
+            except (OSError, UnicodeError):
+                continue
+    except OSError:
+        pass
+    return environment
+
+
+def _write_input_method(mode):
+    os.makedirs(os.path.dirname(INPUT_METHOD_PATH), exist_ok=True)
+    fd, temp_path = tempfile.mkstemp(prefix="input-method.", dir=os.path.dirname(INPUT_METHOD_PATH))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump({"success": True, "mode": mode}, handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, INPUT_METHOD_PATH)
+    finally:
+        try:
+            os.remove(temp_path)
+        except OSError:
+            pass
+
+
+def input_method_status():
+    saved = read_json(INPUT_METHOD_PATH, {"mode": "latin"})
+    mode = saved.get("mode") if saved.get("mode") in {"latin", "pinyin"} else "latin"
+    return {"success": True, "mode": mode, "label": "中" if mode == "pinyin" else "ABC"}
+
+
+def set_input_method(payload):
+    requested = str(payload.get("mode", "toggle")).lower()
+    current = input_method_status().get("mode", "latin")
+    mode = ("latin" if current == "pinyin" else "pinyin") if requested == "toggle" else requested
+    if mode not in {"latin", "pinyin"}:
+        return {"success": False, "error": "Unsupported input method"}
+    command = "pinyin" if mode == "pinyin" else "keyboard-us"
+    try:
+        result = subprocess.run(
+            ["fcitx5-remote", "-s", command],
+            env=_fcitx_environment(), capture_output=True, text=True, timeout=4,
+        )
+        if result.returncode != 0:
+            return {"success": False, "error": result.stderr.strip() or "Fcitx5 输入法切换失败"}
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {"success": False, "error": str(exc)}
+    _write_input_method(mode)
+    return input_method_status()
+
+
+def inject_input_key(payload):
+    key = str(payload.get("key", ""))
+    if not key or len(key) > 16 or any(char in key for char in "\r\n\x00"):
+        return {"success": False, "error": "Invalid key"}
+    try:
+        result = subprocess.run(
+            ["/usr/bin/yunsh-keyinject", key],
+            capture_output=True, text=True, timeout=2,
+        )
+        if result.returncode != 0:
+            return {"success": False, "error": result.stderr.strip() or "Key injection failed"}
+        return {"success": True}
+    except (OSError, subprocess.SubprocessError) as exc:
         return {"success": False, "error": str(exc)}
 
 
@@ -1067,6 +1158,8 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/clipboard":
             clipboard = read_json("/run/yunsh/flow-clipboard.json", {})
             self._send({"success": True, "text": str(clipboard.get("text", ""))[:20000]})
+        elif self.path == "/api/input-method":
+            self._send(input_method_status())
         elif self.path == "/api/screen-relay-status":
             self._send(get_screen_relay_status())
         else:
@@ -1127,6 +1220,10 @@ class Handler(BaseHTTPRequestHandler):
             result = change_boot_password(payload)
         elif self.path == "/api/lock-state":
             result = set_lock_state(payload)
+        elif self.path == "/api/input-method":
+            result = set_input_method(payload)
+        elif self.path == "/api/input-key":
+            result = inject_input_key(payload)
         elif self.path == "/api/verify-boot-password":
             result = verify_boot_password(payload)
         else:
