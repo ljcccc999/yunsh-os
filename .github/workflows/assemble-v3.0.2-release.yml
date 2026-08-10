@@ -82,7 +82,7 @@ jobs:
           tar -xf work/xz-5.8.3.tar.xz -C work
           cd work/xz-5.8.3
           ./configure --disable-shared --disable-doc --disable-scripts
-          make -j2 src/xz/xz
+          make -j2
           ./src/xz/xz -T2 -f ../YUNSH-OS-v3.0.2.img
           cd ../..
           printf '%s  %s\n' \
