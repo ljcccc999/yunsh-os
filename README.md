@@ -38,6 +38,8 @@ system-wide bright liquid-glass material language.
 - Floating application windows with move, resize, minimize, close, and full-screen controls.
 - Direct spatial window layouts for 3DoF viewing: front, left angle, right angle, and distance presets.
 - Window pin and follow modes for view-relative display behavior.
+- An iOS-inspired swipe-up App Switcher keeps minimized apps as tappable
+  background cards and provides an independent close control.
 - SpaceCapsule export and restore, plus encrypted YUNSH Drop discovery, sender delivery, and receiver approval on the local network.
 - YUNSH Link import for forwarding `.yunshspace` files through the iOS share sheet to WeChat, Files, AirDrop, or another installed app.
 - YUNSH Flow for user-selected photo/file transfer and explicit clipboard send
@@ -126,6 +128,8 @@ app does not retain the API key.
 - iPhone Screen Relay as a movable, resizable, pinnable spatial window, using an explicitly started ReplayKit broadcast over encrypted local Wi-Fi.
 - Settings, system information, update center, network, and Bluetooth management.
 - Integrated Android application environment through Waydroid on the YUNSH Wayland session; its background preparation never blocks the desktop or activation flow.
+- Android preparation reports failed or stale background setup with an explicit
+  retry action instead of leaving the interface in an endless preparing state.
 - Built-in Android app catalogue with a verified F-Droid fallback, plus APK side-loading through `yunsh-android install-apk`.
 
 ### Device services
