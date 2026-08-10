@@ -109,6 +109,9 @@ Item {
             font.weight: Font.Medium
             font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"
             opacity: 0.95
+            // MacWindow already renders the app title in its title bar. A
+            // second large title here overlapped that bar on the glass window.
+            visible: false
         }
     }
 

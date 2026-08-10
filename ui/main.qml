@@ -218,6 +218,9 @@ ApplicationWindow {
     }
 
     function closeWindowById(appId) {
+        // Closing or switching away from any app must release the shared
+        // keyboard target; otherwise its old editor can keep reopening it.
+        virtualKeyboard.hide()
         if (appId === "appstore" || appId === "files" || appId.indexOf("android:") === 0) {
             androidWindow.visible = false
             return
@@ -709,6 +712,7 @@ ApplicationWindow {
                 anchors.fill: parent
                 onBackToHome: switchToHome()
                 onRequestVirtualKeyboard: function(target) { virtualKeyboard.showFor(target) }
+                onDismissVirtualKeyboard: virtualKeyboard.hide()
             }
         }
 
@@ -829,6 +833,7 @@ ApplicationWindow {
                 }
             }
             onUnlocked: {
+                virtualKeyboard.hide()
                 screensaver_item.hideScreen()
                 yunshOS.syncLockState(false)
                 idleTimer.restart()

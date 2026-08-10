@@ -14,6 +14,7 @@ Item {
 
     signal backToHome()
     signal requestVirtualKeyboard(var target)
+    signal dismissVirtualKeyboard()
 
     property url currentUrl: "https://www.bing.com"
     property bool isLoading: false
@@ -94,7 +95,11 @@ Item {
         onTriggered: webView.runJavaScript(
             "(function(){var e=document.activeElement;if(!e)return null;var t=(e.tagName||'').toLowerCase();if(t!=='input'&&t!=='textarea'&&!e.isContentEditable)return null;return {v:('value' in e?e.value:e.textContent)||'',p:('selectionStart' in e?e.selectionStart:(e.textContent||'').length)};})()",
             function(value) {
-                if (!value) return
+                if (!value) {
+                    webInputProxy.focus = false
+                    browserScreen.dismissVirtualKeyboard()
+                    return
+                }
                 if (Date.now() < browserScreen.keyboardSuppressedUntil) return
                 webInputProxy.syncing = true
                 webInputProxy.text = value.v || ""

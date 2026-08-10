@@ -17,6 +17,26 @@ TextInput {
         {label: "全选", action: "selectAll"}
     ]
 
+    function pasteWithPriority() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", "http://127.0.0.1:8591/api/clipboard", true)
+        xhr.timeout = 700
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return
+            var phoneText = ""
+            try { phoneText = JSON.parse(xhr.responseText || "{}").text || "" } catch (error) {}
+            if (phoneText.length > 0) {
+                var pos = input.cursorPosition
+                input.text = input.text.substring(0, pos) + phoneText + input.text.substring(pos)
+                input.cursorPosition = pos + phoneText.length
+            } else {
+                input.paste()
+            }
+        }
+        xhr.send()
+    }
+
     Text {
         anchors.fill: parent
         text: input.placeholderText
@@ -80,7 +100,7 @@ TextInput {
                         anchors.fill: parent
                         hoverEnabled: true
                         onClicked: {
-                            if (modelData.action === "paste") input.paste()
+                            if (modelData.action === "paste") input.pasteWithPriority()
                             else if (modelData.action === "copy") { input.copy(); _toast("已复制 ✓") }
                             else if (modelData.action === "selectAll") input.selectAll()
                             popup.close()

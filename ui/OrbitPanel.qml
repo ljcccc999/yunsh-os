@@ -729,7 +729,7 @@ Item {
                         border.width: 1
                         border.color: promptField.activeFocus ? "#00D4FF" : "#D7E7ED"
 
-                        TextField {
+                        EditableInput {
                             id: promptField
                             anchors.left: microphoneButton.right
                             anchors.right: sendButton.left
@@ -738,7 +738,6 @@ Item {
                             anchors.rightMargin: 8
                             placeholderText: "让 Orbit 为你完成任务"
                             color: "#111820"
-                            background: Item {}
                             enabled: !busy && !pendingApprovalId.length
                             onAccepted: sendMessage()
                         }
@@ -831,13 +830,13 @@ Item {
                             visible: provider !== "compatible"
                         }
 
-                        TextField {
+                        EditableInput {
                             id: customModel
                             width: parent.width
                             visible: provider === "compatible"
                             placeholderText: "模型名称，例如 my-model"
                         }
-                        TextField {
+                        EditableInput {
                             id: customEndpoint
                             width: parent.width
                             visible: provider === "compatible"
@@ -853,7 +852,7 @@ Item {
                         Row {
                             width: parent.width
                             spacing: 10
-                            TextField {
+                            EditableInput {
                                 id: apiKeyField
                                 width: parent.width - changeKeyButton.width - parent.spacing
                                 placeholderText: apiKeyHint.length

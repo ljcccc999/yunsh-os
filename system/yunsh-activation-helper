@@ -1064,6 +1064,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send(get_link_pairing_code())
         elif self.path == "/api/ui-command":
             self._send(get_ui_command())
+        elif self.path == "/api/clipboard":
+            clipboard = read_json("/run/yunsh/flow-clipboard.json", {})
+            self._send({"success": True, "text": str(clipboard.get("text", ""))[:20000]})
         elif self.path == "/api/screen-relay-status":
             self._send(get_screen_relay_status())
         else:

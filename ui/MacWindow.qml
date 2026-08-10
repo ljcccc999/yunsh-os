@@ -753,7 +753,7 @@ Rectangle {
         var safeMargin = 28
         var targetX = Math.max(safeMargin - width * 0.75,
                                Math.min(x, parent.width - safeMargin - width * 0.25))
-        var targetY = Math.max(18, Math.min(y, parent.height - 70))
+        var targetY = Math.max(18, Math.min(y, parent.height - height - safeMargin))
         if (reduceMotion) {
             x = targetX
             y = targetY

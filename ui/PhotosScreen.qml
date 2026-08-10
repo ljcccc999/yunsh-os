@@ -18,6 +18,8 @@ Rectangle {
     property bool showGrid: true
     property string currentPhoto: ""
     property bool deleteConfirmationVisible: false
+    property bool hiddenUnlockVisible: false
+    property string hiddenUnlockError: ""
     
     signal backToHome()
 
@@ -47,6 +49,12 @@ Rectangle {
     }
 
     function openAlbum(name) {
+        if (name === "hidden") {
+            hiddenUnlockError = ""
+            hiddenUnlockVisible = true
+            Qt.callLater(function() { hiddenPassword.forceActiveFocus() })
+            return
+        }
         activeAlbum = name
         showGrid = true
         if (name === "deleted") {
@@ -60,8 +68,66 @@ Rectangle {
             headerText.text = "照片"
         }
     }
+
+    function verifyHiddenUnlock() {
+        if (!hiddenPassword.text.length)
+            return
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/verify-boot-password", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return
+            try {
+                var result = JSON.parse(xhr.responseText || "{}")
+                if (xhr.status === 200 && result.success) {
+                    hiddenUnlockVisible = false
+                    hiddenPassword.text = ""
+                    activeAlbum = "hidden"
+                    activeFolder = photosDir + "/.Hidden"
+                    showGrid = true
+                    headerText.text = "隐藏"
+                    return
+                }
+                hiddenUnlockError = result.error || "本机密码不正确"
+                hiddenPassword.selectAll()
+                hiddenPassword.forceActiveFocus()
+            } catch (error) {
+                hiddenUnlockError = "解锁服务暂时不可用"
+            }
+        }
+        xhr.send(JSON.stringify({password: hiddenPassword.text}))
+    }
     
     // ─── Header ────────────────────────────────────
+    Rectangle {
+        anchors.fill: parent; z: 110
+        visible: hiddenUnlockVisible
+        color: Qt.rgba(0, 0, 0, 0.48)
+        Rectangle {
+            anchors.centerIn: parent; width: 430; height: 230; radius: 30
+            color: Qt.rgba(250/255, 254/255, 1, 0.98); border.width: 1; border.color: "#FFFFFF"
+            Column {
+                anchors.fill: parent; anchors.margins: 24; spacing: 14
+                Text { text: "隐藏相册已锁定"; color: "#17212A"; font.pixelSize: 19; font.weight: Font.DemiBold }
+                Text { text: "请输入本机密码后查看隐藏照片"; color: "#61707C"; font.pixelSize: 13 }
+                TextInput {
+                    id: hiddenPassword
+                    width: parent.width; height: 42
+                    echoMode: TextInput.Password; passwordCharacter: "●"
+                    color: "#17212A"; font.pixelSize: 16
+                    verticalAlignment: TextInput.AlignVCenter
+                    onAccepted: photosScreen.verifyHiddenUnlock()
+                }
+                Text { text: hiddenUnlockError; color: "#C62828"; font.pixelSize: 12 }
+                Row { spacing: 12; anchors.right: parent.right
+                    Text { text: "取消"; color: "#61707C"; font.pixelSize: 14; MouseArea { anchors.fill: parent; onClicked: hiddenUnlockVisible = false } }
+                    Text { text: "解锁"; color: "#00A9CC"; font.pixelSize: 14; MouseArea { anchors.fill: parent; onClicked: photosScreen.verifyHiddenUnlock() } }
+                }
+            }
+        }
+    }
+
     Rectangle {
         id: header
         anchors.top: parent.top

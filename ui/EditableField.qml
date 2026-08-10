@@ -15,6 +15,26 @@ TextField {
         {label: "全选", action: "selectAll"}
     ]
 
+    function pasteWithPriority() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", "http://127.0.0.1:8591/api/clipboard", true)
+        xhr.timeout = 700
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return
+            var phoneText = ""
+            try { phoneText = JSON.parse(xhr.responseText || "{}").text || "" } catch (error) {}
+            if (phoneText.length > 0) {
+                var pos = field.cursorPosition
+                field.text = field.text.substring(0, pos) + phoneText + field.text.substring(pos)
+                field.cursorPosition = pos + phoneText.length
+            } else {
+                field.paste()
+            }
+        }
+        xhr.send()
+    }
+
     Popup {
         id: popup
         modal: false
@@ -67,7 +87,7 @@ TextField {
                         anchors.fill: parent
                         hoverEnabled: true
                         onClicked: {
-                            if (modelData.action === "paste") field.paste()
+                            if (modelData.action === "paste") field.pasteWithPriority()
                             else if (modelData.action === "copy") { field.copy(); _toast("已复制 ✓") }
                             else if (modelData.action === "selectAll") field.selectAll()
                             popup.close()
