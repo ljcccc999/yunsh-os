@@ -18,6 +18,10 @@ Rectangle {
     property bool passwordRequired: false
     property bool unlockBusy: false
     property string unlockError: ""
+    // Do not open the large spatial keyboard just because the lock screen was
+    // entered. It is requested only after the user clicks the password field;
+    // this also prevents pointer movement from changing the lock surface.
+    property bool keyboardRequested: false
 
     signal wake()
     signal unlocked()
@@ -45,6 +49,7 @@ Rectangle {
                 if (xhr.status === 200 && result.success) {
                     unlockPassword.text = ""
                     unlockError = ""
+                    keyboardRequested = false
                     screensaver.unlocked()
                 } else {
                     unlockError = result.error || "本机密码不正确"
@@ -128,7 +133,7 @@ Rectangle {
         }
 
         Text {
-            text: "v3.0.5"
+            text: "v3.1.0"
             color: Qt.rgba(255/255, 255/255, 255/255, 0.3)
             font.pixelSize: 10
             anchors.verticalCenter: parent.verticalCenter
@@ -193,6 +198,8 @@ Rectangle {
                     clip: true
                     onActiveFocusChanged: {
                         if (activeFocus && screensaver.visible && screensaver.passwordRequired)
+                            screensaver.keyboardRequested = true
+                        if (activeFocus && screensaver.visible && screensaver.passwordRequired)
                             screensaver.requestVirtualKeyboard(unlockPassword)
                     }
                     onAccepted: screensaver.attemptUnlock()
@@ -228,10 +235,11 @@ Rectangle {
         visible = true
         if (passwordRequired) {
             unlockError = ""
-            Qt.callLater(function() {
-                unlockPassword.forceActiveFocus()
-                screensaver.requestVirtualKeyboard(unlockPassword)
-            })
+            keyboardRequested = false
+            // Leave focus available to a physical keyboard, but do not summon
+            // the floating keyboard until the password field is explicitly
+            // clicked.
+            Qt.callLater(function() { unlockPassword.focus = false })
         }
         // Quick fade in for reduced-motion compatibility (Apple: keep opacity/color changes)
         opacity = 1

@@ -44,7 +44,17 @@ FCITX_PROFILE
         chmod 0600 "$fcitx_home/.config/fcitx5/profile"
     fi
 done
-pgrep -x fcitx5 >/dev/null 2>&1 || fcitx5 -d --replace >/dev/null 2>&1 || true
+if ! pgrep -x fcitx5 >/dev/null 2>&1; then
+    # linuxfb has no compositor-owned session bus.  Start Fcitx inside its
+    # own persistent D-Bus session so fcitx5-remote and the Qt input-method
+    # plugin talk to the same instance after a reboot or a DRM fallback.
+    if command -v dbus-run-session >/dev/null 2>&1; then
+        dbus-run-session -- fcitx5 --replace >>"$UI_LOG" 2>&1 &
+    else
+        fcitx5 -d --replace >>"$UI_LOG" 2>&1 &
+    fi
+    sleep 0.4
+fi
 install -d -o yunsh -g yunsh \
     /home/yunsh/Pictures/Screenshots /home/yunsh/Downloads \
     /home/yunsh/.cache/yunsh-browser /home/yunsh/.local/share/yunsh-browser \
@@ -82,12 +92,20 @@ if ! command -v weston >/dev/null 2>&1; then
     exit 1
 fi
 DISPLAY_BACKEND="wayland"
+# A target device can persistently select the framebuffer path when its DRM
+# plane negotiation is unstable (for example, a monitor/firmware combination
+# that makes Weston abort as soon as the pointer moves).  This marker is local
+# device policy and does not touch activation or user data.
+FORCE_LINUXFB_FILE="/etc/yunsh/force-linuxfb"
 DRM_DEVICE=""
 if [ -d /dev/dri ]; then
     DRM_DEVICE="$(find /dev/dri -maxdepth 1 -type c -name 'card*' -print -quit 2>/dev/null || true)"
 fi
 
-if [ -n "$DRM_DEVICE" ]; then
+if [ -f "$FORCE_LINUXFB_FILE" ]; then
+    DISPLAY_BACKEND="linuxfb"
+    printf '%s Device policy selected Qt linuxfb fallback.\n' "$(date -Iseconds)" >>"$UI_LOG"
+elif [ -n "$DRM_DEVICE" ]; then
     # A compositor killed during startup can leave its socket behind. Do not
     # treat that dead endpoint as a valid session.
     if [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && ! pgrep -x weston >/dev/null 2>&1; then

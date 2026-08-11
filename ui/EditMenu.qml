@@ -84,7 +84,15 @@ Item {
         if (action === "paste") {
             target.paste()
         } else if (action === "copy") {
+            var textToCopy = target.selectedText || ""
             target.copy()
+            if (textToCopy.length > 0) {
+                var xhr = new XMLHttpRequest()
+                xhr.open("POST", "http://127.0.0.1:8591/api/clipboard", true)
+                xhr.setRequestHeader("Content-Type", "application/json")
+                xhr.timeout = 700
+                xhr.send(JSON.stringify({text: textToCopy}))
+            }
             showToast("已复制 ✓")
         } else if (action === "cut") {
             target.cut()

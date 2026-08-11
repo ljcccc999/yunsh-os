@@ -28,11 +28,20 @@ TextField {
                 var pos = field.cursorPosition
                 field.text = field.text.substring(0, pos) + phoneText + field.text.substring(pos)
                 field.cursorPosition = pos + phoneText.length
-            } else {
-                field.paste()
             }
         }
         xhr.send()
+    }
+
+    function copyWithFallback() {
+        var textToCopy = field.selectedText || ""
+        if (!textToCopy.length) return
+        field.copy()
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/clipboard", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 700
+        xhr.send(JSON.stringify({text: textToCopy}))
     }
 
     Popup {
@@ -88,7 +97,7 @@ TextField {
                         hoverEnabled: true
                         onClicked: {
                             if (modelData.action === "paste") field.pasteWithPriority()
-                            else if (modelData.action === "copy") { field.copy(); _toast("已复制 ✓") }
+                            else if (modelData.action === "copy") { field.copyWithFallback(); _toast("已复制 ✓") }
                             else if (modelData.action === "selectAll") field.selectAll()
                             popup.close()
                         }

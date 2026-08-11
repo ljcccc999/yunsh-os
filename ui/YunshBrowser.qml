@@ -35,12 +35,14 @@ Item {
     }
 
     function newTab(address) {
-        var target = address && String(address).length ? String(address) : "about:blank"
+        // New tabs are an editable start surface, not a literal about:blank
+        // page.  Keeping the address empty also prevents the WebEngine page
+        // from stealing focus from the URL field.
+        var target = address && String(address).length ? String(address) : ""
         browserTabs.append({title: "新标签页", address: target})
         activeTabIndex = browserTabs.count - 1
-        webView.url = target
-        if (target === "about:blank")
-            Qt.callLater(function() { urlInput.text = ""; urlInput.forceActiveFocus() })
+        webView.url = target.length ? target : "about:blank"
+        Qt.callLater(function() { urlInput.text = ""; urlInput.forceActiveFocus() })
     }
 
     function switchTab(index) {
@@ -96,7 +98,11 @@ Item {
             "(function(){var e=document.activeElement;if(!e)return null;var t=(e.tagName||'').toLowerCase();if(t!=='input'&&t!=='textarea'&&!e.isContentEditable)return null;return {v:('value' in e?e.value:e.textContent)||'',p:('selectionStart' in e?e.selectionStart:(e.textContent||'').length)};})()",
             function(value) {
                 if (!value) {
-                    webInputProxy.focus = false
+                    // Clicking the floating keyboard temporarily removes the
+                    // WebEngine activeElement. Do not close the keyboard on
+                    // that transient gap; only explicit browser navigation or
+                    // a real focus change should dismiss it.
+                    if (webInputProxy.focus) return
                     browserScreen.dismissVirtualKeyboard()
                     return
                 }
@@ -234,7 +240,11 @@ Item {
                     }
                     MouseArea {
                         anchors.fill: parent
-                        onClicked: { if (webView.canGoBack) webView.goBack() }
+                        onClicked: {
+                            webInputProxy.focus = false
+                            browserScreen.dismissVirtualKeyboard()
+                            if (webView.canGoBack) webView.goBack()
+                        }
                     }
                 }
 
@@ -248,7 +258,11 @@ Item {
                     }
                     MouseArea {
                         anchors.fill: parent
-                        onClicked: { if (webView.canGoForward) webView.goForward() }
+                        onClicked: {
+                            webInputProxy.focus = false
+                            browserScreen.dismissVirtualKeyboard()
+                            if (webView.canGoForward) webView.goForward()
+                        }
                     }
                 }
 
@@ -263,6 +277,8 @@ Item {
                     MouseArea {
                         anchors.fill: parent
                         onClicked: {
+                            webInputProxy.focus = false
+                            browserScreen.dismissVirtualKeyboard()
                             if (isLoading) webView.stop()
                             else webView.reload()
                         }
@@ -306,6 +322,8 @@ Item {
                             webView.url = text
                             urlInput.text = text
                             Qt.inputMethod.hide()
+                            browserScreen.dismissVirtualKeyboard()
+                            webInputProxy.focus = false
                         }
                     }
                 }
@@ -537,9 +555,9 @@ Item {
                 }
                 MouseArea {
                     anchors.fill: parent
-                    onClicked: {
-                        urlInput.selectAll()
-                        urlInput.copy()
+                        onClicked: {
+                            urlInput.selectAll()
+                            urlInput.copyWithFallback()
                         var p = browserScreen.parent
                         while (p) { if (p.showToast) { p.showToast("已复制 ✓"); break }; p = p.parent }
                     }
@@ -593,8 +611,8 @@ Item {
 
             Repeater {
                 model: [
-                    {icon: "📋", label: "复制链接", action: function(){ urlInput.selectAll(); urlInput.copy(); browserMenu.close() }},
-                    {icon: "🔗", label: "分享页面", action: function(){ urlInput.selectAll(); urlInput.copy(); browserMenu.close() }},
+                    {icon: "📋", label: "复制链接", action: function(){ urlInput.selectAll(); urlInput.copyWithFallback(); browserMenu.close() }},
+                    {icon: "🔗", label: "分享页面", action: function(){ urlInput.selectAll(); urlInput.copyWithFallback(); browserMenu.close() }},
                     {icon: "🔄", label: "刷新", action: function(){ webView.reload(); browserMenu.close() }},
                 ]
 
@@ -619,11 +637,7 @@ Item {
     }
 
     // ─── Show on visible ─────────────────────
-    onVisibleChanged: {
-        if (visible && webView.url.toString() === "about:blank") {
-            webView.url = currentUrl
-        }
-    }
+    onVisibleChanged: {}
 
     // Keyboard shortcut to focus URL bar
     Shortcut {

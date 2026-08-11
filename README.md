@@ -21,7 +21,7 @@ system world, an optical-display-ready desktop, the system-level Orbit agent,
 connected-device services, and Bluetooth-connected motion tracking in one
 portable Raspberry Pi 5 environment.
 
-The current local release line is **v3.0.5**, with a circular liquid-glass
+The current local release line is **v3.1.0**, with a circular liquid-glass
 Orbit identity, direct in-island tool approvals, voice speaking-wave feedback,
 interruptible window transitions, a movable Orbit and spatial keyboard, and a
 desktop icon shelf that recedes when an application window opens, all within a
@@ -284,7 +284,7 @@ showing that same frame on both displays.
 ## Project status
 
 YUNSH OS is an active prototype for YUNSH spatial computing hardware. The
-v3.0.5 release line is validated through static QML, Python, shell, image
+v3.1.0 release line is validated through static QML, Python, shell, image
 structure, partition, boot configuration,
 ext4, embedded-file, and systemd-link checks. The current local
 rebuild also carries a read-only confirmed Raspberry Pi 5 firmware/kernel

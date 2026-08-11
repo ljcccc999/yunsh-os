@@ -64,6 +64,9 @@ LINK_PAIRING_PATH = os.environ.get(
 INPUT_METHOD_PATH = os.environ.get(
     "YUNSH_INPUT_METHOD_PATH", "/run/yunsh/input-method.json"
 )
+LOCAL_CLIPBOARD_PATH = os.environ.get(
+    "YUNSH_LOCAL_CLIPBOARD_PATH", "/run/yunsh/local-clipboard.json"
+)
 CAPSULE_ALLOWED_APPS = {
     "settings",
     "browser",
@@ -217,6 +220,39 @@ def set_input_method(payload):
         return {"success": False, "error": str(exc)}
     _write_input_method(mode)
     return input_method_status()
+
+
+def _clipboard_text():
+    """Return the phone Flow clipboard first, then this device's last copy."""
+    flow = read_json("/run/yunsh/flow-clipboard.json", {})
+    flow_text = str(flow.get("text", ""))[:20000]
+    if flow_text:
+        return flow_text
+    local = read_json(LOCAL_CLIPBOARD_PATH, {})
+    return str(local.get("text", ""))[:20000]
+
+
+def save_local_clipboard(payload):
+    text = str(payload.get("text", ""))
+    if len(text) > 20000 or "\x00" in text:
+        return {"success": False, "error": "Clipboard text is invalid"}
+    os.makedirs(os.path.dirname(LOCAL_CLIPBOARD_PATH), exist_ok=True)
+    fd, temporary = tempfile.mkstemp(
+        prefix="local-clipboard.", dir=os.path.dirname(LOCAL_CLIPBOARD_PATH)
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump({"text": text, "updatedAt": time.time()}, handle, ensure_ascii=False)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, LOCAL_CLIPBOARD_PATH)
+    finally:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+    return {"success": True, "text": text}
 
 
 def inject_input_key(payload):
@@ -1156,8 +1192,7 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/api/ui-command":
             self._send(get_ui_command())
         elif self.path == "/api/clipboard":
-            clipboard = read_json("/run/yunsh/flow-clipboard.json", {})
-            self._send({"success": True, "text": str(clipboard.get("text", ""))[:20000]})
+            self._send({"success": True, "text": _clipboard_text()})
         elif self.path == "/api/input-method":
             self._send(input_method_status())
         elif self.path == "/api/screen-relay-status":
@@ -1222,6 +1257,8 @@ class Handler(BaseHTTPRequestHandler):
             result = set_lock_state(payload)
         elif self.path == "/api/input-method":
             result = set_input_method(payload)
+        elif self.path == "/api/clipboard":
+            result = save_local_clipboard(payload)
         elif self.path == "/api/input-key":
             result = inject_input_key(payload)
         elif self.path == "/api/verify-boot-password":

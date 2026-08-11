@@ -40,6 +40,9 @@ FLOW_DIR = os.environ.get(
 FLOW_CLIPBOARD_PATH = os.environ.get(
     "YUNSH_FLOW_CLIPBOARD_PATH", "/run/yunsh/flow-clipboard.json"
 )
+LOCAL_CLIPBOARD_PATH = os.environ.get(
+    "YUNSH_LOCAL_CLIPBOARD_PATH", "/run/yunsh/local-clipboard.json"
+)
 ALLOWED_APPS = {
     "settings", "browser", "terminal", "photos", "appstore",
     "files", "update", "about", "network", "bluetooth", "display",
@@ -283,7 +286,10 @@ def clipboard_text():
                 return result.stdout[:20000]
         except (OSError, subprocess.TimeoutExpired):
             pass
-    return str(read_record_path(FLOW_CLIPBOARD_PATH).get("text", ""))[:20000]
+    flow_text = str(read_record_path(FLOW_CLIPBOARD_PATH).get("text", ""))[:20000]
+    if flow_text:
+        return flow_text
+    return str(read_record_path(LOCAL_CLIPBOARD_PATH).get("text", ""))[:20000]
 
 
 def set_clipboard_text(payload):

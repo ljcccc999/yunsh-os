@@ -30,11 +30,20 @@ TextInput {
                 var pos = input.cursorPosition
                 input.text = input.text.substring(0, pos) + phoneText + input.text.substring(pos)
                 input.cursorPosition = pos + phoneText.length
-            } else {
-                input.paste()
             }
         }
         xhr.send()
+    }
+
+    function copyWithFallback() {
+        var textToCopy = input.selectedText || ""
+        if (!textToCopy.length) return
+        input.copy()
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/clipboard", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 700
+        xhr.send(JSON.stringify({text: textToCopy}))
     }
 
     Text {
@@ -101,7 +110,7 @@ TextInput {
                         hoverEnabled: true
                         onClicked: {
                             if (modelData.action === "paste") input.pasteWithPriority()
-                            else if (modelData.action === "copy") { input.copy(); _toast("已复制 ✓") }
+                            else if (modelData.action === "copy") { input.copyWithFallback(); _toast("已复制 ✓") }
                             else if (modelData.action === "selectAll") input.selectAll()
                             popup.close()
                         }

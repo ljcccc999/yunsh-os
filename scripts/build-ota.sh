@@ -25,6 +25,11 @@ cp "${YUNSH_DIR}"/ui/icons/* "${STAGING}/payload/usr/share/yunsh/icons/"
 cp "${YUNSH_DIR}"/logo/*.png "${STAGING}/payload/usr/share/yunsh/logo/"
 printf 'VERSION=%s\nBUILD=%s\n' "${VERSION}" "${BUILD_ID}" \
     > "${STAGING}/payload/etc/yunsh/version.conf"
+# The Pi 5 display profile currently uses the software framebuffer path while
+# the DRM plane negotiation is being revalidated; keep full-image and OTA
+# installs on the same stable backend.
+printf '%s\n' 'Pi 5 display profile: Qt linuxfb fallback.' \
+    > "${STAGING}/payload/etc/yunsh/force-linuxfb"
 # Keep the first upgrade from v3.0.4 compatible with its older allow-list.
 # The new update daemon migrates the preserved config after that reboot.
 

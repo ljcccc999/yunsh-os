@@ -30,6 +30,7 @@ ALLOWED_PREFIXES = (
     "etc/systemd/system/",
     "etc/yunsh/version.conf",
     "etc/yunsh/update.conf",
+    "etc/yunsh/force-linuxfb",
 )
 
 logger = logging.getLogger("yunsh-updater")

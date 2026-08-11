@@ -1,4 +1,4 @@
-// YUNSH OS v3.0.5 - Main QML Entry Point
+// YUNSH OS v3.1.0 - Main QML Entry Point
 // Apple-style glass system + Task Switcher + Home Indicator
 
 import QtQuick 2.15
@@ -164,10 +164,13 @@ ApplicationWindow {
             var editor = yunshOS.activeFocusItem
             if (screensaver_item.visible) {
                 if (screensaver_item.passwordRequired
+                        && screensaver_item.keyboardRequested
                         && yunshOS.isNativeEditableItem(editor)
                         && (!virtualKeyboard.visible
                             || virtualKeyboard.targetItem !== editor))
                     virtualKeyboard.showFor(editor)
+                else if (!screensaver_item.keyboardRequested && virtualKeyboard.visible)
+                    virtualKeyboard.hide()
                 return
             }
             if (yunshOS.isNativeEditableItem(editor)
@@ -2018,8 +2021,13 @@ ApplicationWindow {
         anchors.fill: parent
         acceptedButtons: Qt.NoButton
         propagateComposedEvents: true
-        hoverEnabled: true
+        // A locked password surface must not receive hover/position events.
+        // On the Pi DRM path those events can enter the compositor's unstable
+        // pointer plane; the lock screen does not need hover feedback.
+        hoverEnabled: !screensaver_item.visible || !screensaver_item.passwordRequired
         onPositionChanged: {
+            if (screensaver_item.visible && screensaver_item.passwordRequired)
+                return
             idleTimer.restart()
             if (screensaver_item.visible) {
                 if (!screensaver_item.passwordRequired)
@@ -2030,7 +2038,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        console.log("YUNSH OS UI v3.0.5")
+        console.log("YUNSH OS UI v3.1.0")
         checkFirstBoot()
         showFullScreen()
         applyWindowPreferences()

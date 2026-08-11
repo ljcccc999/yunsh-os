@@ -8,7 +8,7 @@ BUILD_DIR="${YUNSH_DIR}/build"
 OUTPUT_DIR="${YUNSH_DIR}/output"
 VERSION_CONF="${BUILD_DIR}/yunsh-version.conf"
 if [ ! -f "${VERSION_CONF}" ]; then
-    printf 'VERSION=v3.0.5\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
+    printf 'VERSION=v3.1.0\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
 fi
 VERSION="$(awk -F= '$1 == "VERSION" { print $2; exit }' "${VERSION_CONF}")"
 BUILD_ID="${YUNSH_BUILD_ID:-$(date +%Y.%m.%d)}"
@@ -474,6 +474,14 @@ wifi_only=true
 update_channel=stable
 UC
 add_file "${BUILD_DIR}/yunsh-update.conf" "/etc/yunsh/update.conf"
+
+# The confirmed Pi 5 + current HDMI display combination triggers a Weston DRM
+# plane assertion when the pointer moves.  Keep the release image on the
+# tested Qt linuxfb path; a future display-specific image can remove this
+# device-policy marker after a real Wayland/DRM regression test.
+printf 'Pi 5 DRM plane fallback: use Qt linuxfb until display profile is revalidated.\n' \
+    > "${BUILD_DIR}/yunsh-force-linuxfb"
+add_file "${BUILD_DIR}/yunsh-force-linuxfb" "/etc/yunsh/force-linuxfb"
 
 add_file "${IMAGE_VERSION_CONF}" "/etc/yunsh/version.conf"
 

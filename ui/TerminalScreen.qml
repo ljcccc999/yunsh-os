@@ -17,6 +17,15 @@ Rectangle {
     property string terminalHost: "http://127.0.0.1:8593"
     property bool terminalReady: false
 
+    function saveClipboard(text) {
+        if (!text || text.length === 0) return
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/clipboard", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 700
+        xhr.send(JSON.stringify({text: text}))
+    }
+
     signal backToHome()
 
     // ─── Context Popup (reusable) ────────────────
@@ -74,6 +83,7 @@ Rectangle {
                         onClicked: {
                             if (modelData.action === "copy") {
                                 outputText.copy()
+                                terminalScreen.saveClipboard(outputText.selectedText)
                                 showToast("已复制 ✓")
                             } else if (modelData.action === "selectAll") {
                                 outputText.selectAll()
@@ -144,9 +154,10 @@ Rectangle {
                         hoverEnabled: true
                         onClicked: {
                             if (modelData.action === "paste") {
-                                inputField.paste()
+                                inputField.pasteWithPriority()
                             } else if (modelData.action === "copy") {
                                 inputField.copy()
+                                terminalScreen.saveClipboard(inputField.selectedText)
                                 showToast("已复制 ✓")
                             } else if (modelData.action === "selectAll") {
                                 inputField.selectAll()
@@ -535,6 +546,7 @@ Rectangle {
         onActivated: {
             if (outputText.selectedText.length > 0) {
                 outputText.copy()
+                terminalScreen.saveClipboard(outputText.selectedText)
                 showToast("已复制 ✓")
             }
         }

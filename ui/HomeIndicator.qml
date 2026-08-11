@@ -1,4 +1,4 @@
-// YUNSH OS v3.0.5 - Home Indicator
+// YUNSH OS v3.1.0 - Home Indicator
 // Bottom screen pill for mouse gesture: swipe up → Task Switcher
 // Like iPhone home bar, but for mouse
 
