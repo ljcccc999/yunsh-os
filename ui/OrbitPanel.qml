@@ -742,6 +742,7 @@ Item {
                             anchors.rightMargin: 8
                             placeholderText: "让 Orbit 为你完成任务"
                             color: "#111820"
+                            selectByMouse: true
                             enabled: !busy && !pendingApprovalId.length
                             onAccepted: sendMessage()
                         }

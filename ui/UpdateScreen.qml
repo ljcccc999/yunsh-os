@@ -15,9 +15,10 @@ Item {
 
     /* ---- Signals ---- */
     signal backToHome()
+    signal openHistory()
 
     /* ---- State ---- */
-    property string currentVersion: "3.1.1"
+    property string currentVersion: "3.1.2"
     property string latestVersion: ""
     property bool updateAvailable: false
     property bool isChecking: false
@@ -41,7 +42,7 @@ Item {
             if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
                 try {
                     var data = JSON.parse(xhr.responseText);
-                    currentVersion = data.currentVersion || "3.1.1";
+                    currentVersion = data.currentVersion || "3.1.2";
                     latestVersion = data.latestVersion || "";
                     updateAvailable = data.updateAvailable || false;
                     autoUpdate = data.autoUpdate || false;
@@ -53,7 +54,8 @@ Item {
                     updateError = data.error || "";
                     rebootRequired = data.rebootRequired || false;
                     isChecking = data.state === "checking";
-                    isDownloading = data.state === "downloading" || data.state === "installing";
+                    isDownloading = data.state === "downloading" || data.state === "installing"
+                            || data.state === "rebooting" || data.state === "restart_required";
                 } catch(e) {
                     console.warn("UpdateScreen: failed to parse status:", e);
                 }
@@ -197,7 +199,7 @@ Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 52
                 radius: 26
-                enabled: !isChecking && !isDownloading
+                enabled: !isChecking && !isDownloading && !rebootRequired
 
                 bgColor: isChecking
                          ? Qt.rgba(0.3, 0.3, 0.35, 0.4)
@@ -281,7 +283,7 @@ Item {
             Text {
                 Layout.alignment: Qt.AlignHCenter
                 visible: rebootRequired
-                text: "更新已安装，请重新启动 YUNSH OS"
+                text: isDownloading ? "更新已安装，正在重启 YUNSH OS…" : "更新已安装，请重新启动 YUNSH OS"
                 color: "#30D158"
                 font.pixelSize: 15
             }
@@ -294,8 +296,8 @@ Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 52
                 radius: 26
-                visible: updateAvailable && !isDownloading
-                enabled: !isDownloading
+                visible: updateAvailable && !isDownloading && !rebootRequired
+                enabled: !isDownloading && !rebootRequired
 
                 bgColor: Qt.rgba(0.345, 0.886, 0.51, 0.35)
                 hoverBgColor: Qt.rgba(0.345, 0.886, 0.51, 0.5)
@@ -813,8 +815,7 @@ Item {
                 }
 
                 onClicked: {
-                    // Navigate to update history screen
-                    // Signal to parent to switch view
+                    root.openHistory()
                 }
             }
         }

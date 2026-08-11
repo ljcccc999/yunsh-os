@@ -1157,12 +1157,13 @@ def update_response(action, payload):
         "updateAvailable": result.get("update_available", False),
         "autoUpdate": result.get("auto_update", True),
         "wifiOnly": result.get("wifi_only", True),
-        "lastCheckTime": result.get("last_check_ts", ""),
+        "lastCheckTime": result.get("last_check_iso") or result.get("last_check_ts", ""),
         "changelog": result.get("changelog", ""),
         "state": result.get("state", "idle"),
         "progress": result.get("progress_pct", 0),
         "error": result.get("error"),
         "rebootRequired": result.get("reboot_required", False),
+        "history": result.get("history", []),
     }
 
 

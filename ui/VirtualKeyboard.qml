@@ -31,6 +31,7 @@ Item {
     // through Fcitx5 so Chinese candidates work in every focused field.
     property string inputMethod: "latin"
     readonly property string inputMethodLabel: inputMethod === "pinyin" ? "中" : "ABC"
+    property string pinyinBuffer: ""
     property bool reduceMotion: false
     property bool tilted: true
     property string pinMode: "following" // following, pinned
@@ -162,6 +163,7 @@ Item {
     onVisibleChanged: {
         if (!visible) {
             endBackspace()
+            pinyinBuffer = ""
             targetItem = null
         } else refreshInputMethod()
     }
@@ -413,6 +415,16 @@ Item {
         }
 
         // ─── Keyboard rows ─────────────────────
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: 46
+            visible: keyboardPanel.inputMethod === "pinyin" && keyboardPanel.pinyinBuffer.length > 0
+            text: keyboardPanel.pinyinBuffer
+            color: "#17212A"
+            font.pixelSize: 20
+            font.weight: Font.Medium
+            z: 5
+        }
         Column {
             anchors.centerIn: parent
             anchors.verticalCenterOffset: 22
@@ -689,9 +701,10 @@ Item {
 
     // ─── Key event handlers ─────────────────────
     onKeyPressed: {
-        if (inputMethod === "pinyin" && key.length <= 1 && key.charCodeAt(0) < 128)
+        if (inputMethod === "pinyin" && key.length <= 1 && key.charCodeAt(0) < 128) {
+            pinyinBuffer += key.toLowerCase()
             injectKey(key)
-        else if (targetItem) {
+        } else if (targetItem) {
             var pos = targetItem.cursorPosition
             targetItem.text = targetItem.text.substring(0, pos) + key + targetItem.text.substring(pos)
             targetItem.cursorPosition = pos + 1
@@ -699,6 +712,8 @@ Item {
     }
     onBackspacePressed: {
         if (inputMethod === "pinyin") {
+            if (pinyinBuffer.length > 0)
+                pinyinBuffer = pinyinBuffer.substring(0, pinyinBuffer.length - 1)
             injectKey("backspace")
         } else if (targetItem && targetItem.cursorPosition > 0) {
             var pos = targetItem.cursorPosition
@@ -708,6 +723,7 @@ Item {
     }
     onSpacePressed: {
         if (inputMethod === "pinyin") {
+            pinyinBuffer = ""
             injectKey(" ")
         } else if (targetItem) {
             var pos = targetItem.cursorPosition
@@ -717,6 +733,7 @@ Item {
     }
     onEnterPressed: {
         if (inputMethod === "pinyin") {
+            pinyinBuffer = ""
             injectKey("\n")
         } else if (targetItem && typeof targetItem.submit === "function")
             targetItem.submit()

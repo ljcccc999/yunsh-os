@@ -1,9 +1,12 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 
-Item {
+Rectangle {
     id: relay
     anchors.fill: parent
+    radius: 26
+    clip: true
+    color: "transparent"
     property bool live: false
     property real lastFrame: 0
     signal backToHome()

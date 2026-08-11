@@ -7,7 +7,9 @@ cd /usr/share/yunsh/ui || exit 1
 export QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-wayland}"
 export QT_QUICK_CONTROLS_STYLE="${QT_QUICK_CONTROLS_STYLE:-Basic}"
 export QTWEBENGINE_DISABLE_SANDBOX=1
-export QTWEBENGINE_CHROMIUM_FLAGS="${QTWEBENGINE_CHROMIUM_FLAGS:---no-sandbox --disable-dev-shm-usage}"
+# Keep WebGL available to browser pages.  The Pi 5 KMS path is the normal
+# renderer; Chromium's blocklist is ignored only for this trusted local shell.
+export QTWEBENGINE_CHROMIUM_FLAGS="${QTWEBENGINE_CHROMIUM_FLAGS:---no-sandbox --disable-dev-shm-usage --enable-gpu --enable-webgl --ignore-gpu-blocklist}"
 export QML_XHR_ALLOW_FILE_READ=1
 export QT_IM_MODULE="${QT_IM_MODULE:-fcitx}"
 export GTK_IM_MODULE="${GTK_IM_MODULE:-fcitx}"
@@ -184,6 +186,26 @@ else
     printf '%s Using primary Wayland DRM compositor with Weston pixman renderer.\n' \
         "$(date -Iseconds)" >>"$UI_LOG"
 fi
+
+# Fcitx must start after Weston has created the Wayland socket.  The previous
+# early-start instance could load the pinyin addon but had no focused frontend,
+# so letters appeared to do nothing.  Keep its private session-bus address and
+# export it to the QML process so virtual-keyboard key events reach the same
+# input-method instance.
+pkill -x fcitx5 >/dev/null 2>&1 || true
+install -d -m 0755 /run/yunsh
+rm -f /run/yunsh/fcitx-env
+if command -v dbus-run-session >/dev/null 2>&1; then
+    dbus-run-session -- sh -c 'printf "DBUS_SESSION_BUS_ADDRESS=%s\\n" "$DBUS_SESSION_BUS_ADDRESS" > /run/yunsh/fcitx-env; exec fcitx5 --replace' >>"$UI_LOG" 2>&1 &
+    for _ in $(seq 1 30); do
+        [ -s /run/yunsh/fcitx-env ] && break
+        sleep 0.1
+    done
+    [ -s /run/yunsh/fcitx-env ] && . /run/yunsh/fcitx-env
+else
+    fcitx5 -d --replace >>"$UI_LOG" 2>&1 &
+fi
+fcitx5-remote -s keyboard-us >/dev/null 2>&1 || true
 
 # Do not leave a connected display on a featureless black surface when the
 # shell has a QML error.  A minimal, independent QML screen makes the failure

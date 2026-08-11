@@ -29,6 +29,22 @@ Item {
     property double keyboardSuppressedUntil: 0
     property int activeTabIndex: 0
 
+    ListModel { id: downloadHistory }
+
+    function openDownloadsFolder() {
+        Qt.openUrlExternally("file:///home/yunsh/Downloads")
+    }
+
+    function removeDownload(index) {
+        if (index < 0 || index >= downloadHistory.count) return
+        var path = downloadHistory.get(index).path
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8590/launch", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.send(JSON.stringify({action: "delete_download", path: path}))
+        downloadHistory.remove(index)
+    }
+
     ListModel {
         id: browserTabs
         ListElement { title: "新标签页"; address: "https://www.bing.com" }
@@ -179,6 +195,12 @@ Item {
             if (download.state === WebEngineDownloadRequest.DownloadCompleted) {
                 var path = download.downloadDirectory + "/" + download.downloadFileName
                 browserScreen.downloadStatus = "已保存到 Downloads"
+                downloadHistory.insert(0, {
+                    name: download.downloadFileName,
+                    path: path,
+                    time: Qt.formatTime(new Date(), "HH:mm")
+                })
+                while (downloadHistory.count > 10) downloadHistory.remove(10)
                 if (download.downloadFileName.toLowerCase().endsWith(".apk"))
                     browserScreen.downloadedApkPath = path
             } else {
@@ -225,6 +247,7 @@ Item {
             anchors.right: parent.right; anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
             height: 36; radius: 18
+            clip: true
             color: Qt.rgba(255/255, 255/255, 255/255, 0.62)
             border.color: Qt.rgba(255/255, 255/255, 255/255, 0.88); border.width: 1
 
@@ -297,6 +320,7 @@ Item {
                         anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 4
                         anchors.verticalCenter: parent.verticalCenter
                         color: "#17212A"; font.pixelSize: 12
+                        clip: true
                         verticalAlignment: TextInput.AlignVCenter
                         text: webView.url.toString() === "about:blank" ? "" : webView.url.toString()
                         placeholderText: "搜索或输入网址..."
@@ -391,6 +415,8 @@ Item {
         anchors.bottom: bottomBar.top
         url: currentUrl
         profile: browserProfile
+        settings.webGLEnabled: true
+        settings.accelerated2dCanvasEnabled: true
 
         onNavigationRequested: function(request) {
             if (request.navigationType !== WebEngineNavigationRequest.LinkClickedNavigation)
@@ -613,6 +639,7 @@ Item {
                 model: [
                     {icon: "📋", label: "复制链接", action: function(){ urlInput.selectAll(); urlInput.copyWithFallback(); browserMenu.close() }},
                     {icon: "🔗", label: "分享页面", action: function(){ urlInput.selectAll(); urlInput.copyWithFallback(); browserMenu.close() }},
+                    {icon: "⬇", label: "最近下载", action: function(){ browserMenu.close(); downloadsPopup.open() }},
                     {icon: "🔄", label: "刷新", action: function(){ webView.reload(); browserMenu.close() }},
                 ]
 
@@ -632,6 +659,52 @@ Item {
                         onClicked: { modelData.action(); browserMenu.close() }
                     }
                 }
+            }
+        }
+    }
+
+    Popup {
+        id: downloadsPopup
+        modal: true
+        closePolicy: Popup.CloseOnPressOutside
+        x: parent.width - width - 16
+        y: topBar.height + 4
+        width: 300
+        padding: 10
+        background: Rectangle {
+            color: Qt.rgba(248/255, 252/255, 255/255, 0.96)
+            radius: 14
+            border.color: Qt.rgba(0/255, 212/255, 255/255, 0.16)
+        }
+        Column {
+            width: parent.width
+            spacing: 6
+            Text { text: "最近下载"; color: "#17212A"; font.pixelSize: 15; font.bold: true }
+            Repeater {
+                model: downloadHistory
+                delegate: Rectangle {
+                    width: 280; height: 38; radius: 9
+                    color: Qt.rgba(1, 1, 1, 0.42)
+                    Row {
+                        anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 8
+                        spacing: 8
+                        Text { width: 185; anchors.verticalCenter: parent.verticalCenter; text: model.name; elide: Text.ElideMiddle; color: "#17212A"; font.pixelSize: 12 }
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: "×"; color: "#FF453A"; font.pixelSize: 18; z: 2
+                            MouseArea { anchors.fill: parent; anchors.margins: -8; z: 2; onClicked: browserScreen.removeDownload(index) } }
+                    }
+                    MouseArea { anchors.fill: parent; z: 0; onClicked: browserScreen.openDownloadsFolder() }
+                }
+            }
+            Text {
+                visible: downloadHistory.count === 0
+                text: "暂无最近下载"
+                color: Qt.rgba(23/255, 33/255, 42/255, 0.52)
+                font.pixelSize: 13
+            }
+            GlassButton {
+                width: 280; height: 34; radius: 17
+                onClicked: browserScreen.openDownloadsFolder()
+                Text { anchors.centerIn: parent; text: "打开下载文件夹"; color: "#00D4FF"; font.pixelSize: 12 }
             }
         }
     }

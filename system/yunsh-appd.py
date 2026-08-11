@@ -70,6 +70,8 @@ class AppHandler(BaseHTTPRequestHandler):
             result = self.android_retry()
         elif action == "install_apk":
             result = self.install_apk(req.get("path", ""))
+        elif action == "delete_download":
+            result = self.delete_download(req.get("path", ""))
         elif action == "android_apps":
             result = self.android_apps()
         elif action == "system_settings":
@@ -329,6 +331,18 @@ class AppHandler(BaseHTTPRequestHandler):
         except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
             return {"status": "error", "message": str(exc)}
 
+    def delete_download(self, requested_path):
+        """Delete one browser download, restricted to the Downloads folder."""
+        try:
+            path = os.path.realpath(str(requested_path))
+            if (os.path.commonpath((DOWNLOAD_DIR, path)) != DOWNLOAD_DIR
+                    or path == DOWNLOAD_DIR or not os.path.isfile(path)):
+                return {"status": "error", "message": "Invalid download path"}
+            os.remove(path)
+            return {"status": "ok"}
+        except OSError as exc:
+            return {"status": "error", "message": str(exc)}
+
     def android_apps(self):
         try:
             result = subprocess.run(
@@ -361,7 +375,7 @@ class AppHandler(BaseHTTPRequestHandler):
                 pass
             return values
 
-        version = read_values("/etc/yunsh/version.conf").get("VERSION", "v3.1.1")
+        version = read_values("/etc/yunsh/version.conf").get("VERSION", "v3.1.2")
         language = read_values("/etc/yunsh/language.conf")
         return {
             "status": "ok",
@@ -421,7 +435,7 @@ class AppHandler(BaseHTTPRequestHandler):
         model = read_text("/proc/device-tree/model").replace("\x00", "").strip()
         return {
             "status": "ok",
-            "version": version.get("VERSION", "v3.1.1"),
+            "version": version.get("VERSION", "v3.1.2"),
             "build": version.get("BUILD", ""),
             "model": model or "Raspberry Pi",
             "cpu": f"{cpu_name or 'ARM processor'} × {os.cpu_count() or 1}",

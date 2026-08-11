@@ -20,6 +20,12 @@ Item {
     /* ---- Data model ---- */
     property var updateHistory: [
         {
+            version: "3.1.2",
+            date: "2026-08-11",
+            changelog: "启动、OTA、输入与浏览器体验修复。\n• OTA 手动检查与闲置/夜间自动更新分离，防止重复下载和重复重启\n• 移除 Raspberry Pi Logo/tty1 启动代码，保留串口和 journal 诊断\n• App 后台卡片、窗口边缘拖动、投屏圆角和空白处返回修复\n• 中文拼音组合显示、长按/右键液态玻璃复制粘贴菜单\n• 浏览器 WebGL、最近下载、地址栏横向滚动和下载管理",
+            build: "build 2026.0811"
+        },
+        {
             version: "3.1.1",
             date: "2026-08-10",
             changelog: "首次安装、网络与空间输入可靠性更新。\n• 首次安装显示真实下载 MB，并区分下载、解包与配置\n• NetworkManager 自动接管、检测和恢复网络\n• 自动识别 Ethernet，并自动搜索附近 Wi-Fi\n• 设置无线区域，修复正确密码仍无法连接\n• 虚拟键盘稳定唤起，补全杠类符号与长按退格\n• 窗口打开时点击桌面临时显示 App 图标 30 秒",

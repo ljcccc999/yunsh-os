@@ -257,8 +257,10 @@ ApplicationWindow {
         if (activeAppId === appId)
             activeAppId = ""
         updateWindowFocus()
-        if (openApps.length === 0)
+        if (openApps.length === 0) {
+            taskSwitcher.hide()
             homeScreen.visible = true
+        }
         resolveAppIconVisibility()
     }
 
@@ -724,6 +726,7 @@ ApplicationWindow {
             onMinimizeClicked: yunshOS.minimizeWindow(updateWindow, "update")
             UpdateScreen { anchors.fill: parent
                 onBackToHome: switchToHome()
+                onOpenHistory: switchTo(updateHistoryWindow, "updatehistory")
             }
         }
 
@@ -1308,6 +1311,12 @@ ApplicationWindow {
 
     function showTaskSwitcher() {
         syncOpenAppsFromWindows()
+        if (yunshOS.openApps.length === 0) {
+            taskSwitcher.hide()
+            homeScreen.visible = true
+            resolveAppIconVisibility()
+            return
+        }
         // The home surface remains the background behind the switcher; this
         // also keeps the bottom hit zone alive after minimizing the last
         // visible window.

@@ -750,10 +750,14 @@ Rectangle {
     function settleIntoBounds() {
         if (!parent || state === "fullscreen")
             return
+        // Keep a usable title-bar handle visible on every edge.  A window may
+        // be parked mostly off-screen, but never so far that it cannot be
+        // recovered by dragging it back (macOS/iPadOS-style behaviour).
         var safeMargin = 28
-        var targetX = Math.max(safeMargin - width * 0.75,
-                               Math.min(x, parent.width - safeMargin - width * 0.25))
-        var targetY = Math.max(18, Math.min(y, parent.height - height - safeMargin))
+        var titleBarReach = 140
+        var targetX = Math.max(safeMargin - width + titleBarReach,
+                               Math.min(x, parent.width - safeMargin - titleBarReach))
+        var targetY = Math.max(18, Math.min(y, parent.height - 56))
         if (reduceMotion) {
             x = targetX
             y = targetY

@@ -123,31 +123,36 @@ TextInput {
     MouseArea {
         id: tapArea
         anchors.fill: parent
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
         propagateComposedEvents: true
 
-        onPressAndHold: {
+        function showEditMenu(x) {
             var items = []
-            // Match desktop text editing: a long press on existing text makes
-            // it immediately copyable even when no selection existed yet.
             if ((!input.selectedText || input.selectedText.length === 0)
                     && input.text.length > 0)
                 input.selectAll()
-            if (!input.readOnly) {
+            if (!input.readOnly)
                 items.push({label: "粘贴", action: "paste"})
-            }
             if (input.selectedText && input.selectedText.length > 0) {
                 if (!input.readOnly) items.unshift({label: "复制", action: "copy"})
                 else items.push({label: "复制", action: "copy"})
             }
             items.push({label: "全选", action: "selectAll"})
             input._menuItems = items
-
             popup.x = Math.max(0, Math.min(
-                mouse.x,
-                input.width - popup.width - 20
+                x, input.width - popup.width - 20
             ))
             popup.y = -popup.height - 10
             popup.open()
+        }
+
+        onPressAndHold: {
+            showEditMenu(mouse.x)
+        }
+
+        onClicked: function(mouse) {
+            if (mouse.button === Qt.RightButton)
+                showEditMenu(mouse.x)
         }
 
         onPressed: {

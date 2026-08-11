@@ -2,6 +2,7 @@
 """Download, verify, and safely install a YUNSH OS OTA application bundle."""
 
 import argparse
+import fcntl
 import hashlib
 import json
 import logging
@@ -21,7 +22,9 @@ RESULT_PATH = os.environ.get("YUNSH_OTA_RESULT_PATH", "/tmp/yunsh-update-result.
 STATUS_PATH = os.environ.get("YUNSH_OTA_STATUS_PATH", "/tmp/yunsh-update-status.json")
 INFO_PATH = os.environ.get("YUNSH_OTA_INFO_PATH", "/etc/yunsh/update-info.json")
 DOWNLOAD_PATH = os.environ.get("YUNSH_OTA_DOWNLOAD_PATH", "/var/lib/yunsh-update/update.ota.tar.gz")
+LOCK_PATH = os.environ.get("YUNSH_OTA_LOCK_PATH", "/run/lock/yunsh-update.lock")
 BACKUP_ROOT = os.environ.get("YUNSH_OTA_BACKUP_ROOT", "/var/lib/yunsh-update/backups")
+HISTORY_PATH = os.environ.get("YUNSH_OTA_HISTORY_PATH", "/var/lib/yunsh-update/history.json")
 INSTALL_ROOT = os.environ.get("YUNSH_OTA_ROOT", "/")
 
 ALLOWED_PREFIXES = (
@@ -42,6 +45,18 @@ handler.setFormatter(logging.Formatter(
 logger.addHandler(handler)
 
 
+def acquire_update_lock():
+    """Allow only one OTA process to download/install at a time."""
+    os.makedirs(os.path.dirname(LOCK_PATH), exist_ok=True)
+    handle = open(LOCK_PATH, "w", encoding="utf-8")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        handle.close()
+        return None
+    return handle
+
+
 def _write_json(path: str, data: dict):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
@@ -58,6 +73,21 @@ def _read_json(path: str) -> dict:
             return json.load(handle)
     except (OSError, ValueError):
         return {}
+
+
+def _append_history(result: dict):
+    history = _read_json(HISTORY_PATH)
+    entries = history if isinstance(history, list) else history.get("entries", [])
+    if not isinstance(entries, list):
+        entries = []
+    entry = {
+        "version": result.get("version", ""),
+        "build": result.get("build", ""),
+        "installed_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "success": bool(result.get("success")),
+    }
+    entries = [entry] + [item for item in entries if item.get("version") != entry["version"]]
+    _write_json(HISTORY_PATH, {"entries": entries[:20]})
 
 
 def _status(**fields):
@@ -301,6 +331,12 @@ def install_bundle(bundle_path: str) -> dict:
 
 
 def auto_update() -> dict:
+    lock = acquire_update_lock()
+    if lock is None:
+        result = {"success": False, "already_running": True,
+                  "error": "another OTA update is already in progress"}
+        _write_json(RESULT_PATH, result)
+        return result
     info = _read_json(INFO_PATH)
     url = info.get("download_url", "")
     expected = info.get("sha256", "")
@@ -308,6 +344,8 @@ def auto_update() -> dict:
     if not url or not version:
         result = {"success": False, "error": "no compatible OTA update available"}
         _write_json(RESULT_PATH, result)
+        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+        lock.close()
         return result
 
     try:
@@ -318,8 +356,10 @@ def auto_update() -> dict:
             api_download=bool(info.get("api_download")) or url.startswith("https://api.github.com/"),
         )
         result = install_bundle(DOWNLOAD_PATH)
-        if result.get("success") and auto_reboot_enabled():
-            result["reboot_scheduled"] = schedule_reboot()
+        if result.get("success"):
+            _append_history(result)
+            if auto_reboot_enabled():
+                result["reboot_scheduled"] = schedule_reboot()
             _write_json(RESULT_PATH, result)
     except (OSError, ValueError, urllib.error.URLError) as exc:
         result = {"success": False, "error": str(exc), "timestamp": time.time()}
@@ -328,6 +368,11 @@ def auto_update() -> dict:
     finally:
         try:
             os.remove(DOWNLOAD_PATH)
+        except OSError:
+            pass
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+            lock.close()
         except OSError:
             pass
     return result

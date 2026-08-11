@@ -37,12 +37,16 @@ import urllib.error
 SOCKET_PATH = "/tmp/yunsh-update.sock"
 STATUS_PATH = "/tmp/yunsh-update-status.json"
 INFO_PATH = "/etc/yunsh/update-info.json"
+HISTORY_PATH = "/var/lib/yunsh-update/history.json"
 CONF_PATH = "/etc/yunsh/update.conf"
 LOG_PATH = "/var/log/yunsh-update.log"
 PID_PATH = "/var/run/yunsh-update-daemon.pid"
 
 GITHUB_REPO = "ljcccc999/yunsh-os"
 CHECK_INTERVAL_SEC = 6 * 3600  # 6 hours
+AUTO_UPDATE_IDLE_SEC = 30 * 60
+AUTO_UPDATE_START_HOUR = 22
+AUTO_UPDATE_END_HOUR = 6
 
 DEFAULT_CONFIG = {
     "auto_update": True,
@@ -177,6 +181,14 @@ def write_update_info(info: dict):
     """Save latest release metadata to /etc/yunsh/update-info.json."""
     os.makedirs(os.path.dirname(INFO_PATH), exist_ok=True)
     _write_json(INFO_PATH, info)
+
+
+def read_status_file() -> dict:
+    try:
+        with open(STATUS_PATH) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +450,7 @@ class UpdateDaemon:
         self._state = "idle"  # idle | checking | downloading | applying | error
         self._updater_process = None
         self._check_lock = threading.Lock()
+        self._explicit_check = False
 
         # Create required directories
         for d in ("/etc/yunsh", "/var/log", "/var/run"):
@@ -477,6 +490,7 @@ class UpdateDaemon:
         return handler()
 
     def _cmd_check(self) -> dict:
+        self._explicit_check = True
         started = self._schedule_check()
         return {
             "status": "ok",
@@ -492,9 +506,12 @@ class UpdateDaemon:
             "latest_build": 0,
             "update_available": self._update_available,
             "last_check_ts": self._last_check_ts,
+            "last_check_iso": time.strftime("%Y-%m-%d %H:%M", time.localtime(self._last_check_ts)) if self._last_check_ts else "",
             "auto_update": self._config.get("auto_update", True),
             "wifi_only": self._config.get("wifi_only", True),
             "update_channel": self._config.get("update_channel", "stable"),
+            "auto_update_policy": "idle_or_night",
+            "history": [],
         }
         if self._latest_release:
             status["latest_version"] = self._latest_release.get("version", "")
@@ -514,9 +531,19 @@ class UpdateDaemon:
                 status.update(disk_status)
         except (OSError, ValueError):
             pass
+        try:
+            with open(HISTORY_PATH, encoding="utf-8") as handle:
+                history = json.load(handle)
+            status["history"] = history.get("entries", []) if isinstance(history, dict) else history
+        except (OSError, ValueError):
+            pass
         return status
 
     def _cmd_start_download(self) -> dict:
+        disk = read_status_file()
+        if disk.get("state") in {"downloading", "installing", "rebooting", "restart_required"}:
+            return {"status": "ok", "result": "update_in_progress",
+                    "state": disk.get("state")}
         if not self._update_available or not self._latest_release:
             return {"error": "no update available"}
         download_url = self._latest_release.get("download_url", "")
@@ -578,7 +605,8 @@ class UpdateDaemon:
 
         def worker():
             try:
-                self.check_for_updates()
+                self.check_for_updates(explicit=self._explicit_check)
+                self._explicit_check = False
             except Exception as exc:
                 logger.error("Update check failed: %s", exc)
                 self._state = "error"
@@ -593,7 +621,7 @@ class UpdateDaemon:
         ).start()
         return True
 
-    def check_for_updates(self):
+    def check_for_updates(self, explicit: bool = False):
         """Query GitHub and update local state."""
         self._state = "checking"
         write_status(state="checking")
@@ -669,10 +697,25 @@ class UpdateDaemon:
 
         if available:
             logger.info("Update available: v%s → v%s", cur or "?", latest)
-            if self._config.get("auto_update", True):
+            # A user-initiated check is informational. Automatic installation
+            # is deferred to a quiet window, like iOS, so pressing “检查更新”
+            # never silently starts a download.
+            if self._config.get("auto_update", True) and not explicit and self._safe_auto_update_window():
                 self._perform_download()
         else:
             logger.info("No update available (current=%s latest=%s)", cur or "?", latest)
+
+    def _safe_auto_update_window(self) -> bool:
+        """Install automatically only while idle for 30 minutes or at night."""
+        hour = time.localtime().tm_hour
+        if hour >= AUTO_UPDATE_START_HOUR or hour < AUTO_UPDATE_END_HOUR:
+            return True
+        try:
+            with open("/run/yunsh/last-input", encoding="utf-8") as handle:
+                last_input = float(handle.read().strip() or 0)
+            return last_input > 0 and time.time() - last_input >= AUTO_UPDATE_IDLE_SEC
+        except (OSError, ValueError):
+            return False
 
     def _perform_download(self) -> dict:
         """Start the verified OTA installer without blocking the local API."""

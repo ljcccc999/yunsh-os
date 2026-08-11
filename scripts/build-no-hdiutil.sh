@@ -267,13 +267,13 @@ cat >> "${BUILD_DIR}/yunsh-config-new.txt" << YUNSHCONF
 arm_64bit=1
 [pi5]
 ${KMS_OVERLAY}
-disable_splash=1
 display_auto_detect=1
 hdmi_drive=2
 hdmi_force_hotplug=1
 framebuffer_depth=32
 disable_overscan=1
 [all]
+disable_splash=1
 dtparam=i2c_arm=on
 YUNSHCONF
 mdel -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null || true
@@ -306,9 +306,13 @@ esac
 # Keep the canonical Pi 5 SD layout. Serial0
 # remains the diagnostic console; tty1 stays clean for splash and UI output.
 CMDLINE=$(printf '%s\n' "${CMDLINE}" | sed -E 's/  +/ /g; s/^ +//; s/ +$//')
-echo "${CMDLINE} quiet splash logo.nologo consoleblank=0 loglevel=3 vt.global_cursor_default=0 cma=256M psi=1 systemd.show_status=false systemd.log_target=journal systemd.log_level=notice systemd.default_standard_output=journal" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
+echo "${CMDLINE} quiet logo.nologo consoleblank=0 loglevel=3 vt.global_cursor_default=0 cma=256M psi=1 systemd.show_status=false systemd.log_target=journal systemd.log_level=notice systemd.default_standard_output=journal" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
 mdel -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null || true
 mcopy -i "${BOOT_IMG}" "${BUILD_DIR}/yunsh-cmdline-new.txt" ::/cmdline.txt
+if grep -Eq '(^| )(splash|console=tty1|module_blacklist=)' "${BUILD_DIR}/yunsh-cmdline-new.txt"; then
+    echo "ERROR: boot cmdline still exposes firmware splash, tty1, or a GPU blacklist" >&2
+    exit 1
+fi
 echo "  ✓ cmdline.txt modified"
 
 # Copy YUNSH boot files
@@ -922,7 +926,11 @@ echo "symlink /etc/systemd/system/userconfig.service /dev/null" >> "${DEBUGFS_SC
 echo "rm /etc/systemd/system/systemd-networkd-wait-online.service" >> "${DEBUGFS_SCRIPT}"
 echo "symlink /etc/systemd/system/systemd-networkd-wait-online.service /dev/null" >> "${DEBUGFS_SCRIPT}"
 
-# Keep the stock tty1 getty. The first-boot service owns tty1 while installing,
+# Keep tty1 free for the YUNSH splash and UI. The first-boot service owns tty1 while installing,
+# but normal boots must not expose kernel/systemd/getty text over the optical display.
+echo "rm /etc/systemd/system/getty.target.wants/getty@tty1.service" >> "${DEBUGFS_SCRIPT}"
+echo "rm /etc/systemd/system/getty@tty1.service" >> "${DEBUGFS_SCRIPT}"
+echo "symlink /etc/systemd/system/getty@tty1.service /dev/null" >> "${DEBUGFS_SCRIPT}"
 # avoiding a race with auto-login before the yunsh user has been created.
 
 # rc.local
