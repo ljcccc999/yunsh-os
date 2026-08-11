@@ -10,7 +10,10 @@ Rectangle {
     // === Properties ===
     property string iconSource: ""
     property real iconSize: 20
-    property string title: "Title"
+    // Empty by default.  "Title" was a placeholder, but it was rendered in
+    // cards that provide their own content and ended up overlapping the real
+    // installation/update text below it.
+    property string title: ""
     property string subtitle: ""
     property real cardCornerRadius: 14
     property bool showArrow: false
@@ -19,6 +22,7 @@ Rectangle {
     property bool isToggle: false
     property bool toggleState: false
     property alias contentItem: customContent.data
+    readonly property bool hasCustomContent: customContent.children.length > 0
     
     signal clicked()
     signal toggled(bool state)
@@ -63,7 +67,7 @@ Rectangle {
         height: iconSize + 12
         radius: (iconSize + 12) / 2
         color: Qt.rgba(220/255, 245/255, 255/255, 0.52)
-        visible: iconSource.length > 0
+        visible: iconSource.length > 0 && !hasCustomContent
         
         Image {
             anchors.centerIn: parent
@@ -85,6 +89,7 @@ Rectangle {
         anchors.rightMargin: isToggle ? 76 : (showArrow ? 44 : 18)
         anchors.verticalCenter: parent.verticalCenter
         spacing: 2
+        visible: !hasCustomContent && (title.length > 0 || subtitle.length > 0)
         
         Text {
             width: parent.width
@@ -93,6 +98,7 @@ Rectangle {
             font.pixelSize: 15
             font.weight: Font.Medium
             elide: Text.ElideRight
+            visible: title.length > 0
         }
         
         Text {
@@ -114,7 +120,7 @@ Rectangle {
         color: "#53616C"
         font.pixelSize: 20
         font.weight: Font.Light
-        visible: showArrow
+        visible: showArrow && !hasCustomContent
     }
     
     // Toggle switch (iOS UISwitch style)
