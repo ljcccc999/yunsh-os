@@ -104,13 +104,38 @@ if [ -n "$DRM_DEVICE" ]; then
         fi
         # shellcheck disable=SC2086
         weston $WESTON_ARGS >>"$WESTON_LOG" 2>&1 &
+        WESTON_PID=$!
         # Weston may take several seconds to initialize GBM/EGL on a cold Pi.
         for _ in $(seq 1 300); do
+            weston_state="$(ps -o stat= -p "$WESTON_PID" 2>/dev/null | tr -d '[:space:]')"
+            # A Weston process can leave its socket behind for a short time
+            # after aborting in the DRM backend.  A socket alone is therefore
+            # not proof that a usable Wayland display exists.
+            if [ -z "$weston_state" ] || [[ "$weston_state" == Z* ]]; then
+                break
+            fi
             [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && break
             sleep 0.1
         done
     fi
-    if [ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]; then
+    weston_ready=false
+    if [ -n "${WESTON_PID:-}" ]; then
+        weston_state="$(ps -o stat= -p "$WESTON_PID" 2>/dev/null | tr -d '[:space:]')"
+        if [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] &&
+           [ -n "$weston_state" ] && [[ "$weston_state" != Z* ]]; then
+            # Let the compositor finish its first repaint.  This catches the
+            # Pi DRM assertion path that creates a socket before aborting.
+            sleep 0.5
+            weston_state="$(ps -o stat= -p "$WESTON_PID" 2>/dev/null | tr -d '[:space:]')"
+            [ -n "$weston_state" ] && [[ "$weston_state" != Z* ]] && weston_ready=true
+        fi
+    elif [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && pgrep -x weston >/dev/null 2>&1; then
+        # An already-running compositor may belong to the service wrapper.
+        weston_ready=true
+    fi
+    if [ "$weston_ready" != true ]; then
+        rm -f "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" \
+            "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY.lock"
         printf '%s Weston did not create a Wayland socket; checking framebuffer fallback.\n' \
             "$(date -Iseconds)" >>"$UI_LOG"
         DISPLAY_BACKEND="linuxfb"
