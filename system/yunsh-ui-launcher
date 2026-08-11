@@ -156,6 +156,16 @@ while true; do
     printf '%s YUNSH UI exited with status %s (attempt %s)\n' \
         "$(date -Iseconds)" "$QML_EXIT" "$failure_count" >>"$UI_LOG"
 
+    # Qt Quick can abort inside the Pi's accelerated Wayland scenegraph when a
+    # pointer enters a layered/hovered item.  Keep the compositor and shell
+    # alive, then retry once with the software scenegraph instead of exposing a
+    # boot log and looping on the same GPU crash forever.
+    if [ "$QML_EXIT" -ge 128 ] && [ "${QT_QUICK_BACKEND:-}" != "software" ]; then
+        export QT_QUICK_BACKEND="software"
+        printf '%s Qt Quick aborted; retrying with software scenegraph.\n' \
+            "$(date -Iseconds)" >>"$UI_LOG"
+    fi
+
     if [ "$failure_count" -ge 3 ] && [ -f "$RECOVERY_QML" ]; then
         "$QML_RUNNER" "$RECOVERY_QML" "$QML_EXIT" 2>>"$UI_LOG" || true
         failure_count=0

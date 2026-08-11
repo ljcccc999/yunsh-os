@@ -22,7 +22,6 @@ Rectangle {
     property bool isToggle: false
     property bool toggleState: false
     property alias contentItem: customContent.data
-    readonly property bool hasCustomContent: customContent.children.length > 0
     
     signal clicked()
     signal toggled(bool state)
@@ -67,7 +66,7 @@ Rectangle {
         height: iconSize + 12
         radius: (iconSize + 12) / 2
         color: Qt.rgba(220/255, 245/255, 255/255, 0.52)
-        visible: iconSource.length > 0 && !hasCustomContent
+        visible: iconSource.length > 0
         
         Image {
             anchors.centerIn: parent
@@ -89,7 +88,7 @@ Rectangle {
         anchors.rightMargin: isToggle ? 76 : (showArrow ? 44 : 18)
         anchors.verticalCenter: parent.verticalCenter
         spacing: 2
-        visible: !hasCustomContent && (title.length > 0 || subtitle.length > 0)
+        visible: title.length > 0 || subtitle.length > 0
         
         Text {
             width: parent.width
@@ -120,7 +119,7 @@ Rectangle {
         color: "#53616C"
         font.pixelSize: 20
         font.weight: Font.Light
-        visible: showArrow && !hasCustomContent
+        visible: showArrow
     }
     
     // Toggle switch (iOS UISwitch style)
