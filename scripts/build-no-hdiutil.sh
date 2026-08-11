@@ -820,6 +820,26 @@ WantedBy=multi-user.target
 SSVC
 add_file "${BUILD_DIR}/yunsh-splash.service" "/etc/systemd/system/yunsh-splash.service"
 
+# Keep an independent post-reboot recovery channel.  The firstboot validator
+# refuses to mark setup complete unless SSH and the desktop prerequisites are
+# usable; this guard handles the remaining case where a compositor crash
+# occurs only after the machine has rebooted.
+add_file "${YUNSH_DIR}/system/yunsh-boot-health" "/usr/bin/yunsh-boot-health"
+cat > "${BUILD_DIR}/yunsh-boot-health.service" << 'HEALTHSVC'
+[Unit]
+Description=YUNSH OS Post-Reboot Health Guard
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/yunsh/.packages_installed
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/yunsh-boot-health
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target
+HEALTHSVC
+add_file "${BUILD_DIR}/yunsh-boot-health.service" "/etc/systemd/system/yunsh-boot-health.service"
+
 # Firewall service
 cat > "${BUILD_DIR}/yunsh-firewall.service" << 'FSVC'
 [Unit]
@@ -901,7 +921,7 @@ add_file "${BUILD_DIR}/yunsh-terminal.service" "/etc/systemd/system/yunsh-termin
 # Enable services
 for service in yunsh-os yunsh-firstboot yunsh-grow-root yunsh-local-api yunsh-spaced yunsh-screen-relay yunsh-network yunsh-bluetooth \
                yunsh-update yunsh-link-ble yunsh-glasses-bridge yunsh-appd yunsh-android-setup yunsh-terminal yunsh-headtracking \
-               yunsh-powerd yunsh-splash yunsh-media-setup yunsh-time-sync orbit orbit-voice-setup; do
+               yunsh-powerd yunsh-splash yunsh-boot-health yunsh-media-setup yunsh-time-sync orbit orbit-voice-setup; do
     echo "rm /etc/systemd/system/multi-user.target.wants/${service}.service" >> "${DEBUGFS_SCRIPT}"
     echo "symlink /etc/systemd/system/multi-user.target.wants/${service}.service ../${service}.service" >> "${DEBUGFS_SCRIPT}"
 done
@@ -966,7 +986,7 @@ for bin in yunsh-update-daemon yunsh-updater yunsh-network-daemon yunsh-bluetoot
            yunsh-glasses-bridge \
            yunsh-screenshotd yunsh-factory-reset yunsh-install-progress.sh yunsh-inputd \
            yunsh-powerd yunsh-firstboot.sh yunsh-iptables.sh yunsh-ui-launcher yunsh-splash \
-           yunsh-appd yunsh-terminal yunsh-disk-helper yunsh-headtracking yunsh-headtracking-sim \
+           yunsh-boot-health yunsh-appd yunsh-terminal yunsh-disk-helper yunsh-headtracking yunsh-headtracking-sim \
            yunsh-bno085-reader yunsh-activation-helper yunsh-keyinject yunsh-android yunsh-recordingd yunsh-media-setup yunsh-grow-root yunsh-time-sync orbitd orbit-voice-setup; do
     echo "set_inode_field /usr/bin/${bin} mode 0100755" >> "${DEBUGFS_SCRIPT}"
 done
@@ -1033,6 +1053,7 @@ echo "(partial listing, see build log for complete)"
 REQUIRED_ROOT_FILES="
 /usr/bin/yunsh-ui-launcher
 /usr/bin/yunsh-firstboot.sh
+/usr/bin/yunsh-boot-health
 /usr/bin/yunsh-grow-root
 /usr/bin/growpart
 /usr/sbin/resize2fs
@@ -1059,6 +1080,7 @@ REQUIRED_ROOT_FILES="
 /etc/yunsh/version.conf
 /etc/systemd/system/yunsh-os.service
 /etc/systemd/system/yunsh-firstboot.service
+/etc/systemd/system/yunsh-boot-health.service
 /etc/systemd/system/yunsh-grow-root.service
 /etc/systemd/system/yunsh-android-setup.service
 /etc/systemd/system/orbit.service
@@ -1071,6 +1093,7 @@ REQUIRED_ROOT_FILES="
 /etc/systemd/system/systemd-networkd-wait-online.service
 /etc/systemd/system/multi-user.target.wants/yunsh-os.service
 /etc/systemd/system/multi-user.target.wants/yunsh-firstboot.service
+/etc/systemd/system/multi-user.target.wants/yunsh-boot-health.service
 /etc/systemd/system/multi-user.target.wants/yunsh-grow-root.service
 /etc/systemd/system/multi-user.target.wants/yunsh-android-setup.service
 /etc/systemd/system/multi-user.target.wants/orbit.service

@@ -1,0 +1,46 @@
+#!/bin/bash
+# YUNSH OS post-reboot health guard.
+# Keep the recovery channel available when the graphical compositor or shell
+# fails.  This service never replaces the normal desktop path; it only makes
+# sure SSH is enabled and records a useful diagnostic snapshot.
+set -u
+
+LOG=/var/log/yunsh-boot-health.log
+mkdir -p "$(dirname "$LOG")"
+exec >>"$LOG" 2>&1
+
+echo "[$(date -Iseconds)] boot health check started"
+
+if ! systemctl is-enabled --quiet ssh.service; then
+    echo "[$(date -Iseconds)] ssh.service was not enabled; enabling it"
+    systemctl enable ssh.service || true
+fi
+if ! systemctl is-active --quiet ssh.service; then
+    echo "[$(date -Iseconds)] ssh.service was not active; starting it"
+    systemctl start ssh.service || true
+fi
+
+if systemctl is-active --quiet ssh.service; then
+    echo "[$(date -Iseconds)] ssh.service active"
+else
+    echo "[$(date -Iseconds)] ERROR: ssh.service is still inactive"
+    systemctl --no-pager --full status ssh.service || true
+fi
+
+if systemctl is-enabled --quiet yunsh-os.service; then
+    echo "[$(date -Iseconds)] yunsh-os.service enabled"
+else
+    echo "[$(date -Iseconds)] ERROR: yunsh-os.service is not enabled"
+fi
+
+if systemctl is-active --quiet yunsh-os.service; then
+    echo "[$(date -Iseconds)] yunsh-os.service active"
+else
+    echo "[$(date -Iseconds)] WARNING: yunsh-os.service is not active"
+    systemctl --no-pager --full status yunsh-os.service || true
+    tail -n 80 /var/log/yunsh-ui.log 2>/dev/null || true
+    tail -n 80 /var/log/yunsh-weston.log 2>/dev/null || true
+fi
+
+echo "[$(date -Iseconds)] boot health check finished"
+exit 0

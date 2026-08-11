@@ -49,6 +49,7 @@ echo "  +------------------------------------------+"
 source /usr/bin/yunsh-install-progress.sh 2>/dev/null || true
 
 TOTAL=22; CUR=0; CURRENT_PROGRESS=0; CURRENT_STATUS="Preparing first setup"
+FIRSTBOOT_APT_FAILED=0
 pct() { CUR=$((CUR+1)); local P=$((CUR*100/TOTAL)); [ "$P" -gt "$1" ] && P=$1
     CURRENT_PROGRESS="$P"; CURRENT_STATUS="$2"
     if type draw_frame &>/dev/null 2>&1; then draw_frame "$P" "$2" "$CUR" "$TOTAL"
@@ -325,6 +326,73 @@ install_apt() {
     apt-get clean -qq >>/var/log/yunsh-apt.log 2>&1 || true
 }
 
+# Do not call an installation successful merely because dpkg has unpacked the
+# requested packages.  The previous flow wrote .packages_installed and
+# rebooted even when sshd or the desktop launch prerequisites were not usable;
+# that produced a perfectly alive kernel with a black screen and no SSH port.
+# Keep the marker absent on failure so systemd retries firstboot and the
+# on-device progress/log remains available for diagnosis.
+validate_pre_reboot() {
+    local qml_runner=""
+    echo ""
+    echo "  [+] Validating reboot handoff..."
+
+    if [ "$FIRSTBOOT_APT_FAILED" -ne 0 ]; then
+        echo "  [ERROR] One or more package groups did not complete."
+        return 1
+    fi
+
+    if [ ! -x /usr/bin/yunsh-ui-launcher ]; then
+        echo "  [ERROR] Desktop launcher is missing."
+        return 1
+    fi
+    command -v weston >/dev/null 2>&1 || {
+        echo "  [ERROR] Weston is not installed."
+        return 1
+    }
+    if [ -x /usr/lib/qt6/bin/qml ]; then
+        qml_runner=/usr/lib/qt6/bin/qml
+    elif [ -x /usr/lib/qt6/bin/qmlscene ]; then
+        qml_runner=/usr/lib/qt6/bin/qmlscene
+    else
+        qml_runner="$(command -v qml6 || command -v qml || true)"
+    fi
+    if [ -z "$qml_runner" ]; then
+        echo "  [ERROR] Qt QML runtime is not installed."
+        return 1
+    fi
+
+    systemctl daemon-reload || return 1
+    if ! systemctl enable ssh.service >/dev/null 2>&1; then
+        echo "  [ERROR] SSH service could not be enabled."
+        return 1
+    fi
+    # Start and verify SSH before writing the completion marker.  This is a
+    # local check; it does not depend on a DHCP lease or the user's current
+    # Wi-Fi address.
+    if ! systemctl start ssh.service >/dev/null 2>&1; then
+        echo "  [ERROR] SSH service could not be started."
+        return 1
+    fi
+    if ! systemctl is-active --quiet ssh.service; then
+        echo "  [ERROR] SSH service is not active after start."
+        return 1
+    fi
+    if ! systemctl enable yunsh-os.service >/dev/null 2>&1; then
+        echo "  [ERROR] Desktop service could not be enabled."
+        return 1
+    fi
+    if ! systemctl is-enabled --quiet yunsh-os.service; then
+        echo "  [ERROR] Desktop service is not enabled for the next boot."
+        return 1
+    fi
+
+    echo "  [OK] SSH service enabled and active"
+    echo "  [OK] Desktop launcher, Weston, and Qt QML runtime present"
+    echo "  [OK] Desktop service enabled for post-reboot startup"
+    return 0
+}
+
 # ───── Firewall & SSH Security Setup ────────────
 setup_firewall() {
     local FIREWALL_DONE="/etc/yunsh/.firewall_configured"
@@ -527,6 +595,11 @@ if { [ ! -x /usr/lib/qt6/bin/qml ] && \
     echo ""
     echo "  [ERROR] Required desktop packages are missing:$CORE_MISSING"
     echo "  DPKG details are in /var/log/yunsh-apt.log; reboot to retry."
+    exit 1
+fi
+
+if ! validate_pre_reboot; then
+    echo "  [ERROR] Reboot handoff validation failed; installation will retry without marking completion."
     exit 1
 fi
 

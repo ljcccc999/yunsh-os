@@ -21,7 +21,7 @@ system world, an optical-display-ready desktop, the system-level Orbit agent,
 connected-device services, and Bluetooth-connected motion tracking in one
 portable Raspberry Pi 5 environment.
 
-The current local release line is **v3.1.1**, with a circular liquid-glass
+The current local release line is **v3.1.3**, with a circular liquid-glass
 Orbit identity, direct in-island tool approvals, voice speaking-wave feedback,
 interruptible window transitions, a movable Orbit and spatial keyboard, and a
 desktop icon shelf that recedes when an application window opens, all within a
@@ -284,18 +284,15 @@ frame on both displays.
 ## Project status
 
 YUNSH OS is an active prototype for YUNSH spatial computing hardware. The
-v3.1.1 release line is validated through static QML, Python, shell, image
-structure, partition, boot configuration,
-ext4, embedded-file, and systemd-link checks. The current local
-rebuild also carries a read-only confirmed Raspberry Pi 5 firmware/kernel
-payload while keeping activation and runtime user state absent. No virtual
-machine or fresh hardware boot is claimed for this update; earlier hardware
-evidence reached and displayed the multilingual activation surface through
-`/dev/fb0`. That real-device check validates visible UI and service startup,
-not accelerated DRM/GPU/Wayland output, Bluetooth, Android, or optical-display
-hardware behavior. The real-device regression also confirmed the Pi-side
-YUNSH Link BLE advertisement and pairable controller state; a complete iPhone
-pairing session still requires the phone and its user-approved pairing flow.
+v3.1.3 release line is validated through static QML, Python, shell, image
+structure, partition, boot configuration, ext4, embedded-file, and
+systemd-link checks. A clean ARM64 generic-virt test completed firstboot,
+downloaded packages with MB progress, crossed the former 42% handoff,
+validated SSH and desktop prerequisites, wrote the completion marker, and
+automatically rebooted. After reboot, SSH, `yunsh-os.service`, and the
+post-reboot health guard were reachable. Generic virt machines do not provide
+the Raspberry Pi 5 DRM/fb scanout, so this test does not claim a Pi 5 display,
+mouse, Bluetooth, Android, or optical-display hardware result.
 
 ## License
 
