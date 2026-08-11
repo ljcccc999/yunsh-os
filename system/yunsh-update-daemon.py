@@ -46,6 +46,7 @@ CHECK_INTERVAL_SEC = 6 * 3600  # 6 hours
 
 DEFAULT_CONFIG = {
     "auto_update": True,
+    "auto_reboot": True,
     "wifi_only": True,
     "update_channel": "stable",  # "stable" | "beta"
     "allow_major_update": True,
@@ -83,6 +84,7 @@ def setup_logging(foreground: bool = False):
 def load_config() -> dict:
     """Read /etc/yunsh/update.conf; merge with defaults."""
     config = dict(DEFAULT_CONFIG)
+    seen_keys = set()
     try:
         with open(CONF_PATH) as f:
             for line in f:
@@ -95,12 +97,20 @@ def load_config() -> dict:
                 key = key.strip()
                 val = val.strip().lower()
                 if key in config:
+                    seen_keys.add(key)
                     if isinstance(config[key], bool):
                         config[key] = val == "true"
                     else:
                         config[key] = val
     except FileNotFoundError:
-        pass
+        save_config(config)
+    # v3.0.4 did not know auto_reboot and its OTA allow-list rejected a new
+    # config file. Preserve the old file for the first compatible upgrade, then
+    # migrate it on the first boot of the new daemon.
+    if "auto_reboot" not in seen_keys:
+        config["auto_update"] = True
+        config["auto_reboot"] = True
+        save_config(config)
     return config
 
 
@@ -110,6 +120,7 @@ def save_config(config: dict):
     with open(CONF_PATH, "w") as f:
         for key in (
             "auto_update",
+            "auto_reboot",
             "wifi_only",
             "update_channel",
             "allow_major_update",
@@ -498,7 +509,7 @@ class UpdateDaemon:
             with open(STATUS_PATH, encoding="utf-8") as handle:
                 disk_status = json.load(handle)
             if disk_status.get("state") in {
-                "downloading", "installing", "restart_required", "error"
+                "downloading", "installing", "restart_required", "rebooting", "error"
             }:
                 status.update(disk_status)
         except (OSError, ValueError):
@@ -658,7 +669,7 @@ class UpdateDaemon:
 
         if available:
             logger.info("Update available: v%s → v%s", cur or "?", latest)
-            if self._config.get("auto_update", False):
+            if self._config.get("auto_update", True):
                 self._perform_download()
         else:
             logger.info("No update available (current=%s latest=%s)", cur or "?", latest)

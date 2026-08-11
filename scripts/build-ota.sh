@@ -25,7 +25,8 @@ cp "${YUNSH_DIR}"/ui/icons/* "${STAGING}/payload/usr/share/yunsh/icons/"
 cp "${YUNSH_DIR}"/logo/*.png "${STAGING}/payload/usr/share/yunsh/logo/"
 printf 'VERSION=%s\nBUILD=%s\n' "${VERSION}" "${BUILD_ID}" \
     > "${STAGING}/payload/etc/yunsh/version.conf"
-cp "${BUILD_DIR}/yunsh-update.conf" "${STAGING}/payload/etc/yunsh/update.conf"
+# Keep the first upgrade from v3.0.4 compatible with its older allow-list.
+# The new update daemon migrates the preserved config after that reboot.
 
 # Keep OTA paths identical to the paths used by the full image builder.  Source
 # filenames such as yunsh-appd.py are intentionally installed without their

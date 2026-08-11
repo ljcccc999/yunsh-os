@@ -316,8 +316,14 @@ Item {
                     xhr.open("POST", "http://127.0.0.1:8591/api/update-download", true);
                     xhr.onreadystatechange = function() {
                         if (xhr.readyState === XMLHttpRequest.DONE) {
-                            if (xhr.status !== 200) {
+                            var result = {};
+                            try { result = JSON.parse(xhr.responseText || "{}"); } catch (error) {}
+                            if (xhr.status !== 200 || result.error || result.status === "error") {
                                 isDownloading = false;
+                                updateError = result.error || "更新服务没有成功启动";
+                            } else {
+                                updateError = "";
+                                refreshStatus();
                             }
                         }
                     };

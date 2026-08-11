@@ -1096,7 +1096,7 @@ def update_response(action, payload):
         "currentVersion": result.get("current_version", ""),
         "latestVersion": result.get("latest_version", ""),
         "updateAvailable": result.get("update_available", False),
-        "autoUpdate": result.get("auto_update", False),
+        "autoUpdate": result.get("auto_update", True),
         "wifiOnly": result.get("wifi_only", True),
         "lastCheckTime": result.get("last_check_ts", ""),
         "changelog": result.get("changelog", ""),
