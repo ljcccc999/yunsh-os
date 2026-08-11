@@ -1,4 +1,4 @@
-// YUNSH OS v3.1.0 - Main QML Entry Point
+// YUNSH OS v3.1.1 - Main QML Entry Point
 // Apple-style glass system + Task Switcher + Home Indicator
 
 import QtQuick 2.15
@@ -141,6 +141,35 @@ ApplicationWindow {
         xhr.setRequestHeader("Content-Type", "application/json")
         xhr.timeout = 800
         xhr.send(JSON.stringify({locked: !!locked}))
+    }
+
+    // A normal boot always starts behind the local lock. The small marker is
+    // written by the launcher and cleared only after this screen is unlocked;
+    // it therefore also covers power loss and a restart initiated outside QML.
+    function checkBootLock() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("GET", "http://127.0.0.1:8591/api/boot-lock", true)
+        xhr.timeout = 1200
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE || xhr.status !== 200)
+                return
+            try {
+                var result = JSON.parse(xhr.responseText || "{}")
+                if (result.required === true) {
+                    screensaver_item.passwordRequired = yunshOS.lockPasswordEnabled
+                    screensaver_item.show()
+                }
+            } catch (_error) {}
+        }
+        xhr.send()
+    }
+
+    function clearBootLock() {
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/boot-lock", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 1200
+        xhr.send(JSON.stringify({required: false}))
     }
 
     onActiveFocusItemChanged: {
@@ -858,6 +887,7 @@ ApplicationWindow {
                 virtualKeyboard.hide()
                 screensaver_item.hideScreen()
                 yunshOS.syncLockState(false)
+                yunshOS.clearBootLock()
                 idleTimer.restart()
             }
             onVisibleChanged: {
@@ -1119,7 +1149,8 @@ ApplicationWindow {
             anchors.left: parent.left
             anchors.right: parent.right
             z: 7000
-            visible: (!firstBoot || activationDone) && !screensaver_item.visible
+            visible: (!firstBoot || activationDone)
+            locked: screensaver_item.visible
             orbitConfigured: orbitPanel.configured
             orbitBusy: orbitPanel.computerOperationActive || orbitPanel.voiceConversationActive
             orbitAwaitingApproval: orbitPanel.computerApprovalPending
@@ -1134,6 +1165,11 @@ ApplicationWindow {
                 return active ? active.isFullscreen : false
             }
             onOpenSystemMenu: controlCenter.show()
+            onRequestPowerAction: function(action) {
+                controlCenter.hide()
+                systemMenuBar.powerMenuVisible = false
+                yunshOS.beginSystemActionConfirmation(action)
+            }
             onOpenWorld: yunshOS.openWorld()
             onOpenOrbit: orbitPanel.openPanel()
             onOrbitApprovalDecision: function(decision) { orbitPanel.respondToApproval(decision) }
@@ -2038,7 +2074,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        console.log("YUNSH OS UI v3.1.0")
+        console.log("YUNSH OS UI v3.1.1")
         checkFirstBoot()
         showFullScreen()
         applyWindowPreferences()
@@ -2046,6 +2082,8 @@ ApplicationWindow {
         Qt.callLater(function() {
             yunshOS.loadSpatialPreferences()
             yunshOS.probeHeadTracking()
+            if (!firstBoot)
+                yunshOS.checkBootLock()
         })
     }
 }

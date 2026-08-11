@@ -45,9 +45,8 @@ FCITX_PROFILE
     fi
 done
 if ! pgrep -x fcitx5 >/dev/null 2>&1; then
-    # linuxfb has no compositor-owned session bus.  Start Fcitx inside its
-    # own persistent D-Bus session so fcitx5-remote and the Qt input-method
-    # plugin talk to the same instance after a reboot or a DRM fallback.
+    # Start Fcitx inside its own persistent D-Bus session so fcitx5-remote and
+    # the Qt input-method plugin talk to the same instance after a reboot.
     if command -v dbus-run-session >/dev/null 2>&1; then
         dbus-run-session -- fcitx5 --replace >>"$UI_LOG" 2>&1 &
     else
@@ -80,32 +79,31 @@ if [ ! -f /etc/yunsh/.packages_installed ]; then
     exit 1
 fi
 
+# Every normal desktop start begins behind the local lock. This marker is
+# intentionally independent of the Linux/SSH password and is cleared only by
+# the QML unlock flow after the user has entered the local password.
+if [ -f /etc/yunsh/.activated ]; then
+    install -d -m 0700 /etc/yunsh
+    printf 'required\n' > /etc/yunsh/boot-lock
+    chmod 0600 /etc/yunsh/boot-lock
+fi
+
 /usr/bin/yunsh-disk-helper 2>/dev/null || true
 
 # Waydroid requires a real Wayland session. Weston owns DRM/KMS and composes
-# both the YUNSH shell and Android surfaces on the same display.  Some Pi 5
-# firmware/kernel combinations can leave the firmware framebuffer available
-# while VC4's DRM clock provider fails. Keep the display usable in that case
-# by running Qt directly on the framebuffer with its software scenegraph.
+# both the YUNSH shell and Android surfaces on the same display. Keep Wayland
+# as the normal path; do not silently replace it with linuxfb when DRM fails.
 if ! command -v weston >/dev/null 2>&1; then
     echo "YUNSH: Weston is not installed." >&2
     exit 1
 fi
 DISPLAY_BACKEND="wayland"
-# A target device can persistently select the framebuffer path when its DRM
-# plane negotiation is unstable (for example, a monitor/firmware combination
-# that makes Weston abort as soon as the pointer moves).  This marker is local
-# device policy and does not touch activation or user data.
-FORCE_LINUXFB_FILE="/etc/yunsh/force-linuxfb"
 DRM_DEVICE=""
 if [ -d /dev/dri ]; then
     DRM_DEVICE="$(find /dev/dri -maxdepth 1 -type c -name 'card*' -print -quit 2>/dev/null || true)"
 fi
 
-if [ -f "$FORCE_LINUXFB_FILE" ]; then
-    DISPLAY_BACKEND="linuxfb"
-    printf '%s Device policy selected Qt linuxfb fallback.\n' "$(date -Iseconds)" >>"$UI_LOG"
-elif [ -n "$DRM_DEVICE" ]; then
+if [ -n "$DRM_DEVICE" ]; then
     # A compositor killed during startup can leave its socket behind. Do not
     # treat that dead endpoint as a valid session.
     if [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && ! pgrep -x weston >/dev/null 2>&1; then
@@ -116,7 +114,10 @@ elif [ -n "$DRM_DEVICE" ]; then
         # Weston versions shipped by Debian/Raspberry Pi OS do not all accept
         # --continue-without-input. Passing an unsupported option makes Weston
         # quit before it creates its Wayland socket, leaving the display black.
-        WESTON_ARGS="--backend=drm-backend.so --shell=kiosk-shell.so --socket=$WAYLAND_DISPLAY --idle-time=0"
+        # Weston GL hit drm_output_find_plane_for_view(fb) on the Pi 5 + 4K
+        # display when the pointer entered a view. Pixman avoids that broken
+        # hardware-plane import while retaining Wayland, DRM and libinput.
+        WESTON_ARGS="--backend=drm-backend.so --renderer=pixman --shell=kiosk-shell.so --socket=$WAYLAND_DISPLAY --idle-time=0"
         if weston --help 2>&1 | grep -q -- '--continue-without-input'; then
             WESTON_ARGS="$WESTON_ARGS --continue-without-input"
         fi
@@ -154,27 +155,34 @@ elif [ -n "$DRM_DEVICE" ]; then
     if [ "$weston_ready" != true ]; then
         rm -f "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" \
             "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY.lock"
-        printf '%s Weston did not create a Wayland socket; checking framebuffer fallback.\n' \
+        printf '%s Weston failed; entering explicit recovery framebuffer path.\n' \
             "$(date -Iseconds)" >>"$UI_LOG"
         DISPLAY_BACKEND="linuxfb"
     fi
 else
+    printf '%s No DRM device found; entering explicit recovery framebuffer path.\n' \
+        "$(date -Iseconds)" >>"$UI_LOG"
     DISPLAY_BACKEND="linuxfb"
 fi
 
 if [ "$DISPLAY_BACKEND" = "linuxfb" ]; then
     if [ ! -c /dev/fb0 ]; then
-        echo "YUNSH: neither DRM/KMS nor a framebuffer display is available." >&2
+        echo "YUNSH: Wayland failed and no recovery framebuffer exists." >&2
         exit 1
     fi
     export QT_QPA_PLATFORM="linuxfb:fb=/dev/fb0"
     export QT_QUICK_BACKEND="software"
-    printf '%s Using Qt linuxfb fallback on /dev/fb0.\n' "$(date -Iseconds)" >>"$UI_LOG"
+    printf '%s Using linuxfb only as explicit Wayland/DRM recovery.\n' \
+        "$(date -Iseconds)" >>"$UI_LOG"
 else
     [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] || {
         echo "YUNSH: Wayland compositor failed to start." >&2
         exit 1
     }
+    export QT_QPA_PLATFORM="wayland"
+    export QT_QUICK_BACKEND="software"
+    printf '%s Using primary Wayland DRM compositor with Weston pixman renderer.\n' \
+        "$(date -Iseconds)" >>"$UI_LOG"
 fi
 
 # Do not leave a connected display on a featureless black surface when the
@@ -211,6 +219,21 @@ while true; do
 
     if [ "$failure_count" -ge 3 ] && [ -f "$RECOVERY_QML" ]; then
         "$QML_RUNNER" "$RECOVERY_QML" "$QML_EXIT" 2>>"$UI_LOG" || true
+        failure_count=0
+    fi
+    # If the Wayland/Qt path repeatedly aborts (for example a broken DRM
+    # plane import on pointer movement), switch once to the explicit recovery
+    # framebuffer path. This is never selected during a healthy boot.
+    if [ "$failure_count" -ge 3 ] && [ "$DISPLAY_BACKEND" = "wayland" ] &&
+       [ -c /dev/fb0 ]; then
+        [ -n "${WESTON_PID:-}" ] && kill "$WESTON_PID" 2>/dev/null || true
+        rm -f "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" \
+            "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY.lock"
+        DISPLAY_BACKEND="linuxfb"
+        export QT_QPA_PLATFORM="linuxfb:fb=/dev/fb0"
+        export QT_QUICK_BACKEND="software"
+        printf '%s Wayland/Qt crashed repeatedly; using linuxfb recovery.\n' \
+            "$(date -Iseconds)" >>"$UI_LOG"
         failure_count=0
     fi
     sleep 2

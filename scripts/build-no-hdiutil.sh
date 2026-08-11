@@ -8,7 +8,7 @@ BUILD_DIR="${YUNSH_DIR}/build"
 OUTPUT_DIR="${YUNSH_DIR}/output"
 VERSION_CONF="${BUILD_DIR}/yunsh-version.conf"
 if [ ! -f "${VERSION_CONF}" ]; then
-    printf 'VERSION=v3.1.0\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
+    printf 'VERSION=v3.1.1\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
 fi
 VERSION="$(awk -F= '$1 == "VERSION" { print $2; exit }' "${VERSION_CONF}")"
 BUILD_ID="${YUNSH_BUILD_ID:-$(date +%Y.%m.%d)}"
@@ -251,8 +251,8 @@ mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null > "${BUILD_DIR}/yunsh-config-ne
 # The base Raspberry Pi image may carry a generic VC4 overlay or the legacy
 # firmware-KMS hand-off switch. Normalize both before adding the Pi 5 section:
 # the Pi 5 overlay still asks firmware for its initial framebuffer, while the
-# userspace launcher can fall back to Qt linuxfb when the VC4 clock provider is
-# unavailable.
+# userspace launcher requires the DRM card and Wayland compositor for the
+# normal desktop path.
 sed -i '' -e 's/^dtoverlay=vc4-kms-v3d$/dtoverlay=vc4-kms-v3d-pi5/' \
     -e '/^disable_fw_kms_setup=1$/d' "${BUILD_DIR}/yunsh-config-new.txt" 2>/dev/null || \
 sed -i -e 's/^dtoverlay=vc4-kms-v3d$/dtoverlay=vc4-kms-v3d-pi5/' \
@@ -303,11 +303,10 @@ case " ${CMDLINE} " in
     *" root=/dev/mmcblk0p2 "*) ;;
     *) CMDLINE="${CMDLINE} root=/dev/mmcblk0p2" ;;
 esac
-# Keep the blacklist at the end of the canonical line, matching the confirmed
-# Pi 5 SD layout while retaining the firmware-framebuffer fallback. Serial0
+# Keep the canonical Pi 5 SD layout. Serial0
 # remains the diagnostic console; tty1 stays clean for splash and UI output.
 CMDLINE=$(printf '%s\n' "${CMDLINE}" | sed -E 's/  +/ /g; s/^ +//; s/ +$//')
-echo "${CMDLINE} quiet splash logo.nologo consoleblank=0 loglevel=3 vt.global_cursor_default=0 cma=256M psi=1 systemd.show_status=false systemd.log_target=journal systemd.log_level=notice systemd.default_standard_output=journal module_blacklist=vc4,v3d" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
+echo "${CMDLINE} quiet splash logo.nologo consoleblank=0 loglevel=3 vt.global_cursor_default=0 cma=256M psi=1 systemd.show_status=false systemd.log_target=journal systemd.log_level=notice systemd.default_standard_output=journal" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
 mdel -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null || true
 mcopy -i "${BOOT_IMG}" "${BUILD_DIR}/yunsh-cmdline-new.txt" ::/cmdline.txt
 echo "  ✓ cmdline.txt modified"
@@ -346,7 +345,10 @@ mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^hdmi_drive=2'
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtparam=i2c_arm=on'
 mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'psi=1'
 mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'root=/dev/mmcblk0p2'
-mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'module_blacklist=vc4,v3d'
+if mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'module_blacklist=vc4,v3d'; then
+    echo "  ✗ Pi 5 VC4/V3D is blacklisted; primary Wayland cannot start"
+    exit 1
+fi
 if mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'root=PARTUUID='; then
     echo "  ✗ Stale PARTUUID root target remains"
     exit 1
@@ -451,7 +453,7 @@ if [ -f "$APK_FILE" ] && [ "$(stat -f%z "$APK_FILE" 2>/dev/null || stat -c%s "$A
     echo "  Tencent Appstore APK injected"
 fi
 add_file "$FDROID_FILE" "/usr/share/yunsh/apps/fdroid.apk"
-echo "  F-Droid APK injected (verified fallback)"
+echo "  F-Droid APK injected (verified catalogue)"
 
 # Launcher script
 LAUNCHER_FILE="${BUILD_DIR}/yunsh-ui-launcher"
@@ -474,14 +476,6 @@ wifi_only=true
 update_channel=stable
 UC
 add_file "${BUILD_DIR}/yunsh-update.conf" "/etc/yunsh/update.conf"
-
-# The confirmed Pi 5 + current HDMI display combination triggers a Weston DRM
-# plane assertion when the pointer moves.  Keep the release image on the
-# tested Qt linuxfb path; a future display-specific image can remove this
-# device-policy marker after a real Wayland/DRM regression test.
-printf 'Pi 5 DRM plane fallback: use Qt linuxfb until display profile is revalidated.\n' \
-    > "${BUILD_DIR}/yunsh-force-linuxfb"
-add_file "${BUILD_DIR}/yunsh-force-linuxfb" "/etc/yunsh/force-linuxfb"
 
 add_file "${IMAGE_VERSION_CONF}" "/etc/yunsh/version.conf"
 
@@ -796,7 +790,6 @@ Description=YUNSH OS Android Runtime Setup
 After=network-online.target
 Wants=network-online.target
 ConditionPathExists=/etc/yunsh/.packages_installed
-ConditionPathExists=!/var/lib/yunsh/.android_ready
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/yunsh-android setup

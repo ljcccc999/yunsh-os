@@ -20,6 +20,7 @@ DOWNLOAD_DIR = os.path.realpath(
     os.environ.get("YUNSH_DOWNLOAD_DIR", "/home/yunsh/Downloads")
 )
 UI_STATE_PATH = os.environ.get("YUNSH_UI_STATE_PATH", "/tmp/yunsh-ui-state.json")
+BOOT_LOCK_PATH = os.environ.get("YUNSH_BOOT_LOCK_PATH", "/etc/yunsh/boot-lock")
 
 # Map internal app IDs to launch actions
 APP_MAP = {
@@ -198,6 +199,16 @@ class AppHandler(BaseHTTPRequestHandler):
         if command not in commands:
             return {"status": "error", "message": "Invalid system action"}
         try:
+            # Reboot and poweroff must never return directly to an unlocked
+            # desktop. The launcher also writes this marker on every normal
+            # boot, covering power loss and hardware resets.
+            if command in {"restart", "shutdown"}:
+                os.makedirs(os.path.dirname(BOOT_LOCK_PATH), exist_ok=True)
+                temporary = f"{BOOT_LOCK_PATH}.tmp.{os.getpid()}"
+                with open(temporary, "w", encoding="utf-8") as handle:
+                    handle.write("required\n")
+                os.chmod(temporary, 0o600)
+                os.replace(temporary, BOOT_LOCK_PATH)
             subprocess.Popen(
                 ["/bin/bash", "-c", "sleep 1; exec \"$@\"", "yunsh-system-action"]
                 + commands[command],
@@ -350,7 +361,7 @@ class AppHandler(BaseHTTPRequestHandler):
                 pass
             return values
 
-        version = read_values("/etc/yunsh/version.conf").get("VERSION", "v3.1.0")
+        version = read_values("/etc/yunsh/version.conf").get("VERSION", "v3.1.1")
         language = read_values("/etc/yunsh/language.conf")
         return {
             "status": "ok",
@@ -410,7 +421,7 @@ class AppHandler(BaseHTTPRequestHandler):
         model = read_text("/proc/device-tree/model").replace("\x00", "").strip()
         return {
             "status": "ok",
-            "version": version.get("VERSION", "v3.1.0"),
+            "version": version.get("VERSION", "v3.1.1"),
             "build": version.get("BUILD", ""),
             "model": model or "Raspberry Pi",
             "cpu": f"{cpu_name or 'ARM processor'} × {os.cpu_count() or 1}",

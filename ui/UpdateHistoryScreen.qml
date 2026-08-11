@@ -20,7 +20,7 @@ Item {
     /* ---- Data model ---- */
     property var updateHistory: [
         {
-            version: "3.1.0",
+            version: "3.1.1",
             date: "2026-08-10",
             changelog: "首次安装、网络与空间输入可靠性更新。\n• 首次安装显示真实下载 MB，并区分下载、解包与配置\n• NetworkManager 自动接管、检测和恢复网络\n• 自动识别 Ethernet，并自动搜索附近 Wi-Fi\n• 设置无线区域，修复正确密码仍无法连接\n• 虚拟键盘稳定唤起，补全杠类符号与长按退格\n• 窗口打开时点击桌面临时显示 App 图标 30 秒",
             build: "build 2026.0810"

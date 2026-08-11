@@ -17,9 +17,14 @@ Rectangle {
     property bool reduceMotion: false
     property bool recordingActive: false
     property bool fullscreenMode: false
+    // The bar remains available above the password lock so the user can
+    // reach the local power controls without opening the rest of the shell.
+    property bool locked: false
+    property bool powerMenuVisible: false
     signal openSystemMenu()
     signal openWorld()
     signal openOrbit()
+    signal requestPowerAction(string action)
     signal orbitApprovalDecision(string decision)
 
     Rectangle {
@@ -72,7 +77,12 @@ Rectangle {
             id: leftMouse
             anchors.fill: parent
             hoverEnabled: true
-            onClicked: menuBar.openSystemMenu()
+            onClicked: {
+                if (menuBar.locked)
+                    menuBar.powerMenuVisible = !menuBar.powerMenuVisible
+                else
+                    menuBar.openSystemMenu()
+            }
         }
         DragHandler {
             enabled: menuBar.fullscreenMode
@@ -85,6 +95,76 @@ Rectangle {
         Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
     }
 
+    // Keep this menu deliberately small: power actions are the only controls
+    // exposed while locked. The confirmation dialog remains in main.qml and
+    // therefore still uses the normal local confirmation rules.
+    Rectangle {
+        id: powerMenu
+        x: 18
+        y: 62
+        width: 178
+        height: 104
+        radius: 18
+        visible: menuBar.locked && menuBar.powerMenuVisible
+        z: 20
+        color: Qt.rgba(248/255, 253/255, 255/255, 0.96)
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.98)
+
+        Column {
+            anchors.fill: parent
+            anchors.margins: 8
+            spacing: 4
+            Rectangle {
+                width: parent.width
+                height: 40
+                radius: 13
+                color: restartMouse.pressed ? "#BDEFFF" : "transparent"
+                Text {
+                    anchors.centerIn: parent
+                    text: "重新启动"
+                    color: "#14202A"
+                    font.pixelSize: 14
+                    font.weight: Font.DemiBold
+                }
+                MouseArea {
+                    id: restartMouse
+                    anchors.fill: parent
+                    onClicked: {
+                        menuBar.powerMenuVisible = false
+                        menuBar.requestPowerAction("restart")
+                    }
+                }
+            }
+            Rectangle {
+                width: parent.width
+                height: 40
+                radius: 13
+                color: shutdownMouse.pressed ? "#FFD7DA" : "transparent"
+                Text {
+                    anchors.centerIn: parent
+                    text: "关机"
+                    color: "#B4232D"
+                    font.pixelSize: 14
+                    font.weight: Font.DemiBold
+                }
+                MouseArea {
+                    id: shutdownMouse
+                    anchors.fill: parent
+                    onClicked: {
+                        menuBar.powerMenuVisible = false
+                        menuBar.requestPowerAction("shutdown")
+                    }
+                }
+            }
+        }
+    }
+
+    onLockedChanged: {
+        if (!locked)
+            powerMenuVisible = false
+    }
+
     onFullscreenModeChanged: {
         if (!fullscreenMode) {
             leftEntry.x = 18
@@ -94,6 +174,7 @@ Rectangle {
 
     Rectangle {
         id: worldPortal
+        visible: !menuBar.locked
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: parent.verticalCenter
         width: 72
@@ -151,6 +232,7 @@ Rectangle {
 
     Rectangle {
         id: orbitEntry
+        visible: !menuBar.locked
         anchors.right: parent.right
         anchors.rightMargin: 18
         anchors.verticalCenter: parent.verticalCenter

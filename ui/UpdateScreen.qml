@@ -17,7 +17,7 @@ Item {
     signal backToHome()
 
     /* ---- State ---- */
-    property string currentVersion: "3.1.0"
+    property string currentVersion: "3.1.1"
     property string latestVersion: ""
     property bool updateAvailable: false
     property bool isChecking: false
@@ -41,7 +41,7 @@ Item {
             if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
                 try {
                     var data = JSON.parse(xhr.responseText);
-                    currentVersion = data.currentVersion || "3.1.0";
+                    currentVersion = data.currentVersion || "3.1.1";
                     latestVersion = data.latestVersion || "";
                     updateAvailable = data.updateAvailable || false;
                     autoUpdate = data.autoUpdate || false;

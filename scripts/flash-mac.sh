@@ -13,7 +13,7 @@ IFS=$'\n\t'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VERSION_CONF="${SCRIPT_DIR}/../build/yunsh-version.conf"
-DEFAULT_VERSION="v3.1.0"
+DEFAULT_VERSION="v3.1.1"
 if [ -f "$VERSION_CONF" ]; then
     DEFAULT_VERSION="$(awk -F= '$1 == "VERSION" {print $2; exit}' "$VERSION_CONF")"
 fi

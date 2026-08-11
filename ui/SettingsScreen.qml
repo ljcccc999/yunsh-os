@@ -21,7 +21,7 @@ Rectangle {
     signal openComfortDna()
     signal requestFactoryReset()
 
-    property string osVersionName: "YUNSH OS v3.1.0"
+    property string osVersionName: "YUNSH OS v3.1.1"
     property string selectedLanguageDisplay: "简体中文 · 拼音"
     property int autoLockSeconds: 120
     property bool lockPasswordEnabled: true

@@ -21,7 +21,7 @@ system world, an optical-display-ready desktop, the system-level Orbit agent,
 connected-device services, and Bluetooth-connected motion tracking in one
 portable Raspberry Pi 5 environment.
 
-The current local release line is **v3.1.0**, with a circular liquid-glass
+The current local release line is **v3.1.1**, with a circular liquid-glass
 Orbit identity, direct in-island tool approvals, voice speaking-wave feedback,
 interruptible window transitions, a movable Orbit and spatial keyboard, and a
 desktop icon shelf that recedes when an application window opens, all within a
@@ -130,7 +130,7 @@ app does not retain the API key.
 - Integrated Android application environment through Waydroid on the YUNSH Wayland session; its background preparation never blocks the desktop or activation flow.
 - Android preparation reports failed or stale background setup with an explicit
   retry action instead of leaving the interface in an endless preparing state.
-- Built-in Android app catalogue with a verified F-Droid fallback, plus APK side-loading through `yunsh-android install-apk`.
+- Built-in Android app catalogue with a verified F-Droid catalogue, plus APK side-loading through `yunsh-android install-apk`.
 
 ### Device services
 
@@ -228,10 +228,10 @@ The initial setup creates the fixed Linux `yunsh` service account before any
 package transaction, downloads the required desktop and media packages,
 including the Raspberry Pi 5 DRM/KMS, EGL, OpenGL, Vulkan, FFmpeg, and OCR
 runtime, then reboots once into activation. Connect Ethernet before first
-power-on. On Pi 5 firmware/kernel combinations where the VC4 DRM clock
-provider is unavailable, the image keeps the firmware framebuffer available
-and runs the Qt activation UI through the software `linuxfb` path; this keeps
-the interface visible but is not accelerated DRM/KMS rendering. Activation
+power-on. The graphical desktop requires the Pi 5 DRM/KMS card and starts
+Weston with the Pixman renderer as the primary Wayland path; if that path
+cannot start, the service reports an error instead of silently switching to a
+legacy framebuffer surface. Activation
 starts with multilingual Hello, then guides language,
 Wi-Fi, optional glasses and YUNSH Link pairing, a local account, optional Orbit
 provider/model/key/voice configuration, and optional Comfort DNA. Completing
@@ -247,7 +247,7 @@ Factory reset clears user data, saved Wi-Fi networks, Bluetooth pairings, and th
 
 ## Motion tracking
 
-YUNSH OS supports optional Bluetooth-connected motion tracking for spatial interaction. The head-tracking bridge provides a consistent interface for compatible motion sources and for the built-in development simulator. After tracking is available, each floating window can be placed directly in a front, left-angle, right-angle, or distance layout from its title bar. The current direction can be recentered from the always-available standalone Recenter button or YUNSH Link on iPhone. A keyboard shortcut remains only as a development fallback.
+YUNSH OS supports optional Bluetooth-connected motion tracking for spatial interaction. The head-tracking bridge provides a consistent interface for compatible motion sources and for the built-in development simulator. After tracking is available, each floating window can be placed directly in a front, left-angle, right-angle, or distance layout from its title bar. The current direction can be recentered from the always-available standalone Recenter button or YUNSH Link on iPhone. A keyboard shortcut remains available for development.
 
 ```text
 Bluetooth motion controller → head-tracking bridge → YUNSH OS workspace
@@ -274,17 +274,17 @@ scripts/build-no-hdiutil.sh
 
 Review the script and its input image requirements before building. Generated images and large build artifacts are intentionally excluded from version control.
 
-When DRM/KMS is available, the primary image build leaves display timing to
-the connected controller's EDID and does not force a legacy 1920×1080 kernel
-mode. If the Pi firmware cannot expose a DRM card, YUNSH OS keeps the firmware
-framebuffer and uses Qt's software `linuxfb` path instead. YUNSH OS outputs one
-complete frame by default; the current glasses controller is responsible for
-showing that same frame on both displays.
+The primary image build leaves display timing to the connected controller's
+EDID and does not force a legacy 1920×1080 kernel mode. YUNSH OS requires a
+DRM/KMS card and uses Weston/Wayland with the software Pixman renderer; it does
+not silently downgrade to Qt `linuxfb`. YUNSH OS outputs one complete frame by
+default; the current glasses controller is responsible for showing that same
+frame on both displays.
 
 ## Project status
 
 YUNSH OS is an active prototype for YUNSH spatial computing hardware. The
-v3.1.0 release line is validated through static QML, Python, shell, image
+v3.1.1 release line is validated through static QML, Python, shell, image
 structure, partition, boot configuration,
 ext4, embedded-file, and systemd-link checks. The current local
 rebuild also carries a read-only confirmed Raspberry Pi 5 firmware/kernel

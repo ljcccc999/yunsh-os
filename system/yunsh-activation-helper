@@ -55,6 +55,9 @@ UI_COMMAND_PATH = os.environ.get(
 LOCK_STATE_PATH = os.environ.get(
     "YUNSH_LOCK_STATE_PATH", "/run/yunsh/screen-lock.json"
 )
+BOOT_LOCK_PATH = os.environ.get(
+    "YUNSH_BOOT_LOCK_PATH", "/etc/yunsh/boot-lock"
+)
 SCREEN_RELAY_STATUS_PATH = os.environ.get(
     "YUNSH_SCREEN_STATUS_PATH", "/run/yunsh/screen-relay-status.json"
 )
@@ -498,6 +501,26 @@ def set_lock_state(payload):
         except FileNotFoundError:
             pass
     return {"success": True, "locked": locked}
+
+
+def set_boot_lock(payload):
+    """Require a fresh local unlock after the next normal boot."""
+    required = bool(payload.get("required"))
+    try:
+        if required:
+            os.makedirs(os.path.dirname(BOOT_LOCK_PATH), exist_ok=True)
+            temporary = f"{BOOT_LOCK_PATH}.tmp.{os.getpid()}"
+            with open(temporary, "w", encoding="utf-8") as handle:
+                handle.write("required\n")
+            os.chmod(temporary, 0o600)
+            os.replace(temporary, BOOT_LOCK_PATH)
+        else:
+            os.unlink(BOOT_LOCK_PATH)
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        return {"success": False, "error": str(exc)}
+    return {"success": True, "required": required}
 
 
 def sanitize_spatial_preferences(payload):
@@ -1193,6 +1216,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(get_ui_command())
         elif self.path == "/api/clipboard":
             self._send({"success": True, "text": _clipboard_text()})
+        elif self.path == "/api/boot-lock":
+            self._send({"success": True, "required": os.path.exists(BOOT_LOCK_PATH)})
         elif self.path == "/api/input-method":
             self._send(input_method_status())
         elif self.path == "/api/screen-relay-status":
@@ -1255,6 +1280,8 @@ class Handler(BaseHTTPRequestHandler):
             result = change_boot_password(payload)
         elif self.path == "/api/lock-state":
             result = set_lock_state(payload)
+        elif self.path == "/api/boot-lock":
+            result = set_boot_lock(payload)
         elif self.path == "/api/input-method":
             result = set_input_method(payload)
         elif self.path == "/api/clipboard":
