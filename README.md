@@ -21,7 +21,7 @@ system world, an optical-display-ready desktop, the system-level Orbit agent,
 connected-device services, and Bluetooth-connected motion tracking in one
 portable Raspberry Pi 5 environment.
 
-The current local release line is **v3.1.6**, with a circular liquid-glass
+The current local release line is **v4.0**, with a circular liquid-glass
 Orbit identity, direct in-island tool approvals, voice speaking-wave feedback,
 interruptible window transitions, a movable Orbit and spatial keyboard, and a
 desktop icon shelf that recedes when an application window opens, all within a
@@ -118,6 +118,17 @@ Wi-Fi or an iPhone hotspot. Chat, tool approvals, provider/model selection, and
 API-key setup target the same Orbit instance shown in the glasses; the iPhone
 app does not retain the API key.
 
+### Linux AI + XR camera foundation
+
+The Linux build includes an on-demand USB camera bridge at
+`127.0.0.1:8598`. Orbit can inspect camera availability and, after camera
+permission is granted, capture one frame for local OCR or a future visual
+model. The camera is not kept streaming by this bridge, and a missing camera
+or optional media package never blocks the desktop. This is the first AI + XR
+integration layer; it does not claim object detection, depth estimation, or
+6DoF visual-inertial tracking. Those require a selected camera, calibration
+data, a local vision model, and real Raspberry Pi/optical-display testing.
+
 ### Built-in applications
 
 - Web browser powered by Qt WebEngine.
@@ -127,10 +138,11 @@ app does not retain the API key.
 - SpaceCapsule workspace manager.
 - iPhone Screen Relay as a movable, resizable, pinnable spatial window, using an explicitly started ReplayKit broadcast over encrypted local Wi-Fi.
 - Settings, system information, update center, network, and Bluetooth management.
-- Integrated Android application environment through Waydroid on the YUNSH Wayland session; its background preparation never blocks the desktop or activation flow.
+- Integrated Android application environment through Waydroid on the YUNSH Wayland session. The full v4.0 image preloads the matching arm64 system/vendor images and F-Droid; background initialization and app installation never block the Linux desktop or activation flow.
 - Android preparation reports failed or stale background setup with an explicit
   retry action instead of leaving the interface in an endless preparing state.
-- Built-in Android app catalogue with a verified F-Droid catalogue, plus APK side-loading through `yunsh-android install-apk`.
+- APK downloads are saved to the native Linux Downloads folder. Opening an APK from the browser download list or the native Files app installs it into Waydroid and adds it to the YUNSH home-screen pages automatically.
+- Native Linux packages in Downloads can be double-clicked in Files: `.deb` packages are installed through apt with dependency resolution, while `.AppImage` files are made executable and launched. The same APK path accepts a user-provided Tencent Appstore APK; once installed, Tencent Appstore runs inside Waydroid and can install Android apps normally. F-Droid remains the default preloaded store.
 
 ### Device services
 
@@ -190,6 +202,7 @@ Raspberry Pi 5
     ├── Shared focal-plane application windows
     ├── System services · network · Bluetooth · updates · power
     ├── DRM/KMS + V3D Mesa graphics · Wayland-composited applications
+    ├── OpenXR loader integration · optional Monado/YUNSH runtime manifest
     ├── Wayland-composited Waydroid application environment
     └── Optional Bluetooth motion controller → head-tracking service
 ```
@@ -225,7 +238,7 @@ Compare the result with the matching `.sha256` asset published with the release.
 ## First boot
 
 The initial setup creates the fixed Linux `yunsh` service account before any
-package transaction, downloads the required desktop and media packages,
+package transaction, installs the required desktop and media packages,
 including the Raspberry Pi 5 DRM/KMS, EGL, OpenGL, Vulkan, FFmpeg, and OCR
 runtime, then reboots once into activation. Connect Ethernet before first
 power-on. The graphical desktop requires the Pi 5 DRM/KMS card and starts
@@ -237,6 +250,12 @@ Wi-Fi, optional glasses and YUNSH Link pairing, a local account, optional Orbit
 provider/model/key/voice configuration, and optional Comfort DNA. Completing
 or skipping activation creates a persistent activation marker, so later boots
 open the desktop directly.
+
+Android/Waydroid is an optional preloaded runtime. Release images should carry
+the matching arm64 `system.img` and `vendor.img` pair under the image's
+Waydroid preload path so first boot only initializes local files; online image
+initialization is disabled by default. If a build does not contain that pair,
+Android is reported unavailable rather than starting an unbounded download.
 
 The Pi-side YUNSH Link BLE service advertises the separate OS service and keeps
 phone pairing available during setup. The iPhone still must complete the
@@ -281,10 +300,33 @@ not silently downgrade to Qt `linuxfb`. YUNSH OS outputs one complete frame by
 default; the current glasses controller is responsible for showing that same
 frame on both displays.
 
+OpenXR integration is optional and non-blocking. The image installs available
+Khronos OpenXR loader packages when the active Raspberry Pi OS repository
+provides them, and `yunsh-openxr` records loader, Vulkan, runtime-manifest, and
+tracking-source availability in `/var/lib/yunsh/openxr-status.json`. A runtime
+such as Monado or a future YUNSH runtime still requires a compatible manifest
+and display driver. Linux XR applications can use the standard boundary
+`yunsh-openxr-run APP [ARGS...]` once a runtime is installed; the command fails
+clearly when the loader or runtime manifest is missing. This image does not
+claim that a complete XR runtime or a target-glasses hardware test is already
+present.
+
+### Full-image storage note
+
+The v4.0 full image is intentionally larger than earlier Linux images because
+it carries an offline Waydroid runtime instead of forcing a long first-boot
+download. The current arm64 pair is approximately **2.2 GiB unpacked** before
+the App Store APK and the rest of YUNSH OS are added. The compressed download
+is smaller, but the installed root filesystem still needs the unpacked space.
+Use a sufficiently large SD card and allow first boot to expand the root
+filesystem. F-Droid preinstallation and later APK installs
+run as independent background work; failure is logged and surfaced without
+preventing the Linux desktop from starting.
+
 ## Project status
 
 YUNSH OS is an active prototype for YUNSH spatial computing hardware. The
-v3.1.6 release line is validated through static QML, Python, shell, image
+v4.0 release line is validated through static QML, Python, shell, image
 structure, partition, boot configuration, ext4, embedded-file, and
 systemd-link checks. A clean ARM64 generic-virt test completed firstboot,
 downloaded packages with MB progress, crossed the former 42% handoff,

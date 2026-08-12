@@ -8,11 +8,11 @@ BUILD_DIR="${YUNSH_DIR}/build"
 OUTPUT_DIR="${YUNSH_DIR}/output"
 VERSION_CONF="${BUILD_DIR}/yunsh-version.conf"
 if [ ! -f "${VERSION_CONF}" ]; then
-    printf 'VERSION=v3.1.1\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
+    printf 'VERSION=v4.0\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
 fi
 VERSION="$(awk -F= '$1 == "VERSION" { print $2; exit }' "${VERSION_CONF}")"
 BUILD_ID="${YUNSH_BUILD_ID:-$(date +%Y.%m.%d)}"
-if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.]+)?$ ]]; then
+if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+(\.[0-9]+)?([.-][A-Za-z0-9.]+)?$ ]]; then
     echo "ERROR: invalid VERSION in ${VERSION_CONF}: ${VERSION}"
     exit 1
 fi
@@ -124,27 +124,46 @@ python3 "${YUNSH_DIR}/scripts/generate-splash.py"
 
 # ─── Step 5: Download a verified Android app store ──
 echo ""
-echo "=== Downloading Android app store ==="
+echo "=== Preparing F-Droid Android app store ==="
 APK_FILE="${BUILD_DIR}/apps/appstore.apk"
 FDROID_FILE="${BUILD_DIR}/apps/fdroid.apk"
 mkdir -p "${BUILD_DIR}/apps"
-if [ ! -f "$APK_FILE" ] || [ "$(stat -f%z "$APK_FILE" 2>/dev/null || echo 0)" -lt 1000000 ]; then
+if [ "${YUNSH_USE_TENCENT_APPSTORE:-0}" != "1" ]; then
+    YUNSH_INCLUDE_FDROID_FALLBACK=1
+fi
+if [ "${YUNSH_USE_TENCENT_APPSTORE:-0}" = "1" ]; then
+if [ ! -f "$APK_FILE" ] || [ "$(stat -f%z "$APK_FILE" 2>/dev/null || stat -c%s "$APK_FILE" 2>/dev/null || echo 0)" -lt 1000000 ]; then
     for url in \
         "https://dlied6.myapp.com/myapp/1104466820/sgame/20191217/com.tencent.android.qqdownloader_latest.apk" \
         "https://appdownload.myapp.com/myapp/1104466820/sgame/20191217/com.tencent.android.qqdownloader.apk"; do
         echo "  Trying: $url"
-        curl -L -o "${APK_FILE}" --max-time 30 "$url" 2>/dev/null && break || true
+        curl -fL --connect-timeout 15 --retry 3 --retry-delay 2 \
+            -o "${APK_FILE}.download" --max-time 300 "$url" 2>/dev/null && {
+            mv "${APK_FILE}.download" "${APK_FILE}"
+            break
+        } || true
     done
-    if [ ! -f "$APK_FILE" ] || [ "$(stat -f%z "$APK_FILE" 2>/dev/null || echo 0)" -lt 100000 ]; then
+    if [ ! -f "$APK_FILE" ] || [ "$(stat -f%z "$APK_FILE" 2>/dev/null || stat -c%s "$APK_FILE" 2>/dev/null || echo 0)" -lt 100000 ]; then
         rm -f "$APK_FILE"
-        echo "  Tencent Appstore unavailable; using F-Droid"
+        echo "  Tencent Appstore unavailable"
+        if [ "${YUNSH_ALLOW_FDROID_FALLBACK:-0}" = "1" ]; then
+            YUNSH_INCLUDE_FDROID_FALLBACK=1
+            echo "  Using F-Droid as the configured Android app store"
+        else
+            echo "ERROR: Tencent Appstore was explicitly requested but is unavailable"
+            echo "Remove YUNSH_USE_TENCENT_APPSTORE=1 to use the default F-Droid store."
+            exit 1
+        fi
     fi
 fi
-if [ ! -f "$FDROID_FILE" ] || [ "$(stat -f%z "$FDROID_FILE" 2>/dev/null || echo 0)" -lt 1000000 ]; then
+fi
+if [ "${YUNSH_INCLUDE_FDROID_FALLBACK:-0}" = "1" ] &&
+   { [ ! -f "$FDROID_FILE" ] || [ "$(stat -f%z "$FDROID_FILE" 2>/dev/null || stat -c%s "$FDROID_FILE" 2>/dev/null || echo 0)" -lt 1000000 ]; }; then
     curl -fL --connect-timeout 15 --max-time 300 \
         -o "${FDROID_FILE}.download" https://f-droid.org/F-Droid.apk
     mv "${FDROID_FILE}.download" "$FDROID_FILE"
 fi
+if [ "${YUNSH_INCLUDE_FDROID_FALLBACK:-0}" = "1" ]; then
 python3 - "$FDROID_FILE" <<'PY'
 import os, sys, zipfile
 p = sys.argv[1]
@@ -155,6 +174,7 @@ with zipfile.ZipFile(p) as z:
         raise SystemExit("ERROR: APK has no AndroidManifest.xml")
 print(f"  ✓ verified APK container ({os.path.getsize(p)} bytes)")
 PY
+fi
 
 # ─── Step 6: Inject boot partition (mtools) ────────
 echo ""
@@ -430,6 +450,8 @@ echo "mkdir /usr/share/yunsh/icons" >> "${DEBUGFS_SCRIPT}"
 echo "mkdir /usr/share/yunsh/apps" >> "${DEBUGFS_SCRIPT}"
 echo "mkdir /usr/share/yunsh/logo" >> "${DEBUGFS_SCRIPT}"
 echo "mkdir /etc/yunsh" >> "${DEBUGFS_SCRIPT}"
+echo "mkdir /etc/waydroid-extra" >> "${DEBUGFS_SCRIPT}"
+echo "mkdir /etc/waydroid-extra/images" >> "${DEBUGFS_SCRIPT}"
 
 # A reused base image must never turn a release into an already-installed or
 # already-activated system. Remove all boot-state markers before injecting the
@@ -475,9 +497,12 @@ add_file "${YUNSH_DIR}/system/yunsh-bno085-reader" "/usr/bin/yunsh-bno085-reader
 add_file "${YUNSH_DIR}/system/yunsh-headtracking-sim" "/usr/bin/yunsh-headtracking-sim"
 add_file "${YUNSH_DIR}/system/yunsh-screenshotd" "/usr/bin/yunsh-screenshotd"
 add_file "${YUNSH_DIR}/system/yunsh-recordingd" "/usr/bin/yunsh-recordingd"
+add_file "${YUNSH_DIR}/system/yunsh-visiond" "/usr/bin/yunsh-visiond"
 add_file "${YUNSH_DIR}/system/yunsh-media-setup" "/usr/bin/yunsh-media-setup"
 add_file "${YUNSH_DIR}/system/yunsh-grow-root" "/usr/bin/yunsh-grow-root"
 add_file "${YUNSH_DIR}/system/yunsh-time-sync" "/usr/bin/yunsh-time-sync"
+add_file "${YUNSH_DIR}/system/yunsh-openxr" "/usr/bin/yunsh-openxr"
+add_file "${YUNSH_DIR}/system/yunsh-openxr-run" "/usr/bin/yunsh-openxr-run"
 add_file "${YUNSH_DIR}/system/yunsh-factory-reset" "/usr/bin/yunsh-factory-reset"
 add_file "${YUNSH_DIR}/system/yunsh-install-progress.sh" "/usr/bin/yunsh-install-progress.sh"
 add_file "${YUNSH_DIR}/system/yunsh-inputd" "/usr/bin/yunsh-inputd"
@@ -494,6 +519,27 @@ add_file "${YUNSH_DIR}/system/yunsh-logrotate.conf" "/etc/logrotate.d/yunsh"
 add_file "${YUNSH_DIR}/.gitignore" "/root/.gitignore"
 add_file "${YUNSH_DIR}/boot/yunsh-firstboot.sh" "/usr/bin/yunsh-firstboot.sh"
 add_file "${YUNSH_DIR}/boot/yunsh-iptables.sh" "/usr/bin/yunsh-iptables.sh"
+add_file "${YUNSH_DIR}/yunsh-openxr.conf" "/etc/yunsh/openxr.conf"
+add_file "${YUNSH_DIR}/yunsh-android.conf" "/etc/yunsh/android.conf"
+
+# Optional offline Android payload. The images are intentionally kept outside
+# Git and are injected only when the builder has a complete matching arm64
+# pair. This removes the multi-hour first-boot download while keeping builds
+# reproducible and preventing a partial payload from being called ready.
+ANDROID_PRELOAD_DIR="${YUNSH_ANDROID_PRELOAD_DIR:-${BUILD_DIR}/android-runtime/images}"
+if [ -s "${ANDROID_PRELOAD_DIR}/system.img" ] &&
+   [ -s "${ANDROID_PRELOAD_DIR}/vendor.img" ]; then
+    add_file "${ANDROID_PRELOAD_DIR}/system.img" "/etc/waydroid-extra/images/system.img"
+    add_file "${ANDROID_PRELOAD_DIR}/vendor.img" "/etc/waydroid-extra/images/vendor.img"
+    echo "  ✓ Preloaded arm64 Waydroid system/vendor images"
+else
+    echo "  ⚠ No complete arm64 Waydroid preload found"
+    if [ "${YUNSH_REQUIRE_ANDROID_PRELOAD:-1}" = "1" ]; then
+        echo "ERROR: release image requires a complete arm64 Waydroid system.img/vendor.img pair"
+        echo "Run scripts/prepare-waydroid-arm64-images.sh first, or set YUNSH_REQUIRE_ANDROID_PRELOAD=0 for a non-Android development image."
+        exit 1
+    fi
+fi
 
 # Android application stores
 APK_FILE="${BUILD_DIR}/apps/appstore.apk"
@@ -502,8 +548,19 @@ if [ -f "$APK_FILE" ] && [ "$(stat -f%z "$APK_FILE" 2>/dev/null || stat -c%s "$A
     add_file "$APK_FILE" "/usr/share/yunsh/apps/appstore.apk"
     echo "  Tencent Appstore APK injected"
 fi
-add_file "$FDROID_FILE" "/usr/share/yunsh/apps/fdroid.apk"
-echo "  F-Droid APK injected (verified catalogue)"
+if [ "${YUNSH_INCLUDE_FDROID_FALLBACK:-0}" = "1" ] && [ -f "$FDROID_FILE" ]; then
+    add_file "$FDROID_FILE" "/usr/share/yunsh/apps/fdroid.apk"
+    echo "  Optional F-Droid fallback injected"
+fi
+
+if [ -f "$APK_FILE" ] && [ "$(stat -f%z "$APK_FILE" 2>/dev/null || stat -c%s "$APK_FILE" 2>/dev/null || echo 0)" -ge 1000000 ]; then
+    echo "  Optional Tencent Appstore APK injected"
+elif [ "${YUNSH_INCLUDE_FDROID_FALLBACK:-0}" != "1" ]; then
+    echo "ERROR: no valid Android app-store APK is available for the full 4.0 image"
+    exit 1
+else
+    echo "  F-Droid is the configured Android app store"
+fi
 
 # Launcher script
 LAUNCHER_FILE="${BUILD_DIR}/yunsh-ui-launcher"
@@ -814,6 +871,25 @@ WantedBy=multi-user.target
 ORBITVOICESVC
 add_file "${BUILD_DIR}/orbit-voice-setup.service" "/etc/systemd/system/orbit-voice-setup.service"
 
+# USB camera bridge for on-demand AI + XR observation. It is deliberately
+# independent from the desktop: missing cameras or ffmpeg must never block UI.
+cat > "${BUILD_DIR}/yunsh-vision.service" << 'VISIONSVC'
+[Unit]
+Description=YUNSH USB Vision Camera Bridge
+After=local-fs.target
+ConditionPathExists=/etc/yunsh/.packages_installed
+[Service]
+Type=simple
+ExecStart=/usr/bin/yunsh-visiond
+Restart=always
+RestartSec=5
+User=root
+UMask=0077
+[Install]
+WantedBy=multi-user.target
+VISIONSVC
+add_file "${BUILD_DIR}/yunsh-vision.service" "/etc/systemd/system/yunsh-vision.service"
+
 cat > "${BUILD_DIR}/yunsh-media-setup.service" << 'MEDIASVC'
 [Unit]
 Description=YUNSH Optional Screen Recording and OCR Setup
@@ -852,6 +928,28 @@ RestartSec=120
 WantedBy=multi-user.target
 ANDROIDSVC
 add_file "${BUILD_DIR}/yunsh-android-setup.service" "/etc/systemd/system/yunsh-android-setup.service"
+
+# Install the embedded Android stores after the runtime is ready. This is an
+# independent background job: a slow Waydroid session or a bad APK must never
+# delay the Linux desktop, activation, or yunsh-os.service.
+cat > "${BUILD_DIR}/yunsh-android-store.service" << 'ANDROIDSTORESVC'
+[Unit]
+Description=YUNSH OS Preinstall Android App Stores
+After=yunsh-os.service yunsh-android-setup.service
+Wants=yunsh-android-setup.service
+ConditionPathExists=/etc/yunsh/.packages_installed
+ConditionPathExists=/usr/share/yunsh/apps/appstore.apk
+[Service]
+Type=simple
+ExecStart=/usr/bin/yunsh-android install-store
+TimeoutStartSec=900
+Restart=on-failure
+RestartSec=120
+Nice=10
+[Install]
+WantedBy=multi-user.target
+ANDROIDSTORESVC
+add_file "${BUILD_DIR}/yunsh-android-store.service" "/etc/systemd/system/yunsh-android-store.service"
 
 # Splash service
 cat > "${BUILD_DIR}/yunsh-splash.service" << 'SSVC'
@@ -966,10 +1064,12 @@ WantedBy=multi-user.target
 TERMSVC
 add_file "${BUILD_DIR}/yunsh-terminal.service" "/etc/systemd/system/yunsh-terminal.service"
 
+add_file "${YUNSH_DIR}/yunsh-openxr.service" "/etc/systemd/system/yunsh-openxr.service"
+
 # Enable services
 for service in yunsh-os yunsh-firstboot yunsh-grow-root yunsh-local-api yunsh-spaced yunsh-screen-relay yunsh-network yunsh-bluetooth \
-               yunsh-update yunsh-link-ble yunsh-glasses-bridge yunsh-appd yunsh-android-setup yunsh-terminal yunsh-headtracking \
-               yunsh-powerd yunsh-splash yunsh-boot-health yunsh-media-setup yunsh-time-sync orbit orbit-voice-setup; do
+               yunsh-update yunsh-link-ble yunsh-glasses-bridge yunsh-appd yunsh-android-setup yunsh-android-store yunsh-terminal yunsh-headtracking \
+               yunsh-powerd yunsh-splash yunsh-boot-health yunsh-media-setup yunsh-time-sync yunsh-openxr yunsh-vision orbit orbit-voice-setup; do
     echo "rm /etc/systemd/system/multi-user.target.wants/${service}.service" >> "${DEBUGFS_SCRIPT}"
     echo "symlink /etc/systemd/system/multi-user.target.wants/${service}.service ../${service}.service" >> "${DEBUGFS_SCRIPT}"
 done
@@ -1040,7 +1140,7 @@ for bin in yunsh-update-daemon yunsh-updater yunsh-network-daemon yunsh-bluetoot
            yunsh-screenshotd yunsh-factory-reset yunsh-install-progress.sh yunsh-inputd \
            yunsh-powerd yunsh-firstboot.sh yunsh-iptables.sh yunsh-ui-launcher yunsh-splash \
            yunsh-boot-health yunsh-appd yunsh-terminal yunsh-disk-helper yunsh-headtracking yunsh-headtracking-sim \
-           yunsh-bno085-reader yunsh-activation-helper yunsh-keyinject yunsh-android yunsh-recordingd yunsh-media-setup yunsh-grow-root yunsh-time-sync orbitd orbit-voice-setup; do
+           yunsh-bno085-reader yunsh-activation-helper yunsh-keyinject yunsh-android yunsh-recordingd yunsh-visiond yunsh-media-setup yunsh-grow-root yunsh-time-sync yunsh-openxr yunsh-openxr-run orbitd orbit-voice-setup; do
     echo "set_inode_field /usr/bin/${bin} mode 0100755" >> "${DEBUGFS_SCRIPT}"
 done
 echo "set_inode_field /etc/rc.local mode 0100755" >> "${DEBUGFS_SCRIPT}"
@@ -1122,8 +1222,11 @@ REQUIRED_ROOT_FILES="
 /usr/bin/orbitd
 /usr/bin/orbit-voice-setup
 /usr/bin/yunsh-recordingd
+/usr/bin/yunsh-visiond
 /usr/bin/yunsh-media-setup
 /usr/bin/yunsh-time-sync
+/usr/bin/yunsh-openxr
+/usr/bin/yunsh-openxr-run
 /usr/share/yunsh/ui/main.qml
 /usr/share/yunsh/ui/HomeScreen.qml
 /usr/share/yunsh/ui/OrbitPanel.qml
@@ -1131,15 +1234,20 @@ REQUIRED_ROOT_FILES="
 /usr/share/yunsh/icons/orbit.png
 /usr/share/yunsh/logo/logo-256.png
 /etc/yunsh/version.conf
+/etc/yunsh/android.conf
+/etc/yunsh/openxr.conf
 /etc/systemd/system/yunsh-os.service
 /etc/systemd/system/yunsh-firstboot.service
 /etc/systemd/system/yunsh-boot-health.service
 /etc/systemd/system/yunsh-grow-root.service
 /etc/systemd/system/yunsh-android-setup.service
+/etc/systemd/system/yunsh-android-store.service
 /etc/systemd/system/orbit.service
 /etc/systemd/system/orbit-voice-setup.service
+/etc/systemd/system/yunsh-vision.service
 /etc/systemd/system/yunsh-media-setup.service
 /etc/systemd/system/yunsh-time-sync.service
+/etc/systemd/system/yunsh-openxr.service
 /etc/systemd/system/rpi-resize.service
 /etc/systemd/system/rpi-resize-swap-file.service
 /etc/systemd/system/userconfig.service
@@ -1149,10 +1257,13 @@ REQUIRED_ROOT_FILES="
 /etc/systemd/system/multi-user.target.wants/yunsh-boot-health.service
 /etc/systemd/system/multi-user.target.wants/yunsh-grow-root.service
 /etc/systemd/system/multi-user.target.wants/yunsh-android-setup.service
+/etc/systemd/system/multi-user.target.wants/yunsh-android-store.service
 /etc/systemd/system/multi-user.target.wants/orbit.service
 /etc/systemd/system/multi-user.target.wants/orbit-voice-setup.service
+/etc/systemd/system/multi-user.target.wants/yunsh-vision.service
 /etc/systemd/system/multi-user.target.wants/yunsh-media-setup.service
 /etc/systemd/system/multi-user.target.wants/yunsh-time-sync.service
+/etc/systemd/system/multi-user.target.wants/yunsh-openxr.service
 "
 for required in ${REQUIRED_ROOT_FILES}; do
     if ! "${E2FSPROGS}/sbin/debugfs" -R "stat ${required}" "${ROOT_TEST_IMG}" 2>&1 |

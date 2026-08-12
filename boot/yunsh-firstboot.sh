@@ -394,6 +394,28 @@ install_apt() {
     apt-get clean -qq >>/var/log/yunsh-apt.log 2>&1 || true
 }
 
+# OpenXR is optional. Repository package names vary across Raspberry Pi OS
+# bases, so install candidates only when available and never make the desktop
+# depend on the XR loader/runtime.
+install_optional_apt() {
+    local step="$1" name="$2"; shift 2
+    local available=() package previous_failed="${FIRSTBOOT_APT_FAILED:-0}"
+    for package in "$@"; do
+        if apt-cache show "$package" >/dev/null 2>&1; then
+            available+=("$package")
+        fi
+    done
+    if [ "${#available[@]}" -eq 0 ]; then
+        pct "$step" "$name" "repository package unavailable; XR probe remains enabled"
+        return 0
+    fi
+    install_apt "$step" "$name" "${available[@]}"
+    # A failed optional group must not invalidate the core firstboot marker.
+    if [ "$previous_failed" -eq 0 ]; then
+        FIRSTBOOT_APT_FAILED=0
+    fi
+}
+
 # Do not call an installation successful merely because dpkg has unpacked the
 # requested packages.  The previous flow wrote .packages_installed and
 # rebooted even when sshd or the desktop launch prerequisites were not usable;
@@ -619,6 +641,7 @@ pct 53 "Scheduling screen capture and recording..."
 # future spatial compositor work) in the first-boot transaction, rather than
 # silently falling back to an incomplete software graphics stack.
 install_apt 56 "Pi 5 graphics runtime" mesa-utils libgl1-mesa-dri libegl1 mesa-vulkan-drivers
+install_optional_apt 57 "OpenXR loader and runtime packages" libopenxr-loader1 libopenxr-dev openxr-utils openxr-tools monado monado-service
 
 # Waydroid remains a core component, but its repository and Android image are
 # external network dependencies. They must never block activation or desktop
@@ -665,9 +688,9 @@ else
 fi
 
 pct 92 "Preparing Android application store..."
-# Installation occurs after Weston is available. A verified F-Droid APK is
-# embedded by the image builder, so App installation never depends on Tencent's
-# frequently changing download URL.
+# The Tencent App Store APK is embedded in the 4.0 full image and installed by
+# the independent post-boot Android store service. This check only verifies
+# that the controller was embedded; it never starts Android during firstboot.
 [ -x /usr/bin/yunsh-android ] || {
     echo "  [ERROR] Android application controller is missing."
     exit 1

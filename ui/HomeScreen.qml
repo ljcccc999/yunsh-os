@@ -40,7 +40,7 @@ Item {
     property var coreAppList: [
         { name: "设置", icon: "settings.svg",          color: "#4E8FEA",   action: "settings" },
         { name: "Browser", icon: "browser.svg",        color: "#5477D6",   action: "browser" },
-        { name: "F-Droid", icon: "appstore.svg",       color: "#6E8F5B",   action: "appstore" },
+        { name: "F-Droid", icon: "appstore.svg",         color: "#6E8F5B",   action: "appstore" },
         { name: "文件", icon: "files.svg",             color: "#5A8CC7",   action: "files" },
         { name: "终端", icon: "terminal.svg",          color: "#526F9E",   action: "terminal" },
         { name: "相册", icon: "photos.svg",            color: "#C78A62",   action: "photos" },
@@ -407,7 +407,7 @@ Item {
                                 anchors.bottom: parent.bottom
                                 anchors.bottomMargin: 16
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: "YUNSH OS v3.1.6"
+                                text: "YUNSH OS v4.0"
                                 color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
                                 font.pixelSize: 11
                                 visible: pageIndex === 0

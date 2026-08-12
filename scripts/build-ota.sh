@@ -55,9 +55,12 @@ install_runtime "${YUNSH_DIR}/system/yunsh-bno085-reader" "yunsh-bno085-reader"
 install_runtime "${YUNSH_DIR}/system/yunsh-headtracking-sim" "yunsh-headtracking-sim"
 install_runtime "${YUNSH_DIR}/system/yunsh-screenshotd" "yunsh-screenshotd"
 install_runtime "${YUNSH_DIR}/system/yunsh-recordingd" "yunsh-recordingd"
+install_runtime "${YUNSH_DIR}/system/yunsh-visiond" "yunsh-visiond"
 install_runtime "${YUNSH_DIR}/system/yunsh-media-setup" "yunsh-media-setup"
 install_runtime "${YUNSH_DIR}/system/yunsh-grow-root" "yunsh-grow-root"
 install_runtime "${YUNSH_DIR}/system/yunsh-time-sync" "yunsh-time-sync"
+install_runtime "${YUNSH_DIR}/system/yunsh-openxr" "yunsh-openxr"
+install_runtime "${YUNSH_DIR}/system/yunsh-openxr-run" "yunsh-openxr-run"
 install_runtime "${YUNSH_DIR}/system/yunsh-factory-reset" "yunsh-factory-reset"
 install_runtime "${YUNSH_DIR}/system/yunsh-install-progress.sh" "yunsh-install-progress.sh"
 install_runtime "${YUNSH_DIR}/system/yunsh-ui-launcher" "yunsh-ui-launcher"
@@ -74,19 +77,26 @@ install_runtime "${YUNSH_DIR}/system/orbitd.py" "orbitd"
 install_runtime "${YUNSH_DIR}/system/orbit-voice-setup" "orbit-voice-setup"
 install_runtime "${YUNSH_DIR}/boot/yunsh-firstboot.sh" "yunsh-firstboot.sh"
 install_runtime "${YUNSH_DIR}/boot/yunsh-iptables.sh" "yunsh-iptables.sh"
+cp "${YUNSH_DIR}/yunsh-openxr.conf" "${STAGING}/payload/etc/yunsh/openxr.conf"
+cp "${YUNSH_DIR}/yunsh-android.conf" "${STAGING}/payload/etc/yunsh/android.conf"
 
 required_services=(
     yunsh-os yunsh-firstboot yunsh-grow-root yunsh-local-api yunsh-spaced yunsh-screen-relay yunsh-network yunsh-bluetooth
     yunsh-update yunsh-link-ble yunsh-glasses-bridge yunsh-appd
     yunsh-android-setup yunsh-terminal yunsh-headtracking yunsh-powerd yunsh-splash
-    orbit orbit-voice-setup yunsh-media-setup yunsh-time-sync
+    orbit orbit-voice-setup yunsh-media-setup yunsh-time-sync yunsh-openxr yunsh-vision yunsh-android-store
 )
 for service_name in "${required_services[@]}"; do
     service="${BUILD_DIR}/${service_name}.service"
+    if [ ! -f "${service}" ] && [ -f "${YUNSH_DIR}/${service_name}.service" ]; then
+        service="${YUNSH_DIR}/${service_name}.service"
+    fi
     [ -f "${service}" ] || {
         echo "ERROR: build service is missing: ${service}; run scripts/build-no-hdiutil.sh first" >&2
         exit 1
     }
+    cp "${service}" "${STAGING}/payload/etc/systemd/system/${service_name}.service"
+    chmod 0644 "${STAGING}/payload/etc/systemd/system/${service_name}.service"
 done
 
 for service in "${BUILD_DIR}"/yunsh-*.service; do

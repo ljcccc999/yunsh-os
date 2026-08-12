@@ -445,6 +445,7 @@ add_file "${YUNSH_DIR}/system/yunsh-bno085-reader" "/usr/bin/yunsh-bno085-reader
 add_file "${YUNSH_DIR}/system/yunsh-headtracking-sim" "/usr/bin/yunsh-headtracking-sim"
 add_file "${YUNSH_DIR}/system/yunsh-screenshotd" "/usr/bin/yunsh-screenshotd"
 add_file "${YUNSH_DIR}/system/yunsh-recordingd" "/usr/bin/yunsh-recordingd"
+add_file "${YUNSH_DIR}/system/yunsh-visiond" "/usr/bin/yunsh-visiond"
 add_file "${YUNSH_DIR}/system/yunsh-media-setup" "/usr/bin/yunsh-media-setup"
 add_file "${YUNSH_DIR}/system/yunsh-factory-reset" "/usr/bin/yunsh-factory-reset"
 add_file "${YUNSH_DIR}/system/yunsh-install-progress.sh" "/usr/bin/yunsh-install-progress.sh"
@@ -756,6 +757,11 @@ BNO_SVC_FILE="${BUILD_DIR}/yunsh-bno085-reader.service"
 cp "${YUNSH_DIR}/system/yunsh-bno085-reader.service" "${BNO_SVC_FILE}"
 add_file "${BNO_SVC_FILE}" "/etc/systemd/system/yunsh-bno085-reader.service"
 
+# USB camera bridge for on-demand AI + XR observation.
+VISION_SVC_FILE="${BUILD_DIR}/yunsh-vision.service"
+cp "${YUNSH_DIR}/system/yunsh-vision.service" "${VISION_SVC_FILE}"
+add_file "${VISION_SVC_FILE}" "/etc/systemd/system/yunsh-vision.service"
+
 # ─── Auto-login for tty1 ──────────────────────────
 echo "" >> "${DEBUGFS_SCRIPT}"
 echo "# === Auto-login ===" >> "${DEBUGFS_SCRIPT}"
@@ -797,6 +803,7 @@ echo "set_inode_field /usr/bin/yunsh-network-daemon mode 0100755" >> "${DEBUGFS_
 echo "set_inode_field /usr/bin/yunsh-bluetooth-daemon mode 0100755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-screenshotd mode 0100755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-recordingd mode 0100755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-visiond mode 0100755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-media-setup mode 0100755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-factory-reset mode 0100755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-install-progress.sh mode 0100755" >> "${DEBUGFS_SCRIPT}"

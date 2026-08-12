@@ -1,0 +1,14 @@
+[Unit]
+Description=YUNSH OpenXR Capability Probe
+After=yunsh-headtracking.service
+Wants=yunsh-headtracking.service
+ConditionPathExists=/etc/yunsh/.packages_installed
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/yunsh-openxr probe
+RemainAfterExit=yes
+User=root
+
+[Install]
+WantedBy=multi-user.target

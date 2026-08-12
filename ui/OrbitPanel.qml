@@ -33,6 +33,8 @@ Item {
     property string provider: "deepseek"
     property string modelName: "deepseek-v4-flash"
     property string apiKeyHint: ""
+    property var providerProfiles: []
+    property var revealedProviderKeys: ({})
     property string voice: "sweet_female"
     property bool speakResponses: true
     property string statusText: "正在连接系统运行时…"
@@ -126,6 +128,8 @@ Item {
             configuredProvider = configured ? provider : ""
             modelName = body.config.model || "deepseek-v4-flash"
             apiKeyHint = body.config.apiKeyHint || ""
+            providerProfiles = body.config.profiles || []
+            revealedProviderKeys = ({})
             voice = body.config.voice || "sweet_female"
             speakResponses = body.config.speakResponses !== false
             voiceBox.currentIndex = voice === "young_male" ? 1 : 0
@@ -159,6 +163,34 @@ Item {
         if (provider === "compatible")
             return "OpenAI 兼容"
         return "DeepSeek"
+    }
+
+    function profileName(profile) {
+        return profile.name || (profile.provider === "kimi" ? "Kimi"
+            : (profile.provider === "compatible" ? "OpenAI 兼容" : "DeepSeek"))
+    }
+
+    function revealProfileKey(profileProvider) {
+        request("POST", "/v1/config/reveal-key", {provider: profileProvider}, function(status, body) {
+            if (status !== 200 || !body.success) {
+                toastRequested(body.error || "无法查看 API Key")
+                return
+            }
+            var keys = Object.assign({}, revealedProviderKeys)
+            keys[profileProvider] = body.apiKey || ""
+            revealedProviderKeys = keys
+        })
+    }
+
+    function deleteProfile(profileProvider) {
+        request("POST", "/v1/config/delete-profile", {provider: profileProvider}, function(status, body) {
+            if (status !== 200 || !body.success) {
+                toastRequested(body.error || "删除失败")
+                return
+            }
+            refreshStatus()
+            toastRequested("已删除该提供商的 API 配置")
+        })
     }
 
     function applyPermissionState(values) {
@@ -229,6 +261,7 @@ Item {
             voice = body.voice || "sweet_female"
             speakResponses = body.speakResponses !== false
             apiKeyHint = body.apiKeyHint || ""
+            providerProfiles = body.profiles || providerProfiles
             apiKeyField.text = ""
             settingsVisible = false
             statusText = "系统级 · " + providerDisplayName() + " · " + modelName
@@ -897,6 +930,73 @@ Item {
                                 onClicked: {
                                     apiKeyField.text = ""
                                     apiKeyField.forceActiveFocus()
+                                }
+                            }
+                        }
+
+                        Text {
+                            visible: orbit.providerProfiles.length > 0
+                            text: "已保存的 API 配置"
+                            color: "#101820"
+                            font.pixelSize: 14
+                            font.weight: Font.DemiBold
+                            topPadding: 4
+                        }
+                        Repeater {
+                            model: orbit.providerProfiles
+                            delegate: Rectangle {
+                                id: profileCard
+                                required property var modelData
+                                width: settingsColumn.width
+                                height: orbit.revealedProviderKeys[profileCard.modelData.provider] ? 88 : 58
+                                radius: 16
+                                color: modelData.active ? "#E8F9FC" : "#F3F7F9"
+                                border.width: 1
+                                border.color: modelData.active ? "#9CECF8" : "#DDE8EC"
+
+                                Column {
+                                    anchors.fill: parent
+                                    anchors.margins: 10
+                                    spacing: 6
+                                    Row {
+                                        width: parent.width
+                                        spacing: 8
+                                        Text {
+                                            width: parent.width - revealButton.width - deleteButton.width - 24
+                                            text: orbit.profileName(profileCard.modelData) + " · " + profileCard.modelData.model
+                                                + (profileCard.modelData.active ? " · 当前使用" : "")
+                                            color: "#17212A"
+                                            font.pixelSize: 12
+                                            elide: Text.ElideRight
+                                        }
+                                        Button {
+                                            id: revealButton
+                                            flat: true
+                                            text: orbit.revealedProviderKeys[profileCard.modelData.provider] ? "隐藏" : "查看"
+                                            onClicked: {
+                                                if (orbit.revealedProviderKeys[profileCard.modelData.provider]) {
+                                                    var keys = Object.assign({}, orbit.revealedProviderKeys)
+                                                    delete keys[profileCard.modelData.provider]
+                                                    orbit.revealedProviderKeys = keys
+                                                } else {
+                                                    orbit.revealProfileKey(profileCard.modelData.provider)
+                                                }
+                                            }
+                                        }
+                                        Button {
+                                            id: deleteButton
+                                            flat: true
+                                            text: "删除"
+                                            onClicked: orbit.deleteProfile(profileCard.modelData.provider)
+                                        }
+                                    }
+                                    EditableInput {
+                                        width: parent.width
+                                        visible: !!orbit.revealedProviderKeys[profileCard.modelData.provider]
+                                        readOnly: true
+                                        text: orbit.revealedProviderKeys[profileCard.modelData.provider] || ""
+                                        selectByMouse: true
+                                    }
                                 }
                             }
                         }

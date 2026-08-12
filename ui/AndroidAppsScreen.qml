@@ -105,7 +105,7 @@ Rectangle {
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: targetApp === "files" ? "Files" : "Android Apps"
+            text: targetApp === "files" ? "Files" : "F-Droid"
             color: "#17212A"
             font.pixelSize: 26
             font.weight: Font.DemiBold
@@ -181,7 +181,7 @@ Rectangle {
                 ? "应用在隔离的 Android 容器中运行"
                 : (setupState === "error" || setupState === "display_unavailable"
                     ? "系统桌面可以正常使用；修复网络或图形环境后可重新准备 Android"
-                    : "系统桌面可以正常使用；Android 镜像会在后台下载并自动重试")
+                    : "系统桌面可以正常使用；预置 Android 会在后台初始化并自动重试")
             color: Qt.rgba(23/255, 33/255, 42/255, 0.46)
             font.pixelSize: 12
         }

@@ -12,10 +12,22 @@ export XDG_SESSION_TYPE=wayland
 STORE_DIR="${YUNSH_ANDROID_STORE_DIR:-/usr/share/yunsh/apps}"
 STATE_DIR="${YUNSH_ANDROID_STATE_DIR:-/var/lib/yunsh}"
 WAYDROID_DATA_DIR="${YUNSH_WAYDROID_DATA_DIR:-/var/lib/waydroid}"
+PRELOAD_IMAGE_DIR="${YUNSH_ANDROID_PRELOAD_DIR:-/etc/waydroid-extra/images}"
 STATE_FILE="${STATE_DIR}/android-setup.json"
 READY_FILE="${STATE_DIR}/.android_ready"
 FDROID_APK="$STORE_DIR/fdroid.apk"
 TENCENT_APK="$STORE_DIR/appstore.apk"
+ALLOW_ONLINE_INIT="${YUNSH_ANDROID_ALLOW_ONLINE_INIT:-false}"
+STORE_FALLBACK="${YUNSH_ANDROID_STORE_FALLBACK:-none}"
+
+if [ -r /etc/yunsh/android.conf ]; then
+    configured_preload="$(sed -n 's/^preloaded_images=//p' /etc/yunsh/android.conf | head -n 1)"
+    [ -n "$configured_preload" ] && PRELOAD_IMAGE_DIR="$configured_preload"
+    configured_online="$(sed -n 's/^allow_online_init=//p' /etc/yunsh/android.conf | head -n 1)"
+    [ -n "$configured_online" ] && ALLOW_ONLINE_INIT="$configured_online"
+    configured_fallback="$(sed -n 's/^fallback_store=//p' /etc/yunsh/android.conf | head -n 1)"
+    [ -n "$configured_fallback" ] && STORE_FALLBACK="$configured_fallback"
+fi
 
 mkdir -p "$XDG_RUNTIME_DIR" "$STORE_DIR" "$STATE_DIR"
 chmod 0700 "$XDG_RUNTIME_DIR"
@@ -112,6 +124,11 @@ runtime_initialized() {
         [ -s "$WAYDROID_DATA_DIR/images/vendor.img" ]
 }
 
+preloaded_images_available() {
+    [ -s "$PRELOAD_IMAGE_DIR/system.img" ] &&
+        [ -s "$PRELOAD_IMAGE_DIR/vendor.img" ]
+}
+
 setup_runtime() {
     # An interrupted download must never leave a ready marker that suppresses
     # the setup service forever while only waydroid.cfg exists.
@@ -144,6 +161,23 @@ setup_runtime() {
         return 1
     fi
 
+    if ! preloaded_images_available && [ "$ALLOW_ONLINE_INIT" != "true" ]; then
+        write_state "error" 35 "Android images are not preloaded" \
+            "Build the image with arm64 Waydroid system/vendor images; online first-boot download is disabled"
+        return 1
+    fi
+
+    if preloaded_images_available; then
+        # Waydroid's documented custom-image path avoids the long OTA download
+        # when system.img and vendor.img are already present.
+        write_state "initializing" 35 "Initializing preloaded Android images"
+        if ! timeout 900 waydroid init -f -s VANILLA </dev/null \
+            >>/var/log/yunsh-android.log 2>&1; then
+            write_state "error" 35 "Preloaded Android image initialization failed" \
+                "Check the arm64 system/vendor image pair and Waydroid log"
+            return 1
+        fi
+    else
     # VANILLA is the default official Waydroid image channel. FOSS is accepted
     # by the CLI but currently returns "No images found on system channel" on
     # the Raspberry Pi arm64 runtime, leaving only a misleading waydroid.cfg.
@@ -163,6 +197,7 @@ setup_runtime() {
         write_state "error" 35 "Android image setup did not complete" \
             "The image server may be unavailable; retry from Android Apps"
         return 1
+    fi
     fi
 
     runtime_initialized || {
@@ -306,13 +341,21 @@ ensure_runtime() {
 
 install_store() {
     ensure_runtime || return 1
-    if valid_apk "$TENCENT_APK"; then
-        waydroid app install "$TENCENT_APK" &&
-            touch "$STATE_DIR/.tencent-appstore-installed"
+    local package=""
+    if [ "$STORE_FALLBACK" = "fdroid" ] && valid_apk "$FDROID_APK"; then
+        package="$FDROID_APK"
+    elif valid_apk "$TENCENT_APK"; then
+        package="$TENCENT_APK"
+    else
+        write_state "error" 90 "F-Droid APK 不可用" \
+            "The configured Android app-store APK is missing"
+        return 1
     fi
-    if valid_apk "$FDROID_APK"; then
-        waydroid app install "$FDROID_APK" &&
-            touch "$STATE_DIR/.fdroid-installed"
+    waydroid app install "$package" || return 1
+    if [ "$package" = "$TENCENT_APK" ]; then
+        touch "$STATE_DIR/.tencent-appstore-installed"
+    else
+        touch "$STATE_DIR/.fdroid-fallback-installed"
     fi
     waydroid app list 2>/dev/null |
         grep -Eq 'com\.tencent\.android\.qqdownloader|org\.fdroid\.fdroid'
@@ -322,11 +365,16 @@ launch_store() {
     ensure_runtime || return 1
     local packages
     packages="$(waydroid app list 2>/dev/null || true)"
+    if echo "$packages" | grep -q 'org.fdroid.fdroid'; then
+        exec waydroid app launch org.fdroid.fdroid
+    fi
     if echo "$packages" | grep -q 'com.tencent.android.qqdownloader'; then
         exec waydroid app launch com.tencent.android.qqdownloader
     fi
-    if ! echo "$packages" | grep -q 'org.fdroid.fdroid'; then
-        install_store || return 1
+    install_store || return 1
+    packages="$(waydroid app list 2>/dev/null || true)"
+    if echo "$packages" | grep -q 'com.tencent.android.qqdownloader'; then
+        exec waydroid app launch com.tencent.android.qqdownloader
     fi
     exec waydroid app launch org.fdroid.fdroid
 }

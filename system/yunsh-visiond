@@ -1,0 +1,149 @@
+#!/usr/bin/env python3
+"""YUNSH USB camera bridge for the Linux AI + XR foundation.
+
+The daemon deliberately captures on demand instead of keeping a camera stream
+open. This gives the user a clear privacy boundary and keeps the first camera
+milestone independent from an eventual visual-inertial tracking runtime.
+"""
+
+import glob
+import json
+import os
+import pathlib
+import shutil
+import subprocess
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+HOST = "127.0.0.1"
+PORT = int(os.environ.get("YUNSH_VISION_PORT", "8598"))
+STATE_DIR = pathlib.Path(os.environ.get("YUNSH_VISION_STATE_DIR", "/var/lib/yunsh/vision"))
+MAX_CAPTURE_BYTES = 12 * 1024 * 1024
+
+
+def camera_devices():
+    return sorted(pathlib.Path(path) for path in glob.glob("/dev/video*") if pathlib.Path(path).is_char_device())
+
+
+def device_value(value):
+    requested = str(value or "/dev/video0")
+    path = pathlib.Path(requested)
+    if not path.is_absolute() or path.parent != pathlib.Path("/dev") or not path.name.startswith("video"):
+        raise ValueError("摄像头设备路径无效")
+    if not path.exists() or not path.is_char_device():
+        raise RuntimeError(f"未检测到摄像头：{path}")
+    return path
+
+
+def status_payload():
+    devices = camera_devices()
+    return {
+        "running": True,
+        "devices": [str(path) for path in devices],
+        "defaultDevice": str(devices[0]) if devices else "/dev/video0",
+        "captureAvailable": bool(devices and shutil.which("ffmpeg")),
+        "captureBackend": "ffmpeg-v4l2" if shutil.which("ffmpeg") else None,
+        "visualModelAvailable": False,
+        "visualModelNote": "摄像头采集已准备；目标检测、深度和视觉惯性融合需另行安装模型并完成实机标定。",
+        "privacy": "on-demand-capture",
+    }
+
+
+def capture(payload):
+    if not isinstance(payload, dict):
+        payload = {}
+    if not shutil.which("ffmpeg"):
+        raise RuntimeError("系统未安装 ffmpeg，暂时无法采集 USB 摄像头")
+    device = device_value(payload.get("device"))
+    try:
+        width = max(320, min(1920, int(payload.get("width", 1280))))
+        height = max(240, min(1080, int(payload.get("height", 720))))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("摄像头分辨率无效") from exc
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    os.chmod(STATE_DIR, 0o700)
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    output = STATE_DIR / f"Camera_{timestamp}-{time.time_ns() % 1000000:06d}.jpg"
+    common = [
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "v4l2",
+        "-video_size", f"{width}x{height}", "-i", str(device),
+        "-frames:v", "1", "-q:v", "3", "-y", str(output),
+    ]
+    attempts = [common]
+    # Some UVC cameras reject an explicitly negotiated mode; let ffmpeg pick
+    # its default format as a conservative fallback.
+    attempts.append([
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "v4l2",
+        "-i", str(device), "-frames:v", "1", "-q:v", "3", "-y", str(output),
+    ])
+    errors = []
+    for command in attempts:
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=15)
+        except subprocess.TimeoutExpired:
+            errors.append("摄像头采集超时")
+            continue
+        if result.returncode == 0 and output.exists() and output.stat().st_size <= MAX_CAPTURE_BYTES:
+            return {
+                "captured": True,
+                "path": str(output),
+                "device": str(device),
+                "width": width,
+                "height": height,
+                "capturedAt": time.time(),
+                "visualModelAvailable": False,
+                "next": "将该帧交给本地视觉模型或 Orbit OCR/分析工具。",
+            }
+        errors.append((result.stderr or "摄像头采集失败").strip()[-400:])
+    try:
+        output.unlink()
+    except FileNotFoundError:
+        pass
+    raise RuntimeError("；".join(error for error in errors if error) or "摄像头采集失败")
+
+
+class Handler(BaseHTTPRequestHandler):
+    def send_json(self, code, payload):
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def read_json(self):
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError as exc:
+            raise ValueError("请求长度无效") from exc
+        if length < 0 or length > 64 * 1024:
+            raise ValueError("请求过大")
+        return json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+
+    def do_GET(self):
+        if self.path == "/status":
+            self.send_json(200, status_payload())
+            return
+        self.send_json(404, {"success": False, "error": "Not found"})
+
+    def do_POST(self):
+        try:
+            if self.path != "/capture":
+                self.send_json(404, {"success": False, "error": "Not found"})
+                return
+            self.send_json(200, capture(self.read_json()))
+        except (ValueError, RuntimeError) as exc:
+            self.send_json(400, {"captured": False, "error": str(exc)})
+
+    def log_message(self, _format, *_args):
+        return
+
+
+if __name__ == "__main__":
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    os.chmod(STATE_DIR, 0o700)
+    server = ThreadingHTTPServer((HOST, PORT), Handler)
+    print(f"[yunsh-visiond] Ready on http://{HOST}:{PORT}/status", flush=True)
+    server.serve_forever()

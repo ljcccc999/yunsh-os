@@ -1,0 +1,44 @@
+#!/bin/sh
+# Launch a Linux OpenXR application through the configured YUNSH runtime.
+# This is intentionally a thin standard boundary; it does not replace Monado
+# or another conformant OpenXR runtime.
+set -eu
+
+CONFIG_FILE="${YUNSH_OPENXR_CONFIG:-/etc/yunsh/openxr.conf}"
+runtime_json="${XR_RUNTIME_JSON:-}"
+
+if [ -z "$runtime_json" ] && [ -r "$CONFIG_FILE" ]; then
+    runtime_json="$(sed -n 's/^xr_runtime_json=//p' "$CONFIG_FILE" | head -n 1)"
+fi
+if [ -z "$runtime_json" ]; then
+    for candidate in \
+        /etc/openxr/1/active_runtime.json \
+        /usr/share/openxr/1/active_runtime.json \
+        /usr/local/share/openxr/1/active_runtime.json \
+        /etc/openxr/1/openxr_monado.json \
+        /usr/share/openxr/1/openxr_monado.json \
+        /usr/local/share/openxr/1/openxr_monado.json; do
+        if [ -r "$candidate" ]; then
+            runtime_json="$candidate"
+            break
+        fi
+    done
+fi
+
+if [ "$#" -eq 0 ]; then
+    echo "usage: yunsh-openxr-run APPLICATION [ARGS...]" >&2
+    exit 2
+fi
+if [ -z "$runtime_json" ] || [ ! -r "$runtime_json" ]; then
+    echo "OpenXR runtime manifest not found; install/configure Monado or another runtime first" >&2
+    exit 69
+fi
+if command -v ldconfig >/dev/null 2>&1 &&
+   ! ldconfig -p 2>/dev/null | grep -q 'libopenxr_loader\.so'; then
+    echo "OpenXR loader is not installed" >&2
+    exit 69
+fi
+
+export XR_RUNTIME_JSON="$runtime_json"
+export YUNSH_OPENXR_TRACKING_SOURCE="${YUNSH_OPENXR_TRACKING_SOURCE:-yunsh-headtracking}"
+exec "$@"

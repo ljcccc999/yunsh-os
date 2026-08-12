@@ -276,7 +276,7 @@ ApplicationWindow {
         // Closing or switching away from any app must release the shared
         // keyboard target; otherwise its old editor can keep reopening it.
         virtualKeyboard.hide()
-        if (appId === "appstore" || appId === "files" || appId.indexOf("android:") === 0) {
+        if (appId === "appstore" || appId.indexOf("android:") === 0) {
             androidWindow.visible = false
             androidWindow.isMinimized = false
             return
@@ -304,8 +304,8 @@ ApplicationWindow {
             case "screenrelay": return screenRelayWindow
             case "comfortdna": return comfortDnaWindow
             case "updatehistory": return updateHistoryWindow
-            case "appstore":
-            case "files": return androidWindow
+            case "files": return filesWindow
+            case "appstore": return androidWindow
         }
         if (appId.indexOf("android:") === 0) return androidWindow
         return null
@@ -356,7 +356,7 @@ ApplicationWindow {
             onOpenSettings: switchTo(settingsWindow, "settings")
             onOpenAbout: switchTo(systemInfoWindow, "systeminfo")
             onOpenAppStore: launchApp("appstore")
-            onOpenFileManager: launchApp("files")
+            onOpenFileManager: switchTo(filesWindow, "files")
             onOpenAndroidApp: function(packageName) { launchApp("android:" + packageName) }
             onOpenBrowser: yunshOS.openBrowser()
             onOpenWorld: yunshOS.openWorld()
@@ -776,6 +776,7 @@ ApplicationWindow {
                 sourceComponent: Component {
                     YunshBrowser {
                         anchors.fill: parent
+                        onAndroidAppInstalled: refreshAndroidDesktopApps()
                         onBackToHome: yunshOS.switchToHome()
                         onRequestVirtualKeyboard: function(target) {
                             yunshOS.virtualKeyboardRef.showFor(target)
@@ -828,6 +829,26 @@ ApplicationWindow {
             onCloseClicked: { yunshOS.closeAppFromSwitcher("photos") }
             onMinimizeClicked: yunshOS.minimizeWindow(photosWindow, "photos")
             PhotosScreen { anchors.fill: parent
+                onBackToHome: switchToHome()
+            }
+        }
+
+        // ===== FILES (native Linux) =====
+        MacWindow {
+            id: filesWindow
+            appTitle: "文件"
+            headYaw: yunshOS.headYaw
+            headPitch: yunshOS.headPitch
+            headRoll: yunshOS.headRoll
+            pixelsPerDegree: yunshOS.pixelsPerDegree
+            x: 120; y: 80; width: 860; height: 620
+            visible: false
+            onActivated: yunshOS.activateWindow(filesWindow, "files")
+            onCloseClicked: yunshOS.closeAppFromSwitcher("files")
+            onMinimizeClicked: yunshOS.minimizeWindow(filesWindow, "files")
+            FilesScreen {
+                anchors.fill: parent
+                onAndroidAppInstalled: refreshAndroidDesktopApps()
                 onBackToHome: switchToHome()
             }
         }
@@ -1647,9 +1668,12 @@ ApplicationWindow {
             if (!window || item.appId === "spacecapsule" || item.appId === "comfortdna")
                 continue
 
-            if (item.appId === "appstore" || item.appId === "files") {
+            if (item.appId === "appstore") {
                 launchApp(item.appId)
                 window = androidWindow
+            } else if (item.appId === "files") {
+                switchTo(filesWindow, "files")
+                window = filesWindow
             }
             trackAppOpen(item.appId)
             window.x = item.x
@@ -1755,8 +1779,10 @@ ApplicationWindow {
                     yunshOS.openWorld()
                 } else if (command.action === "open_app" && command.appId) {
                     var appId = String(command.appId)
-                    if (appId === "appstore" || appId === "files")
+                    if (appId === "appstore")
                         yunshOS.launchApp(appId)
+                    else if (appId === "files")
+                        yunshOS.switchTo(filesWindow, "files")
                     else
                         yunshOS.switchToAppById(appId)
                 } else if (command.action === "confirm_system_action"
@@ -1979,13 +2005,13 @@ ApplicationWindow {
         // Android remains one compositor surface, but every installed app gets
         // its own desktop icon and title. Keep just that one Android surface
         // in the task switcher when changing between Android applications.
-        var isAndroidApp = appId === "appstore" || appId === "files"
+        var isAndroidApp = appId === "appstore"
             || appId.indexOf("android:") === 0
         if (isAndroidApp) {
             var filteredApps = []
             for (var i = 0; i < openApps.length; i++) {
                 if (openApps[i].appId.indexOf("android:") !== 0
-                        && openApps[i].appId !== "appstore" && openApps[i].appId !== "files")
+                        && openApps[i].appId !== "appstore")
                     filteredApps.push(openApps[i])
             }
             openApps = filteredApps
@@ -2159,7 +2185,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        console.log("YUNSH OS UI v3.1.6")
+        console.log("YUNSH OS UI v4.0")
         checkFirstBoot()
         showFullScreen()
         applyWindowPreferences()

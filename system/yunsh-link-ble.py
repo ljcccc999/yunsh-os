@@ -307,7 +307,11 @@ class StatusCharacteristic(Characteristic):
     @dbus.service.method(CHAR_IFACE)
     def StartNotify(self):
         self.notifying = True
-        self.refresh()
+        # Do not emit an unauthenticated snapshot here. BlueZ does not pass
+        # the subscribing device to StartNotify, so doing so made a trusted
+        # iPhone briefly look rejected before its encrypted ReadValue supplied
+        # the real device identity. ReadValue immediately publishes the
+        # authoritative state, and the periodic refresh continues afterwards.
 
     @dbus.service.method(CHAR_IFACE)
     def StopNotify(self):

@@ -21,7 +21,7 @@ for version_candidate in \
         break
     fi
 done
-DEFAULT_VERSION="v3.1.6"
+DEFAULT_VERSION="v4.0"
 if [ -f "$VERSION_CONF" ]; then
     DEFAULT_VERSION="$(awk -F= '$1 == "VERSION" {print $2; exit}' "$VERSION_CONF")"
 fi

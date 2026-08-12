@@ -15,6 +15,7 @@ Item {
     signal backToHome()
     signal requestVirtualKeyboard(var target)
     signal dismissVirtualKeyboard()
+    signal androidAppInstalled()
 
     property url currentUrl: "https://www.bing.com"
     property bool isLoading: false
@@ -29,6 +30,13 @@ Item {
     property double keyboardSuppressedUntil: 0
     property int activeTabIndex: 0
 
+    Timer {
+        id: downloadStatusTimer
+        interval: 2600
+        repeat: false
+        onTriggered: browserScreen.downloadStatus = ""
+    }
+
     // An empty tab is a real editable start surface.  WebEngine still uses
     // about:blank internally as its inert document, but that implementation
     // detail must never be painted or exposed to the user.
@@ -41,6 +49,19 @@ Item {
 
     function openDownloadsFolder() {
         Qt.openUrlExternally("file:///home/yunsh/Downloads")
+    }
+
+    function openDownloadItem(index) {
+        if (index < 0 || index >= downloadHistory.count)
+            return
+        var item = downloadHistory.get(index)
+        if (String(item.name).toLowerCase().endsWith(".apk")) {
+            downloadedApkPath = item.path
+            installDownloadedApk()
+        } else {
+            Qt.openUrlExternally("file://" + item.path)
+        }
+        downloadsPopup.close()
     }
 
     function removeDownload(index) {
@@ -172,12 +193,16 @@ Item {
             downloadBusy = false
             try {
                 var data = JSON.parse(xhr.responseText)
-                downloadStatus = data.status === "ok"
-                    ? "Android 应用安装完成"
+            downloadStatus = data.status === "ok"
+                    ? "Android 应用安装完成，正在刷新桌面"
                     : (data.message || "安装失败")
-            } catch (error) {
-                downloadStatus = "无法连接 Android 安装服务"
-            }
+            if (data.status === "ok")
+                androidAppInstalled()
+            downloadStatusTimer.restart()
+        } catch (error) {
+            downloadStatus = "无法连接 Android 安装服务"
+            downloadStatusTimer.restart()
+        }
         }
         xhr.send(JSON.stringify({
             action: "install_apk",
@@ -200,6 +225,7 @@ Item {
         onDownloadRequested: function(download) {
             download.downloadDirectory = "/home/yunsh/Downloads"
             browserScreen.downloadStatus = "正在下载 " + download.suggestedFileName
+            downloadStatusTimer.stop()
             browserScreen.downloadedApkPath = ""
             browserScreen.downloadBusy = true
             download.accept()
@@ -216,11 +242,17 @@ Item {
                     time: Qt.formatTime(new Date(), "HH:mm")
                 })
                 while (downloadHistory.count > 10) downloadHistory.remove(10)
-                if (download.downloadFileName.toLowerCase().endsWith(".apk"))
+                if (download.downloadFileName.toLowerCase().endsWith(".apk")) {
                     browserScreen.downloadedApkPath = path
+                    browserScreen.downloadStatus = "APK 下载完成，正在安装…"
+                    Qt.callLater(function() { browserScreen.installDownloadedApk() })
+                } else {
+                    downloadStatusTimer.restart()
+                }
             } else {
                 browserScreen.downloadStatus = download.interruptReasonString.length > 0
                     ? download.interruptReasonString : "下载未完成"
+                downloadStatusTimer.restart()
             }
         }
     }
@@ -741,7 +773,7 @@ Item {
                         Text { anchors.verticalCenter: parent.verticalCenter; text: "×"; color: "#FF453A"; font.pixelSize: 18; z: 2
                             MouseArea { anchors.fill: parent; anchors.margins: -8; z: 2; onClicked: browserScreen.removeDownload(index) } }
                     }
-                    MouseArea { anchors.fill: parent; z: 0; onClicked: browserScreen.openDownloadsFolder() }
+                    MouseArea { anchors.fill: parent; z: 0; onClicked: browserScreen.openDownloadItem(index) }
                 }
             }
             Text {
