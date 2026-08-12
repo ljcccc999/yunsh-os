@@ -46,16 +46,11 @@ FCITX_PROFILE
         chmod 0600 "$fcitx_home/.config/fcitx5/profile"
     fi
 done
-if ! pgrep -x fcitx5 >/dev/null 2>&1; then
-    # Start Fcitx inside its own persistent D-Bus session so fcitx5-remote and
-    # the Qt input-method plugin talk to the same instance after a reboot.
-    if command -v dbus-run-session >/dev/null 2>&1; then
-        dbus-run-session -- fcitx5 --replace >>"$UI_LOG" 2>&1 &
-    else
-        fcitx5 -d --replace >>"$UI_LOG" 2>&1 &
-    fi
-    sleep 0.4
-fi
+# Fcitx is deliberately not started here.  Before Weston owns a real display
+# there is no Wayland seat for its frontend; starting it early caused repeated
+# "Failed to open wayland connection" crashes and made the boot log look like
+# the shell itself had failed.  It is started once, after the compositor has
+# passed its readiness checks, below.
 install -d -o yunsh -g yunsh \
     /home/yunsh/Pictures/Screenshots /home/yunsh/Downloads \
     /home/yunsh/.cache/yunsh-browser /home/yunsh/.local/share/yunsh-browser \
@@ -239,10 +234,6 @@ while true; do
             "$(date -Iseconds)" >>"$UI_LOG"
     fi
 
-    if [ "$failure_count" -ge 3 ] && [ -f "$RECOVERY_QML" ]; then
-        "$QML_RUNNER" "$RECOVERY_QML" "$QML_EXIT" 2>>"$UI_LOG" || true
-        failure_count=0
-    fi
     # If the Wayland/Qt path repeatedly aborts (for example a broken DRM
     # plane import on pointer movement), switch once to the explicit recovery
     # framebuffer path. This is never selected during a healthy boot.
@@ -256,6 +247,9 @@ while true; do
         export QT_QUICK_BACKEND="software"
         printf '%s Wayland/Qt crashed repeatedly; using linuxfb recovery.\n' \
             "$(date -Iseconds)" >>"$UI_LOG"
+        failure_count=0
+    elif [ "$failure_count" -ge 3 ] && [ -f "$RECOVERY_QML" ]; then
+        "$QML_RUNNER" "$RECOVERY_QML" "$QML_EXIT" 2>>"$UI_LOG" || true
         failure_count=0
     fi
     sleep 2

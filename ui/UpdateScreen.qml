@@ -18,12 +18,14 @@ Item {
     signal openHistory()
 
     /* ---- State ---- */
-    property string currentVersion: "3.1.2"
+    property string currentVersion: "3.1.6"
     property string latestVersion: ""
     property bool updateAvailable: false
     property bool isChecking: false
     property bool isDownloading: false
     property int downloadProgress: 0
+    property double downloadedBytes: 0
+    property double totalBytes: 0
     property string downloadSpeed: ""
     property string downloadEta: ""
     property bool autoUpdate: true
@@ -34,6 +36,10 @@ Item {
     property string updateError: ""
     property bool rebootRequired: false
 
+    function formatMegabytes(value) {
+        return (Math.max(0, Number(value || 0)) / 1000000).toFixed(1) + " MB"
+    }
+
     /* Backend integration — call this to refresh all data */
     function refreshStatus() {
         var xhr = new XMLHttpRequest();
@@ -42,7 +48,7 @@ Item {
             if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
                 try {
                     var data = JSON.parse(xhr.responseText);
-                    currentVersion = data.currentVersion || "3.1.2";
+                    currentVersion = data.currentVersion || "3.1.6";
                     latestVersion = data.latestVersion || "";
                     updateAvailable = data.updateAvailable || false;
                     autoUpdate = data.autoUpdate || false;
@@ -51,6 +57,8 @@ Item {
                     changelog = data.changelog || "";
                     updateAvailable = data.updateAvailable || false;
                     downloadProgress = data.progress || 0;
+                    downloadedBytes = data.downloadedBytes || 0;
+                    totalBytes = data.totalBytes || 0;
                     updateError = data.error || "";
                     rebootRequired = data.rebootRequired || false;
                     isChecking = data.state === "checking";
@@ -578,7 +586,9 @@ Item {
                         spacing: 12
 
                         Text {
-                            text: downloadProgress + "%"
+                            text: totalBytes > 0
+                                ? formatMegabytes(downloadedBytes) + " / " + formatMegabytes(totalBytes)
+                                : downloadProgress + "%"
                             color: "#17212A"
                             font.pixelSize: 14
                             font.weight: Font.Medium
@@ -713,7 +723,7 @@ Item {
                     spacing: 12
 
                     Text {
-                        text: "仅WiFi下载"
+                        text: "仅 Wi-Fi / 有线网络下载"
                         color: "#17212A"
                         font.pixelSize: 17
                         font.family: "SF Pro Display, -apple-system, Helvetica Neue, sans-serif"

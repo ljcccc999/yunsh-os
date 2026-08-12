@@ -104,6 +104,17 @@ Item {
         xhr.send(payload ? JSON.stringify(payload) : "")
     }
 
+    function copyMessage(text) {
+        if (!text || !String(text).length)
+            return
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8591/api/clipboard", true)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.timeout = 1000
+        xhr.send(JSON.stringify({text: String(text)}))
+        toastRequested("已复制")
+    }
+
     function refreshStatus() {
         request("GET", "/v1/status", null, function(status, body) {
             if (status !== 200 || !body.success) {
@@ -631,6 +642,19 @@ Item {
                                     wrapMode: Text.Wrap
                                     font.pixelSize: 14
                                     lineHeight: 1.28
+                                }
+                                // Replies are read-only Text, so provide the
+                                // same long-press copy affordance as inputs.
+                                MouseArea {
+                                    anchors.fill: parent
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    propagateComposedEvents: true
+                                    onPressAndHold: orbit.copyMessage(content)
+                                    onClicked: function(mouse) {
+                                        if (mouse.button === Qt.RightButton)
+                                            orbit.copyMessage(content)
+                                        mouse.accepted = false
+                                    }
                                 }
                             }
                         }

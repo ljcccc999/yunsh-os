@@ -300,7 +300,11 @@ Rectangle {
 
         // Glass toolbar at bottom
         Rectangle {
-        anchors.bottom: bottomLiquidBar.top
+            // The liquid album bar is a sibling outside this full-screen
+            // viewer, so anchoring to it is invalid in QML and produced a
+            // warning on every shell start. Keep the viewer toolbar inside
+            // its own parent; the album bar is hidden while previewing.
+            anchors.bottom: parent.bottom
             anchors.bottomMargin: 32
             anchors.horizontalCenter: parent.horizontalCenter
             width: 200; height: 44; radius: 22

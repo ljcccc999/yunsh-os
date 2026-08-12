@@ -299,8 +299,8 @@ def _build_key(value: str) -> int:
     return int(digits[:8]) if len(digits) >= 8 else 0
 
 
-def wifi_connected() -> bool:
-    """Return True only when NetworkManager reports an active Wi-Fi link."""
+def unmetered_network_connected() -> bool:
+    """Allow OTA on active Wi-Fi or Ethernet, but not mobile-only links."""
     try:
         environment = dict(os.environ)
         environment["LC_ALL"] = "C"
@@ -318,10 +318,14 @@ def wifi_connected() -> bool:
         return False
     if result.returncode != 0:
         return False
-    return any(
-        line.strip() in {"802-11-wireless:activated", "wifi:activated"}
-        for line in result.stdout.splitlines()
-    )
+    allowed_types = {
+        "802-11-wireless", "wifi", "802-3-ethernet", "ethernet",
+    }
+    for line in result.stdout.splitlines():
+        connection_type, separator, state = line.strip().partition(":")
+        if separator and connection_type in allowed_types and state == "activated":
+            return True
+    return False
 
 
 def is_major_update(current: str, latest: str) -> bool:
@@ -719,9 +723,9 @@ class UpdateDaemon:
 
     def _perform_download(self) -> dict:
         """Start the verified OTA installer without blocking the local API."""
-        if self._config.get("wifi_only", True) and not wifi_connected():
+        if self._config.get("wifi_only", True) and not unmetered_network_connected():
             self._state = "error"
-            message = "Wi-Fi-only updates require an active Wi-Fi connection"
+            message = "自动更新需要可用的 Wi-Fi 或有线网络"
             write_status(state="error", error=message)
             return {"error": message}
         self._state = "downloading"

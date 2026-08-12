@@ -214,6 +214,37 @@ if [ -f "${CONFIRMED_BOOT_DIR}/SHA256SUMS" ]; then
     }
 fi
 
+# A boot layer is only safe when its kernel/initramfs ABI matches the clean
+# Raspberry Pi OS rootfs used by this build.  Mixing a newer confirmed kernel
+# with older /lib/modules lets Linux start but leaves KMS, Wi-Fi and other
+# drivers unavailable after the root switch.  In that case keep the archived
+# layer untouched and use the base image's internally matched Pi 5 stack.
+BASE_INITRAMFS_CHECK="${BUILD_DIR}/base-initramfs-check"
+mdel -i "${BOOT_IMG}" ::/BASE-INITRAMFS-CHECK 2>/dev/null || true
+mcopy -i "${BOOT_IMG}" ::/initramfs_2712 "${BASE_INITRAMFS_CHECK}"
+initramfs_kernel_version() {
+    strings "$1" 2>/dev/null |
+        sed -nE 's#.*usr/lib/modules/([^/[:space:]]+).*#\1#p' |
+        head -1
+}
+BASE_KERNEL_ABI="$(initramfs_kernel_version "${BASE_INITRAMFS_CHECK}")"
+LAYER_KERNEL_ABI="$(initramfs_kernel_version "${CONFIRMED_BOOT_DIR}/initramfs_2712")"
+rm -f "${BASE_INITRAMFS_CHECK}"
+[ -n "${BASE_KERNEL_ABI}" ] || {
+    echo "ERROR: cannot determine base image Pi 5 kernel ABI."
+    exit 1
+}
+[ -n "${LAYER_KERNEL_ABI}" ] || {
+    echo "ERROR: cannot determine confirmed boot layer kernel ABI."
+    exit 1
+}
+APPLY_CONFIRMED_BOOT_LAYER=1
+if [ "${BASE_KERNEL_ABI}" != "${LAYER_KERNEL_ABI}" ]; then
+    APPLY_CONFIRMED_BOOT_LAYER=0
+    echo "  ⚠ Boot layer ABI ${LAYER_KERNEL_ABI} does not match rootfs ABI ${BASE_KERNEL_ABI}."
+    echo "  ✓ Preserving the clean base image's matched kernel, initramfs, DTBs and modules."
+fi
+
 copy_confirmed_boot_file() {
     local source_file="$1"
     local target_file="$2"
@@ -221,7 +252,7 @@ copy_confirmed_boot_file() {
     mdel -i "${BOOT_IMG}" "::/${target_file}" 2>/dev/null || true
     mcopy -i "${BOOT_IMG}" "$source_file" "::/${target_file}"
 }
-if [ -d "${CONFIRMED_BOOT_DIR}" ]; then
+if [ "${APPLY_CONFIRMED_BOOT_LAYER}" -eq 1 ]; then
     echo "→ Applying ${TARGET_DEVICE} boot firmware layer (no settings or runtime state)..."
     for source_file in \
         "${CONFIRMED_BOOT_DIR}"/kernel*.img \
@@ -248,17 +279,16 @@ fi
 echo ""
 echo "→ config.txt..."
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null > "${BUILD_DIR}/yunsh-config-new.txt"
-# The base Raspberry Pi image may carry a generic VC4 overlay or the legacy
-# firmware-KMS hand-off switch. Normalize both before adding the Pi 5 section:
-# the Pi 5 overlay still asks firmware for its initial framebuffer, while the
-# userspace launcher requires the DRM card and Wayland compositor for the
-# normal desktop path.
-sed -i '' -e 's/^dtoverlay=vc4-kms-v3d$/dtoverlay=vc4-kms-v3d-pi5/' \
-    -e '/^disable_fw_kms_setup=1$/d' "${BUILD_DIR}/yunsh-config-new.txt" 2>/dev/null || \
-sed -i -e 's/^dtoverlay=vc4-kms-v3d$/dtoverlay=vc4-kms-v3d-pi5/' \
-    -e '/^disable_fw_kms_setup=1$/d' "${BUILD_DIR}/yunsh-config-new.txt"
+# Preserve the VC4 overlay selected by the matched boot stack. Raspberry Pi
+# OS uses the generic overlay and maps it to the Pi 5 implementation; a
+# confirmed, ABI-matched layer may provide the explicit -pi5 overlay.
+if ! grep -q '^disable_fw_kms_setup=1$' "${BUILD_DIR}/yunsh-config-new.txt"; then
+    sed -i '' -e '/^auto_initramfs=1$/a\
+disable_fw_kms_setup=1' "${BUILD_DIR}/yunsh-config-new.txt" 2>/dev/null ||
+    sed -i -e '/^auto_initramfs=1$/a disable_fw_kms_setup=1' "${BUILD_DIR}/yunsh-config-new.txt"
+fi
 KMS_OVERLAY=""
-if ! grep -q '^dtoverlay=vc4-kms-v3d-pi5' "${BUILD_DIR}/yunsh-config-new.txt"; then
+if ! grep -Eq '^dtoverlay=vc4-kms-v3d(-pi5)?([,[:space:]]|$)' "${BUILD_DIR}/yunsh-config-new.txt"; then
     KMS_OVERLAY="dtoverlay=vc4-kms-v3d-pi5"
 fi
 cat >> "${BUILD_DIR}/yunsh-config-new.txt" << YUNSHCONF
@@ -288,7 +318,8 @@ CMDLINE=$(cat "${BUILD_DIR}/yunsh-cmdline-new.txt")
 # Keep detailed startup diagnostics on the serial console and in the journal,
 # while reserving the optical display for the YUNSH splash and spatial UI.
 CMDLINE=$(printf '%s\n' "${CMDLINE}" | sed -E \
-    -e 's/(^| )(quiet|splash|logo\.nologo|console=tty[0-9]+|consoleblank=[^ ]+|loglevel=[^ ]+|systemd\.show_status=[^ ]+|systemd\.log_target=[^ ]+|systemd\.log_level=[^ ]+|systemd\.default_standard_output=[^ ]+|vt\.global_cursor_default=[^ ]+|cma=[^ ]+|psi=[^ ]+|module_blacklist=[^ ]+)( |$)/ /g' \
+    -e 's/(^| )(quiet|splash|logo\.nologo|consoleblank=[^ ]+|loglevel=[^ ]+|systemd\.show_status=[^ ]+|systemd\.log_target=[^ ]+|systemd\.log_level=[^ ]+|systemd\.default_standard_output=[^ ]+|vt\.global_cursor_default=[^ ]+|cma=[^ ]+|psi=[^ ]+|module_blacklist=[^ ]+)( |$)/ /g' \
+    -e 's/(^| )console=tty[0-9]+( |$)/ /g' \
     -e 's/(^| )video=HDMI-A-[12]:[^ ]+//g' \
     -e 's/(^| )resize( |$)/ /g' \
     -e 's/  +/ /g')
@@ -306,11 +337,12 @@ esac
 # Keep the canonical Pi 5 SD layout. Serial0
 # remains the diagnostic console; tty1 stays clean for splash and UI output.
 CMDLINE=$(printf '%s\n' "${CMDLINE}" | sed -E 's/  +/ /g; s/^ +//; s/ +$//')
-echo "${CMDLINE} quiet logo.nologo consoleblank=0 loglevel=3 vt.global_cursor_default=0 cma=256M psi=1 systemd.show_status=false systemd.log_target=journal systemd.log_level=notice systemd.default_standard_output=journal" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
+echo "${CMDLINE} console=tty1 quiet logo.nologo consoleblank=0 loglevel=3 vt.global_cursor_default=0 cma=256M psi=1 systemd.show_status=false systemd.log_target=journal systemd.log_level=notice systemd.default_standard_output=journal" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
 mdel -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null || true
 mcopy -i "${BOOT_IMG}" "${BUILD_DIR}/yunsh-cmdline-new.txt" ::/cmdline.txt
-if grep -Eq '(^| )(splash|console=tty1|module_blacklist=)' "${BUILD_DIR}/yunsh-cmdline-new.txt"; then
-    echo "ERROR: boot cmdline still exposes firmware splash, tty1, or a GPU blacklist" >&2
+if grep -Eq '(^| )(splash|module_blacklist=)' "${BUILD_DIR}/yunsh-cmdline-new.txt" ||
+   ! grep -Eq '(^| )console=tty1( |$)' "${BUILD_DIR}/yunsh-cmdline-new.txt"; then
+    echo "ERROR: boot cmdline is missing the quiet local tty1 display channel or still exposes a splash/GPU blacklist" >&2
     exit 1
 fi
 echo "  ✓ cmdline.txt modified"
@@ -320,6 +352,16 @@ echo ""
 echo "→ YUNSH boot files..."
 mcopy -i "${BOOT_IMG}" "${YUNSH_DIR}/boot/yunsh-firstboot.sh" ::/yunsh-firstboot.sh
 echo "  ✓ yunsh-firstboot.sh"
+
+# Keep an emergency SSH bootstrap marker in every release image.  The base
+# Raspberry Pi OS `sshswitch.service` consumes this marker early in boot and
+# enables ssh.service before the online first-boot package transaction starts.
+# Without it, a failed download/graphics hand-off leaves a live kernel that
+# answers ping but cannot be inspected remotely.
+: > "${BUILD_DIR}/ssh"
+mdel -i "${BOOT_IMG}" ::/ssh 2>/dev/null || true
+mcopy -i "${BOOT_IMG}" "${BUILD_DIR}/ssh" ::/ssh
+echo "  ✓ early SSH recovery marker"
 mcopy -i "${BOOT_IMG}" "${YUNSH_DIR}/boot/yunsh-iptables.sh" ::/yunsh-iptables.sh
 echo "  ✓ yunsh-iptables.sh"
 
@@ -343,12 +385,16 @@ sync
 # Read the FAT image back before deleting it. These are boot-critical settings:
 # a failed mtools write must stop the build rather than becoming an unbootable
 # image published under an otherwise valid checksum.
-mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtoverlay=vc4-kms-v3d-pi5'
-mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -qv '^disable_fw_kms_setup=1$'
+mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -Eq '^dtoverlay=vc4-kms-v3d(-pi5)?([,[:space:]]|$)'
+mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^disable_fw_kms_setup=1$'
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^hdmi_drive=2'
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtparam=i2c_arm=on'
 mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'psi=1'
 mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'root=/dev/mmcblk0p2'
+if ! mtype -i "${BOOT_IMG}" ::/ssh >/dev/null 2>&1; then
+    echo "  ✗ Early SSH recovery marker is missing"
+    exit 1
+fi
 if mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'module_blacklist=vc4,v3d'; then
     echo "  ✗ Pi 5 VC4/V3D is blacklisted; primary Wayland cannot start"
     exit 1
@@ -501,11 +547,11 @@ ExecStart=/usr/bin/yunsh-ui-launcher
 Restart=always
 RestartSec=2
 User=root
-StandardInput=tty
-TTYPath=/dev/tty1
-TTYReset=yes
-TTYVHangup=yes
-TTYVTDisallocate=no
+# The shell owns the framebuffer directly. Keep diagnostics in the journal;
+# inheriting tty1 makes raw QML/code text flash over activation transitions.
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
 [Install]
 WantedBy=multi-user.target
 SVC
@@ -578,6 +624,7 @@ Wants=network-online.target avahi-daemon.service
 ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
+ExecStartPre=/usr/bin/install -d -m 0755 /var/lib/yunsh/space-inbox /var/lib/yunsh/media /var/lib/yunsh/orbit/voice /run/yunsh
 ExecStart=/usr/bin/yunsh-spaced
 Restart=always
 RestartSec=3
@@ -599,6 +646,7 @@ Requires=yunsh-spaced.service
 ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
+ExecStartPre=/usr/bin/install -d -m 0755 /var/lib/yunsh/space-inbox /run/yunsh
 ExecStart=/usr/bin/yunsh-screen-relayd
 Restart=always
 RestartSec=3
@@ -828,8 +876,8 @@ add_file "${YUNSH_DIR}/system/yunsh-boot-health" "/usr/bin/yunsh-boot-health"
 cat > "${BUILD_DIR}/yunsh-boot-health.service" << 'HEALTHSVC'
 [Unit]
 Description=YUNSH OS Post-Reboot Health Guard
-After=network-online.target
-Wants=network-online.target
+After=local-fs.target network.target
+Wants=network.target
 ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=oneshot
@@ -927,6 +975,11 @@ for service in yunsh-os yunsh-firstboot yunsh-grow-root yunsh-local-api yunsh-sp
 done
 # Network: disable dhcpcd, enable NetworkManager + fstrim
 echo "rm /etc/systemd/system/multi-user.target.wants/dhcpcd.service" >> "${DEBUGFS_SCRIPT}"
+# SSH is a diagnostic/recovery channel as well as a normal administration
+# service.  Enable it in the clean image so it remains available even when
+# firstboot stops before the package marker or the graphical shell is ready.
+echo "rm /etc/systemd/system/multi-user.target.wants/ssh.service" >> "${DEBUGFS_SCRIPT}"
+echo "symlink /etc/systemd/system/multi-user.target.wants/ssh.service /lib/systemd/system/ssh.service" >> "${DEBUGFS_SCRIPT}"
 # The filesystem is grown while building the image. Removing one wants-link is
 # insufficient on current Raspberry Pi OS: first-boot generators can still
 # enqueue both resize units and stall sysinit. Mask them explicitly.

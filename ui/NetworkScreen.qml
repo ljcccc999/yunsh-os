@@ -17,6 +17,7 @@ Rectangle {
     property string currentSSID: ""
     property string currentIP: ""
     property bool ethernetConnected: false
+    property bool wifiEnabled: true
     property string ethernetInterface: ""
     property string ethernetIP: ""
     property var networks: []
@@ -55,6 +56,7 @@ Rectangle {
                     currentSSID = data.ssid || ""
                     currentIP = data.ip_address || ""
                     ethernetConnected = data.ethernet_connected === true
+                    wifiEnabled = data.enabled !== false
                     ethernetInterface = data.ethernet_interface || ""
                     ethernetIP = data.ethernet_ip_address || ""
                 } catch(e) {}
@@ -66,6 +68,10 @@ Rectangle {
     // Trigger Wi-Fi scan
     function scanNetworks() {
         if (scanning) return
+        if (ethernetConnected) {
+            networks = []
+            return
+        }
         scanning = true
         networks = []
         
@@ -244,7 +250,7 @@ Rectangle {
         anchors.topMargin: 20
         anchors.left: parent.left
         anchors.leftMargin: 48
-        text: "可用网络"
+        text: ethernetConnected ? "有线网络使用中 · 断开网线后自动恢复 Wi-Fi" : "可用网络"
         color: "#8888A0"
         font.pixelSize: 14
         font.weight: Font.Medium

@@ -66,7 +66,7 @@ if ! id -u yunsh >/dev/null 2>&1; then
     useradd -m -s /bin/bash -G sudo,adm,dialout yunsh
 fi
 install -d -o yunsh -g yunsh /home/yunsh
-echo "yunsh:yunsh123" | chpasswd
+echo "yunsh:YUNSH123" | chpasswd
 echo "✓ 系统账号已保留；本机密码已重置"
 
 # ─── Reset user settings (language, Wi-Fi, Bluetooth) ───

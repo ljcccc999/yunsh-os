@@ -407,7 +407,7 @@ Item {
                                 anchors.bottom: parent.bottom
                                 anchors.bottomMargin: 16
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: "YUNSH OS v3.1.2"
+                                text: "YUNSH OS v3.1.6"
                                 color: Qt.rgba(255/255, 255/255, 255/255, 0.08)
                                 font.pixelSize: 11
                                 visible: pageIndex === 0

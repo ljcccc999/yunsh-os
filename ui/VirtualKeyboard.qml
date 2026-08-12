@@ -32,6 +32,43 @@ Item {
     property string inputMethod: "latin"
     readonly property string inputMethodLabel: inputMethod === "pinyin" ? "中" : "ABC"
     property string pinyinBuffer: ""
+    property var pinyinCandidates: []
+    // A local, deterministic candidate layer keeps the spatial keyboard
+    // usable even when Fcitx has no Wayland frontend (for example during the
+    // Pi framebuffer recovery path). Fcitx still receives the physical-style
+    // keys, while this bar gives the user an explicit iPhone-style choice.
+    property var candidateMap: ({
+        "nihao": ["你好", "拟好", "泥号", "倪浩"],
+        "nimen": ["你们", "尼们"], "ni": ["你", "拟", "泥", "尼", "逆"],
+        "hao": ["好", "号", "浩", "毫", "郝"], "wo": ["我", "窝", "握", "沃"],
+        "shi": ["是", "时", "事", "十", "使", "市", "师", "实"],
+        "de": ["的", "得", "德", "地"], "bu": ["不", "部", "步", "布"],
+        "zai": ["在", "再", "载"], "you": ["有", "又", "由", "友", "游"],
+        "ma": ["吗", "马", "妈", "嘛", "麻"], "ne": ["呢", "哪", "那"],
+        "ta": ["他", "她", "它", "塔"], "men": ["们", "门", "梦"],
+        "zhong": ["中", "种", "重", "众", "钟"], "guo": ["国", "过", "果", "锅"],
+        "ren": ["人", "任", "认", "忍"], "sheng": ["生", "声", "省", "胜"],
+        "xue": ["学", "雪", "血"], "xi": ["喜", "西", "系", "希", "细"],
+        "tian": ["天", "田", "填"], "qi": ["起", "其", "气", "七", "期"],
+        "jia": ["家", "加", "价", "假"], "xin": ["新", "心", "信", "辛"],
+        "wen": ["问", "文", "温"], "zi": ["字", "子", "自", "资"],
+        "shang": ["上", "商", "上"], "xia": ["下", "夏", "吓"],
+        "kai": ["开", "凯", "慨"], "guan": ["关", "观", "管", "官"],
+        "dian": ["点", "电", "店", "典"], "na": ["那", "哪", "拿", "纳"],
+        "ge": ["个", "各", "歌", "哥"], "ji": ["几", "机", "及", "记", "级"],
+        "hao123": ["好"], "yunsh": ["云石", "YUNSH"], "shu": ["书", "数", "树", "输"],
+        "miao": ["秒", "苗", "妙"], "zhang": ["张", "长", "章", "掌"],
+        "ming": ["明", "名", "命", "鸣"], "bai": ["白", "百", "摆"],
+        "tui": ["退", "推", "腿"], "hui": ["会", "回", "灰", "汇"],
+        "dakai": ["打开", "打卡"], "guanbi": ["关闭", "管壁"],
+        "shezhi": ["设置", "舌质"], "liulanqi": ["浏览器"],
+        "shurufa": ["输入法"], "zhongwen": ["中文"], "yingwen": ["英文"],
+        "fuzhi": ["复制"], "zhantie": ["粘贴"], "shanchu": ["删除"],
+        "quxiao": ["取消"], "queding": ["确定"], "chongqi": ["重启"],
+        "guanji": ["关机"], "wangluo": ["网络"], "mima": ["密码"],
+        "shouji": ["手机"], "diannao": ["电脑"], "xiangce": ["相册"],
+        "xiazai": ["下载"], "gengxin": ["更新"], "wancheng": ["完成"]
+    })
     property bool reduceMotion: false
     property bool tilted: true
     property string pinMode: "following" // following, pinned
@@ -105,6 +142,43 @@ Item {
         targetItem.cursorPosition = pos + key.length
     }
 
+    function refreshCandidates() {
+        if (inputMethod !== "pinyin" || !pinyinBuffer.length) {
+            pinyinCandidates = []
+            return
+        }
+        var exact = candidateMap[pinyinBuffer.toLowerCase()]
+        if (exact) {
+            pinyinCandidates = exact.filter(function(item) { return item.length > 0 })
+            return
+        }
+        // Keep the most useful prefix candidates visible while a phrase is
+        // still being typed (e.g. ni → 你, then nihao → 你好).
+        var result = []
+        Object.keys(candidateMap).forEach(function(key) {
+            if (key.indexOf(pinyinBuffer.toLowerCase()) === 0 && candidateMap[key].length) {
+                candidateMap[key].forEach(function(item) {
+                    if (item.length && result.indexOf(item) < 0) result.push(item)
+                })
+            }
+        })
+        pinyinCandidates = result.slice(0, 12)
+    }
+
+    function commitCandidate(candidate) {
+        if (!candidate || !targetItem)
+            return
+        // Cancel the physical-style Fcitx composition first, then commit the
+        // selected Chinese text into the focused QML/WebEngine proxy.
+        injectKey("escape")
+        var pos = targetItem.cursorPosition
+        targetItem.text = targetItem.text.substring(0, pos) + candidate
+            + targetItem.text.substring(pos)
+        targetItem.cursorPosition = pos + candidate.length
+        pinyinBuffer = ""
+        pinyinCandidates = []
+    }
+
     function injectKey(key) {
         var completed = false
         var xhr = new XMLHttpRequest()
@@ -164,6 +238,7 @@ Item {
         if (!visible) {
             endBackspace()
             pinyinBuffer = ""
+            pinyinCandidates = []
             targetItem = null
         } else refreshInputMethod()
     }
@@ -425,9 +500,49 @@ Item {
             font.weight: Font.Medium
             z: 5
         }
+        Flickable {
+            id: candidateFlick
+            x: 18; y: 68
+            width: parent.width - 36; height: 34
+            clip: true
+            visible: keyboardPanel.inputMethod === "pinyin"
+                     && keyboardPanel.pinyinCandidates.length > 0
+            contentWidth: candidateRow.width
+            contentHeight: height
+            boundsBehavior: Flickable.StopAtBounds
+            Row {
+                id: candidateRow
+                height: parent.height
+                spacing: 6
+                Repeater {
+                    model: keyboardPanel.pinyinCandidates
+                    delegate: Rectangle {
+                        width: Math.max(58, candidateLabel.implicitWidth + 28)
+                        height: 32; radius: 16
+                        color: candidateMouse.pressed
+                            ? Qt.rgba(0/255,212/255,255/255,0.38)
+                            : Qt.rgba(255/255,255/255,0.82)
+                        border.color: Qt.rgba(0/255,160/255,210/255,0.28)
+                        Text {
+                            id: candidateLabel
+                            anchors.centerIn: parent
+                            text: modelData
+                            color: "#17212A"
+                            font.pixelSize: 16
+                            font.weight: Font.Medium
+                        }
+                        MouseArea {
+                            id: candidateMouse
+                            anchors.fill: parent
+                            onClicked: keyboardPanel.commitCandidate(modelData)
+                        }
+                    }
+                }
+            }
+        }
         Column {
             anchors.centerIn: parent
-            anchors.verticalCenterOffset: 22
+            anchors.verticalCenterOffset: 45
             spacing: 8
 
             // Row 0: Numbers
@@ -703,6 +818,7 @@ Item {
     onKeyPressed: {
         if (inputMethod === "pinyin" && key.length <= 1 && key.charCodeAt(0) < 128) {
             pinyinBuffer += key.toLowerCase()
+            refreshCandidates()
             injectKey(key)
         } else if (targetItem) {
             var pos = targetItem.cursorPosition
@@ -714,6 +830,7 @@ Item {
         if (inputMethod === "pinyin") {
             if (pinyinBuffer.length > 0)
                 pinyinBuffer = pinyinBuffer.substring(0, pinyinBuffer.length - 1)
+            refreshCandidates()
             injectKey("backspace")
         } else if (targetItem && targetItem.cursorPosition > 0) {
             var pos = targetItem.cursorPosition
@@ -723,8 +840,12 @@ Item {
     }
     onSpacePressed: {
         if (inputMethod === "pinyin") {
-            pinyinBuffer = ""
-            injectKey(" ")
+            if (pinyinCandidates.length > 0)
+                commitCandidate(pinyinCandidates[0])
+            else {
+                pinyinBuffer = ""
+                injectKey(" ")
+            }
         } else if (targetItem) {
             var pos = targetItem.cursorPosition
             targetItem.text = targetItem.text.substring(0, pos) + " " + targetItem.text.substring(pos)
@@ -733,8 +854,12 @@ Item {
     }
     onEnterPressed: {
         if (inputMethod === "pinyin") {
-            pinyinBuffer = ""
-            injectKey("\n")
+            if (pinyinCandidates.length > 0)
+                commitCandidate(pinyinCandidates[0])
+            else {
+                pinyinBuffer = ""
+                injectKey("\n")
+            }
         } else if (targetItem && typeof targetItem.submit === "function")
             targetItem.submit()
         else if (targetItem && typeof targetItem.accepted === "function")

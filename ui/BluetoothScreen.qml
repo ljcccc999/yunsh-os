@@ -756,24 +756,34 @@ Rectangle {
 
         Rectangle {
             anchors.centerIn: parent
-            width: 340
-            height: deviceActionSheet.connected ? 260 : 220
+            width: Math.min(deviceActionSheet.width - 32, 400)
+            // Grow with the actual text and action buttons.  The old fixed
+            // 220/260px card clipped the lower buttons and made labels look
+            // off-centre on Chinese/localized layouts.
+            height: Math.min(deviceActionSheet.height - 32,
+                Math.max(220, actionSheetContent.implicitHeight + 44))
             radius: 24
             color: Qt.rgba(248/255, 252/255, 255/255, 0.94)
             border.color: Qt.rgba(255/255, 255/255, 255/255, 0.94)
             border.width: 1
 
             Column {
+                id: actionSheetContent
                 anchors.centerIn: parent
+                width: parent.width - 40
                 spacing: 16
 
                 // Device name header
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
+                    width: parent.width
                     text: deviceActionSheet.name
                     color: "#17212A"
                     font.pixelSize: 18
                     font.weight: Font.Bold
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    maximumLineCount: 3
                 }
 
                 // MAC address
@@ -800,7 +810,7 @@ Rectangle {
                     // Connect / Disconnect button
                     Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        width: 260; height: 44; radius: 22
+                        width: Math.min(260, actionSheetContent.width); height: 44; radius: 22
                         color: deviceActionSheet.connected
                             ? Qt.rgba(255/255, 82/255, 82/255, 0.12)
                             : Qt.rgba(0/255, 212/255, 255/255, 0.15)
@@ -840,7 +850,7 @@ Rectangle {
                     // Pair / Unpair button
                     Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        width: 260; height: 44; radius: 22
+                        width: Math.min(260, actionSheetContent.width); height: 44; radius: 22
                         color: deviceActionSheet.paired
                             ? Qt.rgba(255/255, 255/255, 255/255, 0.68)
                             : Qt.rgba(0/255, 212/255, 255/255, 0.1)
@@ -876,7 +886,7 @@ Rectangle {
                     // Cancel button
                     Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        width: 260; height: 44; radius: 22
+                        width: Math.min(260, actionSheetContent.width); height: 44; radius: 22
                         color: Qt.rgba(255/255, 255/255, 255/255, 0.68)
                         border.color: Qt.rgba(255/255, 255/255, 255/255, 0.88)
                         border.width: 1

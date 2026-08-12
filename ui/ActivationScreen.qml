@@ -1,4 +1,4 @@
-// YUNSH OS v3.1.1 - touch-first activation experience.
+// YUNSH OS v3.1.6 - touch-first activation experience.
 // Physical keyboard input is never required.
 
 import QtQuick 2.15
@@ -23,11 +23,12 @@ Rectangle {
     property string selectedLanguage: "简体中文"
     property string selectedKeyboard: "拼音"
     property string wifiSSID: ""
-    property string accountUsername: "YUNSH User"
+    property string accountUsername: "YUNSH Link"
     property string accountPassword: ""
     property string accountConfirmPassword: ""
     property string bootPassword: ""
     property string bootConfirmPassword: ""
+    readonly property string defaultBootPassword: "YUNSH123"
     property bool accountValid: false
     property string accountError: ""
     property bool activationConfigReady: false
@@ -230,7 +231,9 @@ Rectangle {
             keyboard: selectedKeyboard,
             displayName: accountUsername,
             password: accountPassword,
-            bootPassword: bootPassword
+            // An empty custom value deliberately keeps the documented
+            // factory credential for local unlock/terminal access.
+            bootPassword: bootPassword.length > 0 ? bootPassword : defaultBootPassword
         }))
     }
 
@@ -429,7 +432,7 @@ Rectangle {
                 // Version
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "v3.1.1"
+                    text: "v3.1.6"
                     color: Qt.rgba(16/255, 32/255, 42/255, 0.28)
                     font.pixelSize: 11
                 }
@@ -1249,6 +1252,16 @@ Rectangle {
                     bottomPadding: 16
                 }
 
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 430
+                    text: "未设置自定义密码时：默认开机/命令行密码为 YUNSH123；默认用户为 YUNSH Link（系统账户 yunsh）"
+                    color: "#52616C"
+                    font.pixelSize: 11
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                }
+
                 // Username field
                 Column {
                     spacing: 6
@@ -1267,7 +1280,7 @@ Rectangle {
                             verticalAlignment: TextInput.AlignVCenter
                             color: "#17212A"; font.pixelSize: 15
                             placeholderText: "你的显示名称"
-                            text: "YUNSH User"
+                            text: "YUNSH Link"
                             placeholderTextColor: Qt.rgba(23/255, 33/255, 42/255, 0.36)
                             onTextChanged: {
                                 accountUsername = text
@@ -1290,7 +1303,7 @@ Rectangle {
                             verticalAlignment: TextInput.AlignVCenter
                             color: "#17212A"; font.pixelSize: 15
                             echoMode: TextInput.Password
-                            placeholderText: "输入独立的本机密码"
+                            placeholderText: "留空使用默认开机密码"
                             placeholderTextColor: Qt.rgba(23/255, 33/255, 42/255, 0.36)
                             onTextChanged: bootPassword = text
                         }
@@ -1336,7 +1349,7 @@ Rectangle {
                             verticalAlignment: TextInput.AlignVCenter
                             color: "#17212A"; font.pixelSize: 15
                             echoMode: TextInput.Password
-                            placeholderText: "输入 YUNSH 账户密码"
+                            placeholderText: "留空则不启用账户密码"
                             placeholderTextColor: Qt.rgba(23/255, 33/255, 42/255, 0.36)
                             onTextChanged: accountPassword = text
                         }
@@ -1389,7 +1402,7 @@ Rectangle {
                         MouseArea {
                             anchors.fill: parent; hoverEnabled: true
                             onClicked: {
-                                accountUsername = "YUNSH User"
+                                accountUsername = "YUNSH Link"
                                 accountPassword = ""
                                 accountConfirmPassword = ""
                                 bootPassword = ""
@@ -1402,7 +1415,8 @@ Rectangle {
                     Rectangle {
                         width: 160; height: 44; radius: 22
                         color: "#00D4FF"
-                        opacity: accountPassword.length > 0 && accountPassword === accountConfirmPassword && bootPassword.length > 0 && bootPassword === bootConfirmPassword ? 1 : 0.42
+                        opacity: ((accountPassword.length === 0 || accountPassword === accountConfirmPassword)
+                            && (bootPassword.length === 0 || bootPassword === bootConfirmPassword)) ? 1 : 0.42
                         border.color: "#7BE7FF"; border.width: 1
                         Text { anchors.centerIn: parent; text: "继续"; color: "#00151B"; font.pixelSize: 14; font.weight: Font.Medium }
                         MouseArea {
@@ -1411,13 +1425,13 @@ Rectangle {
                                 accountError = ""
                                 if (accountUsername.trim().length < 1) {
                                     accountError = "请输入显示名称"
-                                } else if (accountPassword.length < 4) {
+                                } else if (accountPassword.length > 0 && accountPassword.length < 4) {
                                     accountError = "密码至少需要4个字符"
-                                } else if (accountPassword !== accountConfirmPassword) {
+                                } else if (accountPassword.length > 0 && accountPassword !== accountConfirmPassword) {
                                     accountError = "两次密码不一致"
-                                } else if (bootPassword.length < 4) {
+                                } else if (bootPassword.length > 0 && bootPassword.length < 4) {
                                     accountError = "本机密码至少需要4个字符"
-                                } else if (bootPassword !== bootConfirmPassword) {
+                                } else if (bootPassword.length > 0 && bootPassword !== bootConfirmPassword) {
                                     accountError = "两次本机密码不一致"
                                 } else {
                                     currentStep = 6

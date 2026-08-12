@@ -133,7 +133,7 @@ Rectangle {
         }
 
         Text {
-            text: "v3.1.1"
+            text: "v3.1.6"
             color: Qt.rgba(255/255, 255/255, 255/255, 0.3)
             font.pixelSize: 10
             anchors.verticalCenter: parent.verticalCenter
@@ -189,7 +189,11 @@ Rectangle {
                     id: unlockPassword
                     anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14
                     enabled: !unlockBusy
-                    focus: screensaver.visible && passwordRequired
+                    // Do not focus on lock entry: the user explicitly taps the
+                    // password field when they want the spatial keyboard.
+                    // This prevents pointer movement/automatic lock from
+                    // summoning the keyboard or destabilising the surface.
+                    focus: false
                     color: "#101820"; font.pixelSize: 16
                     echoMode: TextInput.Password
                     passwordCharacter: "●"

@@ -1,4 +1,4 @@
-// YUNSH OS v3.1.1 - Main QML Entry Point
+// YUNSH OS v3.1.6 - Main QML Entry Point
 // Apple-style glass system + Task Switcher + Home Indicator
 
 import QtQuick 2.15
@@ -64,6 +64,14 @@ ApplicationWindow {
     property string activeAppId: ""
     property string androidTarget: "appstore"
     property string lastUiCommandId: ""
+    // WebEngine is a separate Chromium process tree.  Do not construct it
+    // during the boot shell's first frame: on a Pi 5 it can negotiate EGL
+    // before Weston has finished its first repaint and take the whole QML
+    // process down, leaving a black display.  The browser is created only
+    // after the user opens it (and stays alive for the rest of the session).
+    property bool browserRequested: false
+    property var browserScreen: browserLoader.item
+    property var virtualKeyboardRef: virtualKeyboard
     // A manual hide choice survives desktop clicks. App-driven automatic
     // hiding remains temporary and can be reversed from exposed desktop space.
     property bool appIconsManuallyHidden: false
@@ -350,7 +358,7 @@ ApplicationWindow {
             onOpenAppStore: launchApp("appstore")
             onOpenFileManager: launchApp("files")
             onOpenAndroidApp: function(packageName) { launchApp("android:" + packageName) }
-            onOpenBrowser: switchTo(browserWindow, "browser")
+            onOpenBrowser: yunshOS.openBrowser()
             onOpenWorld: yunshOS.openWorld()
             onOpenSystemUpdateUI: switchTo(updateWindow, "update")
             onOpenNetwork: switchTo(networkWindow, "network")
@@ -761,12 +769,20 @@ ApplicationWindow {
             onActivated: yunshOS.activateWindow(browserWindow, "browser")
             onCloseClicked: { yunshOS.closeAppFromSwitcher("browser") }
             onMinimizeClicked: yunshOS.minimizeWindow(browserWindow, "browser")
-            YunshBrowser {
-                id: browserScreen
+            Loader {
+                id: browserLoader
                 anchors.fill: parent
-                onBackToHome: switchToHome()
-                onRequestVirtualKeyboard: function(target) { virtualKeyboard.showFor(target) }
-                onDismissVirtualKeyboard: virtualKeyboard.hide()
+                active: yunshOS.browserRequested
+                sourceComponent: Component {
+                    YunshBrowser {
+                        anchors.fill: parent
+                        onBackToHome: yunshOS.switchToHome()
+                        onRequestVirtualKeyboard: function(target) {
+                            yunshOS.virtualKeyboardRef.showFor(target)
+                        }
+                        onDismissVirtualKeyboard: yunshOS.virtualKeyboardRef.hide()
+                    }
+                }
             }
         }
 
@@ -829,7 +845,7 @@ ApplicationWindow {
             onActivated: yunshOS.activateWindow(
                 androidWindow, yunshOS.androidTarget
             )
-            onCloseClicked: { yunshOS.closeAppFromSwitcher("appstore"); yunshOS.closeAppFromSwitcher("files") }
+            onCloseClicked: yunshOS.closeAppFromSwitcher(yunshOS.androidTarget)
             onMinimizeClicked: yunshOS.minimizeWindow(
                 androidWindow, yunshOS.androidTarget
             )
@@ -933,6 +949,10 @@ ApplicationWindow {
             anchors.fill: parent
             reduceMotion: yunshOS.reduceMotion
             openApps: yunshOS.openApps
+            // The switcher is a system surface and must stay above every
+            // floating app window.  The lock/activation layers still use a
+            // higher z and explicitly hide it.
+            z: 6000
             onSwitchToApp: function(appId) { hideTaskSwitcher(); switchToAppById(appId) }
             onCloseApp: function(appId) { yunshOS.closeAppFromSwitcher(appId) }
             onDismissSwitcher: hideTaskSwitcher()
@@ -941,7 +961,7 @@ ApplicationWindow {
         // ===== HOME INDICATOR (mouse swipe up trigger) =====
         HomeIndicator {
             id: homeIndicator
-            z: 300
+            z: 5990
             reduceMotion: yunshOS.reduceMotion
             // Keep the home hit zone alive while a minimized/background app is
             // tracked, even if the home surface was briefly hidden during the
@@ -949,6 +969,43 @@ ApplicationWindow {
             visible: homeScreen.visible || yunshOS.openApps.length > 0 || taskSwitcher.visible
             onSwipeUpTriggered: showTaskSwitcher()
             onClicked: showTaskSwitcher()
+        }
+
+        // Full-width bottom gesture target.  The old target was only the
+        // 164px-wide pill, so on a large display a normal upward swipe often
+        // landed beside it and did nothing.  This transparent surface is
+        // active only while an app is tracked and the switcher is closed; it
+        // therefore cannot steal card or dialog input.
+        MouseArea {
+            id: taskSwitcherGestureSurface
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: 120
+            z: 5995
+            visible: homeScreen.visible
+                && !taskSwitcher.visible
+                && yunshOS.openApps.length > 0
+                && !screensaver_item.visible
+            hoverEnabled: false
+            property real pressY: 0
+            property bool triggered: false
+
+            onPressed: function(mouse) {
+                pressY = mouse.y
+                triggered = false
+            }
+            onPositionChanged: function(mouse) {
+                if (pressed && !triggered && pressY - mouse.y >= 24) {
+                    triggered = true
+                    showTaskSwitcher()
+                }
+            }
+            onReleased: function(mouse) {
+                if (!triggered && Math.abs(pressY - mouse.y) < 24)
+                    showTaskSwitcher()
+                triggered = false
+            }
         }
 
         StereoCalibration {
@@ -1207,6 +1264,10 @@ ApplicationWindow {
         // A minimized window remains a running app and must stay in the App
         // Switcher even when it arrived through a dynamic Android entry.
         trackAppOpen(appId, window && window.appTitle ? window.appTitle : "")
+        // A minimized app must not leave its editor/keyboard on top of the
+        // home surface; otherwise the bottom gesture is covered and the
+        // switcher appears not to respond.
+        virtualKeyboard.hide()
         window.visible = false
         window.isMinimized = true
         var updatedApps = openApps.slice()
@@ -1240,20 +1301,30 @@ ApplicationWindow {
     }
 
     function switchToHome() {
-        var ids = ["update","updatehistory","browser","terminal",
-                    "photos","settings","about","systeminfo","network","bluetooth",
-                    "display","comfortdna","spacecapsule"]
-        for (var i = 0; i < ids.length; i++) {
-            var w = getWindowById(ids[i])
-            if (w) { w.visible = false; w.isMinimized = false }
+        // Going home is not the same as terminating applications. Preserve
+        // every open window as a background card so the upward gesture can
+        // restore it, matching the explicit yellow minimize action.
+        var updatedApps = openApps.slice()
+        for (var i = 0; i < updatedApps.length; i++) {
+            var w = getWindowById(updatedApps[i].appId)
+            if (w && (w.visible || w.isMinimized)) {
+                w.visible = false
+                w.isMinimized = true
+                updatedApps[i].minimized = true
+            }
         }
-        androidWindow.visible = false
-        androidWindow.isMinimized = false
+        openApps = updatedApps
+        virtualKeyboard.hide()
         worldLayer.visible = false
         activeAppId = ""
         updateWindowFocus()
         homeScreen.visible = true
         resolveAppIconVisibility()
+    }
+
+    function openBrowser() {
+        browserRequested = true
+        switchTo(browserWindow, "browser")
     }
 
     function openWorld() {
@@ -1513,6 +1584,8 @@ ApplicationWindow {
             { appId: "about", window: aboutWindow },
             { appId: "network", window: networkWindow },
             { appId: "bluetooth", window: bluetoothWindow },
+            { appId: "comfortdna", window: comfortDnaWindow },
+            { appId: "spacecapsule", window: spaceCapsuleWindow },
             { appId: "screenrelay", window: screenRelayWindow },
             { appId: "update", window: updateWindow },
             { appId: "updatehistory", window: updateHistoryWindow },
@@ -1543,7 +1616,7 @@ ApplicationWindow {
                 pinMode: window.pinMode,
                 order: window.z
             }
-            if (appId === "browser")
+            if (appId === "browser" && browserScreen)
                 item.state = {url: String(browserScreen.currentUrl)}
             result.push(item)
         }
@@ -1592,8 +1665,11 @@ ApplicationWindow {
             window.z = 60 + Math.max(0, item.order)
             windowCount = Math.max(windowCount, item.order)
 
-            if (item.appId === "browser" && item.state && item.state.url)
-                browserScreen.currentUrl = item.state.url
+            if (item.appId === "browser") {
+                browserRequested = true
+                if (item.state && item.state.url && browserScreen)
+                    browserScreen.currentUrl = item.state.url
+            }
             if (item.appId === capsule.activeAppId && window.visible)
                 restoredActiveWindow = window
             restoredCount++
@@ -2083,7 +2159,7 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
-        console.log("YUNSH OS UI v3.1.1")
+        console.log("YUNSH OS UI v3.1.6")
         checkFirstBoot()
         showFullScreen()
         applyWindowPreferences()

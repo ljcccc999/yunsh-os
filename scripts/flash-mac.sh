@@ -12,8 +12,16 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VERSION_CONF="${SCRIPT_DIR}/../build/yunsh-version.conf"
-DEFAULT_VERSION="v3.1.1"
+VERSION_CONF=""
+for version_candidate in \
+    "${SCRIPT_DIR}/../build/yunsh-version.conf" \
+    "${SCRIPT_DIR}/../../build/yunsh-version.conf"; do
+    if [ -f "$version_candidate" ]; then
+        VERSION_CONF="$version_candidate"
+        break
+    fi
+done
+DEFAULT_VERSION="v3.1.6"
 if [ -f "$VERSION_CONF" ]; then
     DEFAULT_VERSION="$(awk -F= '$1 == "VERSION" {print $2; exit}' "$VERSION_CONF")"
 fi

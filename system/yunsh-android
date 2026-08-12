@@ -136,13 +136,30 @@ setup_runtime() {
     rm -f "$READY_FILE"
     install_waydroid_package || return 1
 
+    local available_kb
+    available_kb="$(df -Pk "$WAYDROID_DATA_DIR" 2>/dev/null | awk 'NR == 2 {print $4}')"
+    if [ -n "$available_kb" ] && [ "$available_kb" -lt 4194304 ]; then
+        write_state "error" 30 "Android storage is insufficient" \
+            "At least 4 GB of free storage is required"
+        return 1
+    fi
+
     # VANILLA is the default official Waydroid image channel. FOSS is accepted
     # by the CLI but currently returns "No images found on system channel" on
     # the Raspberry Pi arm64 runtime, leaving only a misleading waydroid.cfg.
     # Force initialization so an earlier partial config cannot be mistaken for
     # complete Android system/vendor images.
     write_state "initializing" 35 "Downloading the Android system image"
-    if ! timeout 1800 waydroid init -f -s VANILLA </dev/null; then
+    timeout 7200 waydroid init -f -s VANILLA </dev/null \
+        >>/var/log/yunsh-android.log 2>&1 &
+    local init_pid=$! elapsed=0
+    while kill -0 "$init_pid" 2>/dev/null; do
+        sleep 15
+        elapsed=$((elapsed + 15))
+        write_state "initializing" 35 \
+            "Downloading Android image · $((elapsed / 60)) min elapsed"
+    done
+    if ! wait "$init_pid"; then
         write_state "error" 35 "Android image setup did not complete" \
             "The image server may be unavailable; retry from Android Apps"
         return 1
@@ -177,16 +194,20 @@ trigger_setup_retry() {
 
 status_json() {
     local service_failed="false"
+    local service_active="false"
     if systemctl is-failed --quiet yunsh-android-setup.service 2>/dev/null; then
         service_failed="true"
     fi
-    python3 - "$STATE_FILE" "$READY_FILE" "$WAYDROID_DATA_DIR" "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" "$service_failed" <<'PY'
+    if systemctl is-active --quiet yunsh-android-setup.service 2>/dev/null; then
+        service_active="true"
+    fi
+    python3 - "$STATE_FILE" "$READY_FILE" "$WAYDROID_DATA_DIR" "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" "$service_failed" "$service_active" <<'PY'
 import json
 import os
 import sys
 import time
 
-state_path, ready_path, data_path, wayland_path, service_failed = sys.argv[1:]
+state_path, ready_path, data_path, wayland_path, service_failed, service_active = sys.argv[1:]
 try:
     with open(state_path, encoding="utf-8") as handle:
         data = json.load(handle)
@@ -214,7 +235,8 @@ if service_failed == "true" and data.get("state") not in ("ready", "display_unav
         "message": "Android 后台准备失败",
         "error": "后台服务已停止，请点击“重试准备”",
     })
-elif (data.get("state") in ("pending", "installing", "initializing") and
+elif (service_active != "true" and
+      data.get("state") in ("pending", "installing", "initializing") and
       updated and time.time() - updated > 2700):
     data.update({
         "state": "error",

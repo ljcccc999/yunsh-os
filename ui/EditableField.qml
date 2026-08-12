@@ -140,6 +140,14 @@ TextField {
             mouse.accepted = false
             field.forceActiveFocus()
         }
+
+        onReleased: {
+            // Some parent windows restore focus during the same pointer turn.
+            // Reassert it once after release so the shared keyboard watcher
+            // cannot miss a tap on a newly opened field.
+            Qt.callLater(function() { field.forceActiveFocus() })
+            mouse.accepted = false
+        }
     }
 
     function _toast(msg) {

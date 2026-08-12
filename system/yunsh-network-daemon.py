@@ -19,6 +19,7 @@ import re
 SOCKET_PATH = "/tmp/yunsh-network.sock"
 STATUS_PATH = "/tmp/yunsh-network-status.json"
 LOG_PATH = "/var/log/yunsh-network.log"
+ETHERNET_WIFI_MARKER = "/run/yunsh/wifi-disabled-by-ethernet"
 
 # Setup logging
 logging.basicConfig(
@@ -120,6 +121,14 @@ def split_nmcli(line):
 
 def scan_wifi():
     """Scan Wi-Fi networks"""
+    status = get_status()
+    if status.get("ethernet_connected"):
+        return {
+            "success": True,
+            "networks": [],
+            "wifi_suspended": True,
+            "message": "有线网络连接时 Wi-Fi 扫描已暂停",
+        }
     run_nmcli(["radio", "wifi", "on"], timeout=10)
     success, text = run_nmcli([
         "-t", "-e", "yes", "-f", "SSID,SIGNAL,SECURITY,BARS,CHAN",
@@ -242,6 +251,12 @@ def connect_wifi(ssid, password=None):
     if password is not None and not isinstance(password, str):
         return {"success": False, "message": "Password must be text"}
 
+    if get_status().get("ethernet_connected"):
+        return {
+            "success": False,
+            "message": "请先断开有线网络，再连接 Wi-Fi",
+        }
+
     run_nmcli(["radio", "wifi", "on"], timeout=10)
     # Refresh scan results before connecting. NetworkManager otherwise may
     # report a correct nearby SSID as unavailable when its cache is stale.
@@ -328,6 +343,26 @@ def save_status():
         return {"error": str(e)}
 
 
+def reconcile_network_priority():
+    """Prefer Ethernet without permanently changing the user's Wi-Fi state."""
+    status = get_status()
+    os.makedirs(os.path.dirname(ETHERNET_WIFI_MARKER), exist_ok=True)
+    if status.get("ethernet_connected"):
+        if status.get("enabled"):
+            run_nmcli(["radio", "wifi", "off"], timeout=10)
+            try:
+                with open(ETHERNET_WIFI_MARKER, "w", encoding="utf-8") as handle:
+                    handle.write("ethernet\n")
+            except OSError:
+                pass
+    elif os.path.exists(ETHERNET_WIFI_MARKER):
+        run_nmcli(["radio", "wifi", "on"], timeout=10)
+        try:
+            os.remove(ETHERNET_WIFI_MARKER)
+        except OSError:
+            pass
+
+
 def handle_command(cmd_data):
     """Process a command from the socket"""
     cmd = cmd_data.get("command", "")
@@ -392,7 +427,11 @@ def main():
     log.info("YUNSH Network Daemon starting...")
     country = configure_wifi_country()
     log.info("Wi-Fi regulatory country: %s", country)
-    run_nmcli(["radio", "wifi", "on"], timeout=10)
+    # Ethernet has priority. Wi-Fi is restored automatically after the cable
+    # is removed only when this daemon suspended it.
+    reconcile_network_priority()
+    if not get_status().get("ethernet_connected"):
+        run_nmcli(["radio", "wifi", "on"], timeout=10)
     
     # Initial status save
     save_status()
@@ -405,6 +444,7 @@ def main():
     while True:
         time.sleep(30)
         try:
+            reconcile_network_priority()
             save_status()
         except Exception as e:
             log.error(f"Status update error: {e}")

@@ -20,6 +20,24 @@ Item {
     /* ---- Data model ---- */
     property var updateHistory: [
         {
+            version: "3.1.6",
+            date: "2026-08-12",
+            changelog: "Pi 5 启动、输入与后台可靠性更新。\n• 构建时校验内核/initramfs 与 rootfs 模块 ABI，禁止混用导致 KMS、Wi-Fi 和驱动失效\n• 正常使用匹配的 Pi 5 KMS/Wayland 图形栈，仅在真实失败时记录并启用恢复路径\n• 中文键盘使用持续 uinput 设备，避免每个字母重建键盘导致拼音组合丢失\n• 修复主界面返回、动态 Android 窗口和工作区恢复时后台卡片丢失\n• Android 下载显示持续活动，允许慢速网络完成并检测存储空间\n• OTA 同时支持 Wi-Fi 与有线网络并显示真实下载 MB",
+            build: "build 2026.0812"
+        },
+        {
+            version: "3.1.5",
+            date: "2026-08-12",
+            changelog: "全量启动与桌面可靠性更新。\n• 正常启动诊断输出改为写入 journal，激活进入桌面不再显示代码\n• KMS 失败时自动进入明确的 framebuffer 恢复路径，避免黑屏\n• 修复空间接收、投屏和媒体运行目录在重启后缺失\n• 新标签页使用可输入的 YUNSH 起始页，不显示 about:blank\n• 修复输入框点击后键盘焦点与主动锁定页面的误弹出",
+            build: "build 2026.0812"
+        },
+        {
+            version: "3.1.4",
+            date: "2026-08-12",
+            changelog: "启动与安装可靠性更新。\n• 首次启动保留早期 SSH 恢复通道，显示/桌面异常时仍可诊断\n• WebEngine 改为打开浏览器时才加载，避免启动阶段占用图形资源\n• Fcitx 延后到 Wayland 就绪后启动，避免键盘服务抢先崩溃\n• 修复相册全屏工具栏的非法锚点警告",
+            build: "build 2026.0812"
+        },
+        {
             version: "3.1.2",
             date: "2026-08-11",
             changelog: "启动、OTA、输入与浏览器体验修复。\n• OTA 手动检查与闲置/夜间自动更新分离，防止重复下载和重复重启\n• 移除 Raspberry Pi Logo/tty1 启动代码，保留串口和 journal 诊断\n• App 后台卡片、窗口边缘拖动、投屏圆角和空白处返回修复\n• 中文拼音组合显示、长按/右键液态玻璃复制粘贴菜单\n• 浏览器 WebGL、最近下载、地址栏横向滚动和下载管理",

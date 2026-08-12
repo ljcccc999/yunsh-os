@@ -82,7 +82,36 @@ Item {
     function handleAction(action) {
         if (!target) return
         if (action === "paste") {
-            target.paste()
+            if (typeof target.pasteWithPriority === "function") {
+                target.pasteWithPriority()
+            } else {
+                // Match YUNSH Flow/Mac clipboard semantics even for legacy
+                // TextField users: phone clipboard first, then the last local
+                // copy returned by the local bridge, and finally Qt's native
+                // clipboard if the bridge has no text.
+                var xhr = new XMLHttpRequest()
+                xhr.open("GET", "http://127.0.0.1:8591/api/clipboard", true)
+                xhr.timeout = 700
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState !== XMLHttpRequest.DONE) return
+                    var preferred = ""
+                    try { preferred = JSON.parse(xhr.responseText || "{}").text || "" }
+                    catch (_error) {}
+                    if (preferred.length > 0 && target.text !== undefined
+                            && target.cursorPosition !== undefined) {
+                        var pos = target.cursorPosition
+                        target.text = target.text.substring(0, pos) + preferred
+                            + target.text.substring(pos)
+                        target.cursorPosition = pos + preferred.length
+                    } else if (typeof target.paste === "function") {
+                        target.paste()
+                    }
+                }
+                xhr.ontimeout = function() {
+                    if (typeof target.paste === "function") target.paste()
+                }
+                xhr.send()
+            }
         } else if (action === "copy") {
             var textToCopy = target.selectedText || ""
             target.copy()

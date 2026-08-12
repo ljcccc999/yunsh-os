@@ -10,10 +10,16 @@ export DEBCONF_NONINTERACTIVE_SEEN=true
 # desktop packages are deliberately installed online; a missing network must
 # be diagnosable on-device rather than looking like a blank desktop.
 mkdir -p /var/log
+# The local firstboot surface is tty1.  Explicitly select it before drawing so
+# a getty/serial-console handoff cannot leave the HDMI output on an empty VT.
+# This is harmless on headless/serial boots where chvt is unavailable.
+if [ -c /dev/tty1 ] && command -v chvt >/dev/null 2>&1; then
+    chvt 1 >/dev/null 2>&1 || true
+fi
 exec > >(tee -a /var/log/yunsh-firstboot.log /dev/tty1 /dev/console) 2>&1
-trap 'rc=$?; echo "[TRACE] firstboot exit rc=${rc} line=${LINENO}" | tee -a /var/log/yunsh-firstboot.log' EXIT
-trap 'echo "[TRACE] firstboot signal TERM line=${LINENO}" | tee -a /var/log/yunsh-firstboot.log; exit 143' TERM
-trap 'echo "[TRACE] firstboot signal INT line=${LINENO}" | tee -a /var/log/yunsh-firstboot.log; exit 130' INT
+trap 'rc=$?; printf "[TRACE] firstboot exit rc=%s line=%s\n" "$rc" "$LINENO" >> /var/log/yunsh-firstboot.log' EXIT
+trap 'printf "[TRACE] firstboot signal TERM line=%s\n" "$LINENO" >> /var/log/yunsh-firstboot.log; exit 143' TERM
+trap 'printf "[TRACE] firstboot signal INT line=%s\n" "$LINENO" >> /var/log/yunsh-firstboot.log; exit 130' INT
 # Firstboot writes progress to tty1 but never reads from a terminal. Do not let
 # a getty/console handoff send it SIGHUP and leave the image half-installed.
 trap '' HUP
@@ -72,10 +78,17 @@ progress_detail() {
 if ! id -u yunsh >/dev/null 2>&1; then
     useradd -m -s /bin/bash -G sudo,adm,dialout yunsh 2>/dev/null || true
 fi
-if ! id -u yunsh >/dev/null 2>&1 || ! echo "yunsh:yunsh123" | chpasswd 2>/dev/null; then
+if ! id -u yunsh >/dev/null 2>&1 || ! echo "yunsh:YUNSH123" | chpasswd 2>/dev/null; then
     echo "  [ERROR] Unable to create the Linux service account." >&2
     exit 1
 fi
+
+# Open the recovery channel before the network wait and before any large APT
+# transaction.  If firstboot or the display stack later fails, the Pi must
+# still be inspectable over SSH instead of becoming a ping-only device.
+ssh-keygen -A 2>/dev/null || true
+systemctl enable ssh.service >/dev/null 2>&1 || true
+systemctl start ssh.service >/dev/null 2>&1 || true
 
 # Raspberry Pi OS' stock user wizard races this installer on a fresh image.
 # Besides holding graphical.target, it runs dpkg-reconfigure interactively and
@@ -118,6 +131,49 @@ APT_OPTIONS=(
     -o Acquire::ftp::Timeout=15
     -o DPkg::Lock::Timeout=60
 )
+
+# A dpkg-deb child can occasionally stop making progress on a real Pi SD card
+# while the parent apt transaction remains alive.  An unbounded transaction
+# leaves firstboot looking frozen forever (the UI percentage cannot advance
+# until apt returns).  Keep a generous per-command limit for slow SD cards,
+# then tear down only the package-manager processes and let the existing
+# repair/retry path continue.  The limit is overrideable for diagnostics.
+APT_COMMAND_TIMEOUT="${YUNSH_APT_COMMAND_TIMEOUT:-900}"
+
+apt_timeout() {
+    local label="$1"
+    shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout --foreground "${APT_COMMAND_TIMEOUT}s" "$@"
+    else
+        # coreutils/timeout is present on the supported Raspberry Pi OS base,
+        # but keep a safe compatibility path for older development images.
+        echo "  [WARN] timeout helper unavailable for ${label}; running apt normally" |
+            tee -a /var/log/yunsh-apt.log
+        "$@"
+    fi
+}
+
+stop_stalled_package_processes() {
+    local signal="$1" pid comm
+    while read -r pid comm; do
+        [ -n "$pid" ] || continue
+        case "$comm" in
+            apt|apt-get|dpkg|dpkg-deb|dpkg-query)
+                [ "$pid" = "$$" ] || kill -"$signal" "$pid" 2>/dev/null || true
+                ;;
+        esac
+    done < <(ps -eo pid=,comm= 2>/dev/null || true)
+}
+
+recover_stalled_package_processes() {
+    echo "  [WARN] Timed out package transaction; stopping stale apt/dpkg processes" |
+        tee -a /var/log/yunsh-apt.log
+    stop_stalled_package_processes TERM
+    sleep 3
+    stop_stalled_package_processes KILL
+    sleep 1
+}
 
 wait_for_network() {
     local tries="${1:-18}" i=0
@@ -211,8 +267,8 @@ apt_services_on() {
 firstboot_exit() {
     local rc=$?
     apt_services_on || true
-    echo "[TRACE] firstboot exit rc=${rc} line=${BASH_LINENO[0]:-${LINENO}}" |
-        tee -a /var/log/yunsh-firstboot.log
+    printf '[TRACE] firstboot exit rc=%s line=%s\n' \
+        "$rc" "${BASH_LINENO[0]:-${LINENO}}" >> /var/log/yunsh-firstboot.log
     trap - EXIT
     exit "$rc"
 }
@@ -237,14 +293,14 @@ apt_repair() {
     # not configured.  Repair that state before retrying the next package
     # group; otherwise every later apt invocation fails immediately and the
     # desktop marker is never written.
-    dpkg --configure -a >>/var/log/yunsh-apt.log 2>&1 || true
-    apt-get "${APT_OPTIONS[@]}" -f install -yqq --no-install-recommends >>/var/log/yunsh-apt.log 2>&1 || true
+    apt_timeout "dpkg repair" dpkg --configure -a >>/var/log/yunsh-apt.log 2>&1 || true
+    apt_timeout "apt repair" apt-get "${APT_OPTIONS[@]}" -f install -yqq --no-install-recommends >>/var/log/yunsh-apt.log 2>&1 || true
 }
 
 apt_download_manifest() {
     local manifest="$1"; shift
     : > "$manifest"
-    apt-get "${APT_OPTIONS[@]}" --print-uris -y --no-install-recommends install "$@" \
+    apt_timeout "${manifest} URI calculation" apt-get "${APT_OPTIONS[@]}" --print-uris -y --no-install-recommends install "$@" \
         2>>/var/log/yunsh-apt.log |
         awk '$1 ~ /^\047/ && $3 ~ /^[0-9]+$/ { print $2 "\t" $3 }' > "$manifest"
 }
@@ -282,7 +338,7 @@ download_apt_group() {
     fi
 
     total_mb="$(format_mb "$total")"
-    apt-get "${APT_OPTIONS[@]}" --download-only -y --no-install-recommends install "$@" \
+    apt_timeout "${name} download" apt-get "${APT_OPTIONS[@]}" --download-only -y --no-install-recommends install "$@" \
         >>/var/log/yunsh-apt.log 2>&1 &
     pid=$!
     while kill -0 "$pid" 2>/dev/null; do
@@ -292,6 +348,10 @@ download_apt_group() {
         sleep 2
     done
     wait "$pid"; rc=$?
+    if [ "$rc" -eq 124 ]; then
+        echo "  [ERROR] Package download timed out: $name" | tee -a /var/log/yunsh-apt.log
+        recover_stalled_package_processes
+    fi
     downloaded="$(downloaded_bytes "$manifest")"
     progress_detail "Downloading: $name" "$(format_mb "$downloaded") MB / ${total_mb} MB"
     rm -f "$manifest"
@@ -303,6 +363,7 @@ install_apt() {
     pct "$step" "Installing: $name"
     local attempt=1
     local installed=1
+    local apt_rc=0
     while [ "$attempt" -le 3 ]; do
         if ! network_ready && ! recover_network; then
             echo "  [WARN] Network unavailable before package group: $name" | tee -a /var/log/yunsh-apt.log
@@ -310,11 +371,18 @@ install_apt() {
         if download_apt_group "$name" "$@"; then
             progress_detail "Unpacking and configuring: $name" "Downloaded packages are being installed"
         fi
-        if apt-get "${APT_OPTIONS[@]}" --no-download install -yqq --no-install-recommends "$@" >>/var/log/yunsh-apt.log 2>&1; then
+        if apt_timeout "${name} install" apt-get "${APT_OPTIONS[@]}" --no-download install -yqq --no-install-recommends "$@" >>/var/log/yunsh-apt.log 2>&1; then
             installed=0
             break
+        else
+            apt_rc=$?
         fi
         echo "  [WARN] Package group failed (attempt $attempt/3): $name" | tee -a /var/log/yunsh-apt.log
+        # timeout(1) returns 124.  Clean up the child dpkg/deb processes before
+        # repair so the next retry cannot inherit the old deadlock or lock.
+        if [ "$apt_rc" -eq 124 ]; then
+            recover_stalled_package_processes
+        fi
         apt_repair
         sleep $((attempt * 5))
         attempt=$((attempt + 1))
@@ -391,6 +459,19 @@ validate_pre_reboot() {
     echo "  [OK] Desktop launcher, Weston, and Qt QML runtime present"
     echo "  [OK] Desktop service enabled for post-reboot startup"
     return 0
+}
+
+# Record a KMS failure for diagnostics. Never rewrite cmdline.txt here: adding
+# a VC4/V3D blacklist on Pi 5 can remove both DRM and the only framebuffer,
+# turning a recoverable graphics failure into a no-display boot.
+record_display_failure() {
+    if [ -e /dev/dri/card0 ] ||
+       ! dmesg 2>/dev/null | grep -Eq 'vc4.*(Couldn.t get|Couldn.t stop)|Failed to get (V3D|clock)'; then
+        return 0
+    fi
+    touch /etc/yunsh/.display-recovery
+    echo "  [WARN] Pi KMS failed; preserving boot configuration and SSH diagnostics." |
+        tee -a /var/log/yunsh-apt.log
 }
 
 # ───── Firewall & SSH Security Setup ────────────
@@ -483,10 +564,20 @@ pct 3 "Updating package lists..."
 apt-get update -qq 2>/dev/null || { sleep 10; apt-get update -qq 2>/dev/null || true; }
 
 # Install packages
-# Keep the Pi 5 kernel, firmware and utility stack current before the desktop
-# starts.  A stale firmware/clock provider can leave vc4-drm unbound, which
-# makes Weston report "no drm device found" even when the HDMI overlay exists.
-install_apt 6 "Raspberry Pi kernel and firmware" linux-image-rpi-2712 raspi-firmware raspi-utils-core
+# Do not replace the boot-critical Pi 5 kernel/firmware during firstboot.  The
+# base image already carries the tested firmware layer; upgrading it while the
+# system is online can leave the running kernel and firmware KMS hand-off out
+# of sync and make vc4/v3d fail to create /dev/dri/card0 after reboot.  Kernel
+# updates belong in a separately validated OTA, never in the first desktop
+# installation transaction.
+pct 6 "Checking Raspberry Pi kernel and firmware..."
+for boot_package in linux-image-rpi-2712 raspi-firmware raspi-utils-core; do
+    if ! dpkg-query -W -f='${Status}' "$boot_package" 2>/dev/null |
+        grep -q "install ok installed"; then
+        echo "  [WARN] Boot package is not installed yet: $boot_package" |
+            tee -a /var/log/yunsh-apt.log
+    fi
+done
 install_apt 8 "Qt6 framework" qt6-base-dev qt6-declarative-dev libqt6svg6 qt6-svg-plugins libqt6opengl6 qt6-base-dev-tools qt6-qmltooling-plugins qml-qt6 qmlscene-qt6 qml6-module-qtqml qml6-module-qtqml-workerscript qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-window qml6-module-qtquick-virtualkeyboard qml6-module-qt-labs-qmlmodels qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtquick-templates
 install_apt 14 "Python environment" python3-cryptography python3-pip python3-smbus2
 install_apt 20 "WebEngine" qt6-webengine-dev libqt6webenginequick6 qml6-module-qtwebengine
@@ -495,13 +586,17 @@ install_apt 20 "WebEngine" qt6-webengine-dev libqt6webenginequick6 qml6-module-q
 # is already prepared asynchronously by yunsh-android-setup.service.
 install_apt 24 "Android display runtime" python3-dbus python3-gi weston libwayland-client0 qml6-module-qtwayland-compositor qt6-wayland
 install_apt 32 "Network & BT" network-manager wpasupplicant bluez
-# NetworkManager is needed by the final OS and its package installation can
-# alter the currently active link. Start it immediately, verify real Internet
-# access, and let systemd retry firstboot automatically if the handoff fails.
+# NetworkManager is needed by the final OS, but restarting an already-active
+# manager deliberately drops the very Wi-Fi/Ethernet link still carrying the
+# remaining packages. That was the reproducible mid-install stall which often
+# recovered only after a power cycle. Preserve the live process and connection;
+# start it only when the package installation left it inactive.
 apt_services_on
 progress_detail "Activating NetworkManager..." "Keeping first-boot downloads online"
 systemctl enable NetworkManager 2>/dev/null || true
-systemctl restart NetworkManager 2>/dev/null || true
+if ! systemctl is-active --quiet NetworkManager 2>/dev/null; then
+    systemctl start NetworkManager 2>/dev/null || true
+fi
 nmcli networking on 2>/dev/null || true
 nmcli connection reload 2>/dev/null || true
 if ! wait_for_network 18 && ! recover_network; then
@@ -511,12 +606,9 @@ fi
 apt_services_off
 install_apt 38 "System tools" openssh-server avahi-daemon avahi-utils openssl iptables i2c-tools curl wget git unzip python3-pil psmisc util-linux
 install_apt 44 "Chinese input and emoji" fonts-noto-cjk fonts-noto-color-emoji fcitx5 fcitx5-chinese-addons fcitx5-frontend-qt6 python3-pam
-# Audio packages are optional for the first desktop frame and can trigger
-# debconf contention on a fresh image. Prepare them asynchronously after
-# firstboot, alongside the media runtime.
-echo "[TRACE] before audio scheduling line=${LINENO}"
+# Install the userspace Bluetooth audio path during first boot so paired A2DP
+# speakers are ready before activation; hardware pairing remains non-blocking.
 install_apt 50 "Bluetooth audio speakers" pulseaudio pulseaudio-module-bluetooth
-echo "[TRACE] after audio scheduling line=${LINENO}"
 # Screen capture, recording, and OCR are optional and can contend with
 # cloud-init's debconf database on a fresh image. Prepare all of them
 # asynchronously with yunsh-media-setup.service after the desktop marker.
@@ -534,7 +626,11 @@ install_apt 56 "Pi 5 graphics runtime" mesa-utils libgl1-mesa-dri libegl1 mesa-v
 # retries safely after this first-boot transaction has completed.
 pct 58 "Scheduling Android runtime setup..."
 apt_services_on
-mkdir -p /var/lib/yunsh
+mkdir -p /var/lib/yunsh \
+    /var/lib/yunsh/space-inbox \
+    /var/lib/yunsh/media \
+    /var/lib/yunsh/orbit/voice \
+    /run/yunsh
 printf '{"state":"pending","progress":0,"message":"Android setup is queued"}\n' \
     > /var/lib/yunsh/android-setup.json
 
@@ -583,6 +679,7 @@ pct 92 "Preparing Android application store..."
 # status check below is the authoritative gate.
 
 pct 98 "Cleaning up..."
+record_display_failure
 CORE_PACKAGES="linux-image-rpi-2712 raspi-firmware raspi-utils-core qml-qt6 qt6-svg-plugins libqt6opengl6 qml6-module-qtqml qml6-module-qtqml-workerscript qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-virtualkeyboard qml6-module-qtquick-templates qml6-module-qt-labs-qmlmodels qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtwebengine qt6-wayland weston network-manager wpasupplicant bluez openssh-server avahi-daemon avahi-utils openssl iptables i2c-tools curl wget git unzip python3-pil python3-cryptography python3-smbus2 python3-dbus python3-gi python3-pam libegl1 libgl1-mesa-dri mesa-vulkan-drivers psmisc util-linux fonts-noto-cjk fonts-noto-color-emoji fcitx5 fcitx5-chinese-addons fcitx5-frontend-qt6 pulseaudio pulseaudio-module-bluetooth"
 CORE_MISSING=""
 for package in $CORE_PACKAGES; do

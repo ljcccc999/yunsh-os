@@ -29,6 +29,14 @@ Item {
     property double keyboardSuppressedUntil: 0
     property int activeTabIndex: 0
 
+    // An empty tab is a real editable start surface.  WebEngine still uses
+    // about:blank internally as its inert document, but that implementation
+    // detail must never be painted or exposed to the user.
+    function isEmptyTab() {
+        return browserTabs.count > 0 &&
+            String(browserTabs.get(activeTabIndex).address || "").length === 0
+    }
+
     ListModel { id: downloadHistory }
 
     function openDownloadsFolder() {
@@ -66,7 +74,14 @@ Item {
         browserTabs.setProperty(activeTabIndex, "address", webView.url.toString())
         browserTabs.setProperty(activeTabIndex, "title", webView.title || "标签页")
         activeTabIndex = index
-        webView.url = browserTabs.get(index).address
+        var address = String(browserTabs.get(index).address || "")
+        webView.url = address.length ? address : "about:blank"
+        Qt.callLater(function() {
+            if (browserScreen.isEmptyTab()) {
+                urlInput.text = ""
+                urlInput.forceActiveFocus()
+            }
+        })
     }
 
     function closeTab(index) {
@@ -413,6 +428,7 @@ Item {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: bottomBar.top
+        visible: !browserScreen.isEmptyTab()
         url: currentUrl
         profile: browserProfile
         settings.webGLEnabled: true
@@ -440,6 +456,7 @@ Item {
         }
 
         onUrlChanged: {
+            browserScreen.currentUrl = webView.url
             browserTabs.setProperty(browserScreen.activeTabIndex, "address", webView.url.toString())
             urlInput.text = webView.url.toString() === "about:blank" ? "" : webView.url.toString()
         }
@@ -487,6 +504,37 @@ Item {
         onNewWindowRequested: function(request) {
             browserScreen.newTab(request.requestedUrl || "about:blank")
             request.openIn(webView)
+        }
+    }
+
+    // Keep the empty-tab surface branded and useful.  In particular, do not
+    // show Chromium's literal about:blank page while the address field is
+    // waiting for input.
+    Rectangle {
+        anchors.top: progressBar.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: bottomBar.top
+        visible: browserScreen.isEmptyTab()
+        color: "#000000"
+        z: 2
+
+        Column {
+            anchors.centerIn: parent
+            spacing: 10
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "新标签页"
+                color: Qt.rgba(1, 1, 1, 0.86)
+                font.pixelSize: 24
+                font.weight: Font.DemiBold
+            }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: "在上方输入网址或搜索内容"
+                color: Qt.rgba(1, 1, 1, 0.56)
+                font.pixelSize: 14
+            }
         }
     }
 
@@ -542,6 +590,7 @@ Item {
         anchors.right: parent.right
         height: 44
         radius: 28
+        clip: true
         color: Qt.rgba(248/255, 252/255, 255/255, 0.86)
 
         Rectangle {

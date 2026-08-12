@@ -509,7 +509,7 @@ fi
 # Phase 2: Ensure yunsh user exists
 if ! id -u yunsh &>/dev/null 2>&1; then
     useradd -m -s /bin/bash yunsh 2>/dev/null || true
-    echo "yunsh:yunsh123" | chpasswd 2>/dev/null || true
+    echo "yunsh:YUNSH123" | chpasswd 2>/dev/null || true
     usermod -aG sudo,audio,video,input,render yunsh 2>/dev/null || true
 fi
 

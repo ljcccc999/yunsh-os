@@ -375,7 +375,7 @@ class AppHandler(BaseHTTPRequestHandler):
                 pass
             return values
 
-        version = read_values("/etc/yunsh/version.conf").get("VERSION", "v3.1.2")
+        version = read_values("/etc/yunsh/version.conf").get("VERSION", "v3.1.6")
         language = read_values("/etc/yunsh/language.conf")
         return {
             "status": "ok",
@@ -435,7 +435,7 @@ class AppHandler(BaseHTTPRequestHandler):
         model = read_text("/proc/device-tree/model").replace("\x00", "").strip()
         return {
             "status": "ok",
-            "version": version.get("VERSION", "v3.1.2"),
+            "version": version.get("VERSION", "v3.1.6"),
             "build": version.get("BUILD", ""),
             "model": model or "Raspberry Pi",
             "cpu": f"{cpu_name or 'ARM processor'} × {os.cpu_count() or 1}",

@@ -571,6 +571,15 @@ Rectangle {
             z: -1
             drag.target: macWindow
             drag.axis: Drag.XAndYAxis
+            // Keep a generous title-bar strip visible while dragging.  This
+            // prevents a window from being parked below the desktop where it
+            // can no longer be grabbed and restored.
+            drag.minimumX: macWindow.parent ? 28 - macWindow.width + 180 : -macWindow.width + 180
+            drag.maximumX: macWindow.parent ? macWindow.parent.width - 28 - 180 : 1740
+            drag.minimumY: 18
+            drag.maximumY: macWindow.parent
+                ? Math.max(18, macWindow.parent.height - 96)
+                : 984
             cursorShape: Qt.OpenHandCursor
             onPressed: {
                 if (macWindow.state === "fullscreen") {
