@@ -79,7 +79,7 @@ draw_frame() {
     printf "]\e[0m\n"
     
     # Percentage
-    printf "%*s\e[1m\e[97m  %3d%%\e[0m\n" $(( (term_width - 6) / 2 )) "" $progress
+    printf "%*s\e[1m\e[97m  总安装进度 %3d%%\e[0m\n" $(( (term_width - 16) / 2 )) "" $progress
     printf "\n\n"
     
     # Tips at bottom

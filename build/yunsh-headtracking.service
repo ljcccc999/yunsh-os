@@ -5,6 +5,7 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-headtracking
-Restart=always
+Restart=on-failure
+RestartSec=30
 [Install]
 WantedBy=multi-user.target

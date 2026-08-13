@@ -7,8 +7,8 @@ Wants=yunsh-headtracking.service
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-bno085-reader
-Restart=always
-RestartSec=5
+Restart=on-failure
+RestartSec=30
 User=root
 
 [Install]

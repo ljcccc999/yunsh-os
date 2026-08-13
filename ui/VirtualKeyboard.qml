@@ -27,8 +27,9 @@ Item {
     property bool capsActive: false
     property bool symbolsActive: false
     property bool emojiActive: false
-    // `latin` inserts text directly; `pinyin` sends physical-style key events
-    // through Fcitx5 so Chinese candidates work in every focused field.
+    // `latin` inserts text directly.  Pinyin is composed locally so the same
+    // behavior works in QML fields and WebEngine without leaking raw letters
+    // or Backspace events through a second Fcitx/uinput path.
     property string inputMethod: "latin"
     readonly property string inputMethodLabel: inputMethod === "pinyin" ? "中" : "ABC"
     property string pinyinBuffer: ""
@@ -56,7 +57,8 @@ Item {
         "kai": ["开", "凯", "慨"], "guan": ["关", "观", "管", "官"],
         "dian": ["点", "电", "店", "典"], "na": ["那", "哪", "拿", "纳"],
         "ge": ["个", "各", "歌", "哥"], "ji": ["几", "机", "及", "记", "级"],
-        "hao123": ["好"], "yunsh": ["云石", "YUNSH"], "shu": ["书", "数", "树", "输"],
+        "hao123": ["好"], "wei": ["为", "位", "未", "维", "味", "喂", "伟"],
+        "yunsh": ["云石", "YUNSH"], "shu": ["书", "数", "树", "输"],
         "miao": ["秒", "苗", "妙"], "zhang": ["张", "长", "章", "掌"],
         "ming": ["明", "名", "命", "鸣"], "bai": ["白", "百", "摆"],
         "tui": ["退", "推", "腿"], "hui": ["会", "回", "灰", "汇"],
@@ -168,15 +170,31 @@ Item {
     function commitCandidate(candidate) {
         if (!candidate || !targetItem)
             return
-        // Cancel the physical-style Fcitx composition first, then commit the
-        // selected Chinese text into the focused QML/WebEngine proxy.
-        injectKey("escape")
         var pos = targetItem.cursorPosition
         targetItem.text = targetItem.text.substring(0, pos) + candidate
             + targetItem.text.substring(pos)
         targetItem.cursorPosition = pos + candidate.length
         pinyinBuffer = ""
         pinyinCandidates = []
+    }
+
+    function deletePreviousTargetChar() {
+        if (!targetItem || targetItem.cursorPosition <= 0)
+            return
+        var pos = targetItem.cursorPosition
+        targetItem.text = targetItem.text.substring(0, pos - 1)
+            + targetItem.text.substring(pos)
+        targetItem.cursorPosition = pos - 1
+    }
+
+    function commitPinyinLiteral(suffix) {
+        if (pinyinBuffer.length > 0) {
+            insertDirect(pinyinBuffer)
+            pinyinBuffer = ""
+        }
+        pinyinCandidates = []
+        if (suffix)
+            insertDirect(suffix)
     }
 
     function injectKey(key) {
@@ -819,7 +837,6 @@ Item {
         if (inputMethod === "pinyin" && key.length <= 1 && key.charCodeAt(0) < 128) {
             pinyinBuffer += key.toLowerCase()
             refreshCandidates()
-            injectKey(key)
         } else if (targetItem) {
             var pos = targetItem.cursorPosition
             targetItem.text = targetItem.text.substring(0, pos) + key + targetItem.text.substring(pos)
@@ -830,22 +847,18 @@ Item {
         if (inputMethod === "pinyin") {
             if (pinyinBuffer.length > 0)
                 pinyinBuffer = pinyinBuffer.substring(0, pinyinBuffer.length - 1)
+            else
+                deletePreviousTargetChar()
             refreshCandidates()
-            injectKey("backspace")
-        } else if (targetItem && targetItem.cursorPosition > 0) {
-            var pos = targetItem.cursorPosition
-            targetItem.text = targetItem.text.substring(0, pos - 1) + targetItem.text.substring(pos)
-            targetItem.cursorPosition = pos - 1
+        } else {
+            deletePreviousTargetChar()
         }
     }
     onSpacePressed: {
         if (inputMethod === "pinyin") {
             if (pinyinCandidates.length > 0)
                 commitCandidate(pinyinCandidates[0])
-            else {
-                pinyinBuffer = ""
-                injectKey(" ")
-            }
+            else commitPinyinLiteral(" ")
         } else if (targetItem) {
             var pos = targetItem.cursorPosition
             targetItem.text = targetItem.text.substring(0, pos) + " " + targetItem.text.substring(pos)
@@ -856,10 +869,11 @@ Item {
         if (inputMethod === "pinyin") {
             if (pinyinCandidates.length > 0)
                 commitCandidate(pinyinCandidates[0])
-            else {
-                pinyinBuffer = ""
-                injectKey("\n")
-            }
+            else commitPinyinLiteral("")
+            if (targetItem && typeof targetItem.submit === "function")
+                targetItem.submit()
+            else if (targetItem && typeof targetItem.accepted === "function")
+                targetItem.accepted()
         } else if (targetItem && typeof targetItem.submit === "function")
             targetItem.submit()
         else if (targetItem && typeof targetItem.accepted === "function")

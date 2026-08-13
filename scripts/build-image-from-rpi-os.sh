@@ -300,7 +300,7 @@ arm_64bit=1
 
 [pi5]
 # Pi 5 KMS display. EDID selects mono or binocular SBS native mode.
-dtoverlay=vc4-kms-v3d
+dtoverlay=vc4-kms-v3d-pi5
 disable_splash=1
 dtparam=audio=off
 display_auto_detect=1
@@ -507,10 +507,15 @@ if [ ! -f /etc/yunsh/.packages_installed ]; then
     fi
 fi
 
-# Phase 2: Ensure yunsh user exists
+# Phase 2: Ensure every image made by this legacy builder has the same
+# recoverable Linux account as the main builder.  Do not only set the
+# password when creating the user: a base image may already contain `yunsh`
+# with an unknown or empty password.
 if ! id -u yunsh &>/dev/null 2>&1; then
     useradd -m -s /bin/bash yunsh 2>/dev/null || true
-    echo "yunsh:YUNSH123" | chpasswd 2>/dev/null || true
+fi
+if id -u yunsh &>/dev/null 2>&1; then
+    echo "yunsh:yunsh123" | chpasswd 2>/dev/null || true
     usermod -aG sudo,audio,video,input,render yunsh 2>/dev/null || true
 fi
 

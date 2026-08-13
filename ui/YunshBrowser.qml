@@ -25,6 +25,11 @@ Item {
     property string downloadStatus: ""
     property string downloadedApkPath: ""
     property bool downloadBusy: false
+    property var activeDownload: null
+    property real downloadReceivedBytes: 0
+    property real downloadTotalBytes: 0
+    readonly property real downloadProgress: downloadTotalBytes > 0
+        ? Math.max(0, Math.min(1, downloadReceivedBytes / downloadTotalBytes)) : 0
     property bool desktopMode: false
     property string defaultUserAgent: ""
     property double keyboardSuppressedUntil: 0
@@ -37,11 +42,23 @@ Item {
         onTriggered: browserScreen.downloadStatus = ""
     }
 
+    Timer {
+        id: downloadProgressTimer
+        interval: 120
+        repeat: true
+        running: browserScreen.downloadBusy && browserScreen.activeDownload !== null
+        onTriggered: {
+            if (!browserScreen.activeDownload) return
+            browserScreen.downloadReceivedBytes = Number(browserScreen.activeDownload.receivedBytes || 0)
+            browserScreen.downloadTotalBytes = Number(browserScreen.activeDownload.totalBytes || 0)
+        }
+    }
+
     // An empty tab is a real editable start surface.  WebEngine still uses
     // about:blank internally as its inert document, but that implementation
     // detail must never be painted or exposed to the user.
     function isEmptyTab() {
-        return browserTabs.count > 0 &&
+        return browserTabs.count > 0 && activeTabIndex >= 0 && activeTabIndex < browserTabs.count &&
             String(browserTabs.get(activeTabIndex).address || "").length === 0
     }
 
@@ -228,14 +245,18 @@ Item {
             downloadStatusTimer.stop()
             browserScreen.downloadedApkPath = ""
             browserScreen.downloadBusy = true
+            browserScreen.activeDownload = download
+            browserScreen.downloadReceivedBytes = 0
+            browserScreen.downloadTotalBytes = Number(download.totalBytes || 0)
             download.accept()
         }
 
         onDownloadFinished: function(download) {
             browserScreen.downloadBusy = false
+            browserScreen.activeDownload = null
             if (download.state === WebEngineDownloadRequest.DownloadCompleted) {
                 var path = download.downloadDirectory + "/" + download.downloadFileName
-                browserScreen.downloadStatus = "已保存到 Downloads"
+                browserScreen.downloadStatus = "下载完成 · 已保存到 Downloads"
                 downloadHistory.insert(0, {
                     name: download.downloadFileName,
                     path: path,
@@ -489,8 +510,10 @@ Item {
 
         onUrlChanged: {
             browserScreen.currentUrl = webView.url
-            browserTabs.setProperty(browserScreen.activeTabIndex, "address", webView.url.toString())
-            urlInput.text = webView.url.toString() === "about:blank" ? "" : webView.url.toString()
+            var blank = webView.url.toString() === "about:blank"
+            if (!(blank && browserScreen.isEmptyTab()))
+                browserTabs.setProperty(browserScreen.activeTabIndex, "address", webView.url.toString())
+            urlInput.text = blank ? "" : webView.url.toString()
         }
 
         // Background color
@@ -504,8 +527,13 @@ Item {
                 browserScreen.loadProgress = 100
                 pageTitle = webView.title
                 browserTabs.setProperty(activeTabIndex, "title", webView.title || "标签页")
-                browserTabs.setProperty(activeTabIndex, "address", webView.url.toString())
-                urlInput.text = webView.url.toString()
+                var blank = webView.url.toString() === "about:blank"
+                if (!(blank && browserScreen.isEmptyTab())) {
+                    browserTabs.setProperty(activeTabIndex, "address", webView.url.toString())
+                    urlInput.text = webView.url.toString()
+                } else {
+                    urlInput.text = ""
+                }
                 browserScreen._pendingDomain = ""
             } else if (loadRequest.status === WebEngineView.LoadFailedStatus) {
                 browserScreen.isLoading = false
@@ -575,40 +603,63 @@ Item {
         anchors.bottom: bottomBar.top
         anchors.bottomMargin: 12
         width: Math.min(parent.width - 40, 520)
-        height: downloadStatus.length > 0 ? 52 : 0
+        height: downloadStatus.length > 0 ? (downloadBusy ? 78 : 52) : 0
         radius: 18
         color: Qt.rgba(248/255, 252/255, 255/255, 0.92)
         border.color: Qt.rgba(255/255, 255/255, 255/255, 0.94)
         visible: downloadStatus.length > 0
         z: 20
 
-        Row {
+        Column {
             anchors.fill: parent
             anchors.leftMargin: 18
             anchors.rightMargin: 10
-            spacing: 12
+            anchors.topMargin: 7
+            anchors.bottomMargin: 7
+            spacing: 5
 
-            Text {
-                width: parent.width - (downloadedApkPath.length > 0 ? 110 : 24)
-                anchors.verticalCenter: parent.verticalCenter
-                text: downloadStatus
-                elide: Text.ElideMiddle
-                color: "#17212A"
-                font.pixelSize: 13
+            Row {
+                width: parent.width
+                height: 28
+                spacing: 12
+                Text {
+                    width: parent.width - (downloadedApkPath.length > 0 ? 110 : 24)
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: downloadBusy && downloadTotalBytes > 0
+                        ? downloadStatus + "  " + Math.round(downloadProgress * 100) + "%"
+                        : downloadStatus
+                    elide: Text.ElideMiddle
+                    color: "#17212A"
+                    font.pixelSize: 13
+                }
+
+                GlassButton {
+                    width: 88
+                    height: 34
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: downloadedApkPath.length > 0
+                    enabled: !downloadBusy
+                    onClicked: browserScreen.installDownloadedApk()
+                    Text {
+                        anchors.centerIn: parent
+                        text: downloadBusy ? "安装中…" : "安装 APK"
+                        color: "#00D4FF"
+                        font.pixelSize: 12
+                    }
+                }
             }
 
-            GlassButton {
-                width: 88
-                height: 34
-                anchors.verticalCenter: parent.verticalCenter
-                visible: downloadedApkPath.length > 0
-                enabled: !downloadBusy
-                onClicked: browserScreen.installDownloadedApk()
-                Text {
-                    anchors.centerIn: parent
-                    text: downloadBusy ? "安装中…" : "安装 APK"
+            Rectangle {
+                width: parent.width
+                height: 4
+                radius: 2
+                visible: downloadBusy
+                color: Qt.rgba(0, 0.83, 1, 0.16)
+                Rectangle {
+                    width: parent.width * (downloadTotalBytes > 0 ? downloadProgress : 0.18)
+                    height: parent.height
+                    radius: 2
                     color: "#00D4FF"
-                    font.pixelSize: 12
                 }
             }
         }

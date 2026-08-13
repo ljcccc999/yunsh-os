@@ -37,6 +37,25 @@ case "${TARGET_DEVICE}" in
         ;;
 esac
 
+# The Pi 5 KMS configuration is the normal display path.  A target that
+# cannot create /dev/dri/card0 must still remain usable through the explicit
+# linuxfb recovery branch in yunsh-ui-launcher; it must not be made the normal
+# release configuration because that would remove Wayland and break Android.
+# Both paths keep firmware EDID/HPD mode selection and never force 1080p.
+DISPLAY_RECOVERY_MODE="${YUNSH_DISPLAY_RECOVERY_MODE:-kms}"
+case "${DISPLAY_RECOVERY_MODE}" in
+    linuxfb)
+        DISPLAY_CMDLINE_SUFFIX="module_blacklist=vc4,v3d"
+        ;;
+    kms)
+        DISPLAY_CMDLINE_SUFFIX=""
+        ;;
+    *)
+        echo "ERROR: YUNSH_DISPLAY_RECOVERY_MODE must be linuxfb or kms"
+        exit 1
+        ;;
+esac
+
 OUTPUT_FILE="${OUTPUT_DIR}/YUNSH-OS-${VERSION}.img"
 IMAGE_VERSION_CONF="${BUILD_DIR}/yunsh-version-image.conf"
 printf 'VERSION=%s\nBUILD=%s\n' "${VERSION}" "${BUILD_ID}" > "${IMAGE_VERSION_CONF}"
@@ -107,11 +126,23 @@ echo "  ✓ ${OUTPUT_FILE}"
 # Ship enough writable root space for the complete desktop.  The stock image
 # relies on initramfs + systemd-growfs during the first boot; that job has an
 # infinite timeout and is the source of the apparent post-initramfs hang.
-# Six GiB remains below the actual capacity of a nominal 8 GB SD card.
-MIN_IMAGE_BYTES=$((6 * 1024 * 1024 * 1024))
+#
+# 4.0/4.1 preloads the arm64 Waydroid system/vendor pair (roughly 2.4 GiB
+# unpacked).  A 6 GiB image leaves no room for the Chinese input stack and
+# makes APT fail with "not enough free space" on an 8 GB SD card.  Seven GiB
+# fits within the usable capacity of a nominal 8 GB card while leaving the
+# firstboot package transaction enough headroom.  Keep this overrideable for
+# a deliberately slim image or a larger test disk, but never silently shrink
+# the default below the space required by the preloaded Android assets.
+MIN_IMAGE_GIB="${YUNSH_MIN_IMAGE_GIB:-7}"
+if ! [[ "${MIN_IMAGE_GIB}" =~ ^[0-9]+$ ]] || [ "${MIN_IMAGE_GIB}" -lt 7 ]; then
+    echo "ERROR: YUNSH_MIN_IMAGE_GIB must be an integer >= 7 for the preloaded Waydroid image"
+    exit 1
+fi
+MIN_IMAGE_BYTES=$((MIN_IMAGE_GIB * 1024 * 1024 * 1024))
 CURRENT_IMAGE_BYTES=$(stat -f%z "${OUTPUT_FILE}" 2>/dev/null || stat -c%s "${OUTPUT_FILE}")
 if [ "${CURRENT_IMAGE_BYTES}" -lt "${MIN_IMAGE_BYTES}" ]; then
-    echo "  → Expanding image to 6 GiB for first-boot desktop installation"
+    echo "  → Expanding image to ${MIN_IMAGE_GIB} GiB for first-boot desktop installation"
     truncate -s "${MIN_IMAGE_BYTES}" "${OUTPUT_FILE}"
     python3 - "${OUTPUT_FILE}" <<'PY'
 import struct, sys
@@ -218,32 +249,41 @@ else
     exit 1
 fi
 
-if [ -f "${CONFIRMED_BOOT_DIR}/DEVICE.conf" ]; then
-    LAYER_DEVICE_ID="$(awk -F= '$1 == "DEVICE_ID" {print $2; exit}' "${CONFIRMED_BOOT_DIR}/DEVICE.conf")"
-    if [ "${LAYER_DEVICE_ID}" != "${TARGET_DEVICE}" ]; then
-        echo "ERROR: firmware layer targets ${LAYER_DEVICE_ID:-unknown}, not ${TARGET_DEVICE}."
+for layer_metadata in DEVICE.conf SHA256SUMS README.md; do
+    if [ ! -f "${CONFIRMED_BOOT_DIR}/${layer_metadata}" ]; then
+        echo "ERROR: Pi 5 firmware layer is missing provenance file: ${layer_metadata}"
         exit 1
     fi
+done
+LAYER_DEVICE_ID="$(awk -F= '$1 == "DEVICE_ID" {print $2; exit}' "${CONFIRMED_BOOT_DIR}/DEVICE.conf")"
+LAYER_ARCHITECTURE="$(awk -F= '$1 == "ARCHITECTURE" {print $2; exit}' "${CONFIRMED_BOOT_DIR}/DEVICE.conf")"
+LAYER_TYPE="$(awk -F= '$1 == "LAYER_TYPE" {print $2; exit}' "${CONFIRMED_BOOT_DIR}/DEVICE.conf")"
+if [ "${LAYER_DEVICE_ID}" != "${TARGET_DEVICE}" ] ||
+   [ "${LAYER_ARCHITECTURE}" != "arm64" ] ||
+   [ "${LAYER_TYPE}" != "boot-firmware" ]; then
+    echo "ERROR: invalid Pi 5 firmware layer metadata: DEVICE_ID=${LAYER_DEVICE_ID:-unknown} ARCHITECTURE=${LAYER_ARCHITECTURE:-unknown} LAYER_TYPE=${LAYER_TYPE:-unknown}"
+    exit 1
 fi
 for required_firmware in \
     kernel_2712.img \
     initramfs_2712 \
     bcm2712-rpi-5-b.dtb \
+    bcm2712d0-rpi-5-b.dtb \
+    overlays/README \
+    overlays/overlay_map.dtb \
     overlays/vc4-kms-v3d-pi5.dtbo; do
     if [ ! -f "${CONFIRMED_BOOT_DIR}/${required_firmware}" ]; then
         echo "ERROR: incomplete ${TARGET_DEVICE} firmware layer: ${required_firmware}"
         exit 1
     fi
 done
-if [ -f "${CONFIRMED_BOOT_DIR}/SHA256SUMS" ]; then
-    (
-        cd "${CONFIRMED_BOOT_DIR}"
-        shasum -a 256 -c SHA256SUMS >/dev/null
-    ) || {
-        echo "ERROR: boot firmware layer checksum verification failed."
-        exit 1
-    }
-fi
+(
+    cd "${CONFIRMED_BOOT_DIR}"
+    shasum -a 256 -c SHA256SUMS >/dev/null
+) || {
+    echo "ERROR: boot firmware layer checksum verification failed."
+    exit 1
+}
 
 # A boot layer is only safe when its kernel/initramfs ABI matches the clean
 # Raspberry Pi OS rootfs used by this build.  Mixing a newer confirmed kernel
@@ -274,7 +314,7 @@ rm -f "${BASE_INITRAMFS_CHECK}"
     exit 1
 }
 [ "${BASE_KERNEL_ABI}" = "${CONFIRMED_PI5_KERNEL_ABI}" ] || {
-    echo "ERROR: base image ABI is ${BASE_KERNEL_ABI}, but 4.1 requires ${CONFIRMED_PI5_KERNEL_ABI}."
+    echo "ERROR: base image ABI is ${BASE_KERNEL_ABI}, but ${VERSION} requires ${CONFIRMED_PI5_KERNEL_ABI}."
     echo "The build must use a rootfs with matching /lib/modules; it will not fall back to the old kernel."
     exit 1
 }
@@ -311,6 +351,49 @@ if [ "${APPLY_CONFIRMED_BOOT_LAYER}" -eq 1 ]; then
     echo "  ✓ Confirmed firmware payload applied"
 fi
 
+# The source checksum file proves what was selected, but it does not prove
+# that mtools actually replaced every boot file in the FAT image.  Verify the
+# bytes after injection, including the legacy-named files kept in the Pi 5
+# layer for firmware compatibility.  The active Pi 5 path is kernel_2712,
+# initramfs_2712, bcm2712*.dtb and vc4-kms-v3d-pi5.dtbo; the complete payload
+# check prevents a stale base-image file from surviving a rebuild.
+boot_layer_payload_file() {
+    case "$1" in
+        *.dtb|*.dtbo|*.img|*.elf|*.dat|initramfs*|bootcode.bin|LICENCE.broadcom)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+verify_boot_layer_payload() {
+    local fat_image="$1"
+    local verify_dir="${BUILD_DIR}/boot-layer-verify"
+    local expected rel actual extracted
+    rm -rf "${verify_dir}"
+    mkdir -p "${verify_dir}"
+    while read -r expected rel; do
+        rel="${rel#./}"
+        boot_layer_payload_file "${rel}" || continue
+        extracted="${verify_dir}/${rel}"
+        mkdir -p "$(dirname "${extracted}")"
+        mcopy -i "${fat_image}" "::/${rel}" "${extracted}" >/dev/null 2>&1 || {
+            echo "ERROR: final FAT image is missing Pi 5 firmware payload: ${rel}"
+            return 1
+        }
+        actual="$(shasum -a 256 "${extracted}" | awk '{print $1}')"
+        if [ "${actual}" != "${expected}" ]; then
+            echo "ERROR: final FAT payload hash mismatch: ${rel}"
+            echo "       source=${expected} final=${actual}"
+            return 1
+        fi
+    done < "${CONFIRMED_BOOT_DIR}/SHA256SUMS"
+    rm -rf "${verify_dir}"
+    return 0
+}
+
 # Modify config.txt --- extract, modify, write back
 echo ""
 echo "→ config.txt..."
@@ -319,8 +402,10 @@ mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null > "${BUILD_DIR}/yunsh-config-ne
 # restore the v3.1.6 regression: the generic overlay plus
 # disable_fw_kms_setup=1 can prevent VC4/HVS/V3D from creating DRM devices.
 sed -i '' -e 's/^dtoverlay=vc4-kms-v3d$/dtoverlay=vc4-kms-v3d-pi5/' \
+    -e '/^dtoverlay=disable-bt$/d' \
     -e '/^disable_fw_kms_setup=1$/d' "${BUILD_DIR}/yunsh-config-new.txt" 2>/dev/null ||
 sed -i -e 's/^dtoverlay=vc4-kms-v3d$/dtoverlay=vc4-kms-v3d-pi5/' \
+    -e '/^dtoverlay=disable-bt$/d' \
     -e '/^disable_fw_kms_setup=1$/d' "${BUILD_DIR}/yunsh-config-new.txt"
 KMS_OVERLAY=""
 if ! grep -q '^dtoverlay=vc4-kms-v3d-pi5' "${BUILD_DIR}/yunsh-config-new.txt"; then
@@ -373,12 +458,26 @@ esac
 # remains the diagnostic console; tty1 is reserved for splash, firstboot
 # progress, and the graphical shell output.
 CMDLINE=$(printf '%s\n' "${CMDLINE}" | sed -E 's/  +/ /g; s/^ +//; s/ +$//')
-echo "${CMDLINE} quiet logo.nologo consoleblank=0 loglevel=3 vt.global_cursor_default=0 cma=256M psi=1 systemd.show_status=false systemd.log_target=journal systemd.log_level=notice systemd.default_standard_output=journal" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
+echo "${CMDLINE} quiet logo.nologo consoleblank=0 loglevel=3 vt.global_cursor_default=0 cma=256M psi=1 systemd.show_status=false systemd.log_target=journal systemd.log_level=notice systemd.default_standard_output=journal ${DISPLAY_CMDLINE_SUFFIX}" | sed -E 's/  +/ /g; s/[[:space:]]+$//' > "${BUILD_DIR}/yunsh-cmdline-new.txt"
 mdel -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null || true
 mcopy -i "${BOOT_IMG}" "${BUILD_DIR}/yunsh-cmdline-new.txt" ::/cmdline.txt
-if grep -Eq '(^| )(splash|module_blacklist=|console=tty1( |$))' "${BUILD_DIR}/yunsh-cmdline-new.txt" ||
+if grep -Eq '(^| )(splash|console=tty1( |$))' "${BUILD_DIR}/yunsh-cmdline-new.txt" ||
    ! grep -Eq '(^| )console=serial0,115200( |$)' "${BUILD_DIR}/yunsh-cmdline-new.txt"; then
     echo "ERROR: boot cmdline is missing the serial diagnostic channel or still exposes a local console/GPU blacklist" >&2
+    exit 1
+fi
+if [ "${DISPLAY_RECOVERY_MODE}" = "linuxfb" ] &&
+   ! grep -Eq '(^| )module_blacklist=vc4,v3d( |$)' "${BUILD_DIR}/yunsh-cmdline-new.txt"; then
+    echo "ERROR: linuxfb recovery mode must blacklist the failing VC4/V3D modules before they remove simplefb" >&2
+    exit 1
+fi
+if [ "${DISPLAY_RECOVERY_MODE}" = "kms" ] &&
+   grep -Eq '(^| )(module_blacklist=|modprobe\.blacklist=)vc4,v3d( |$)' "${BUILD_DIR}/yunsh-cmdline-new.txt"; then
+    echo "ERROR: KMS mode must not carry the framebuffer recovery blacklist" >&2
+    exit 1
+fi
+if grep -Eq '(^| )video=HDMI-A-[12]:[^ ]+|(^| )hdmi_(group|mode|timings|cvt)(:[01])?=' "${BUILD_DIR}/yunsh-cmdline-new.txt"; then
+    echo "ERROR: fixed HDMI resolution/timing is forbidden; keep EDID mode selection" >&2
     exit 1
 fi
 echo "  ✓ cmdline.txt modified"
@@ -427,6 +526,10 @@ if mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^disable_fw_kms_s
     echo "  ✗ disable_fw_kms_setup=1 is forbidden on the Pi 5 release path"
     exit 1
 fi
+if mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtoverlay=disable-bt$'; then
+    echo "  ✗ Bluetooth is disabled in the Pi 5 release path"
+    exit 1
+fi
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^hdmi_drive=2'
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtparam=i2c_arm=on'
 mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'psi=1'
@@ -436,7 +539,21 @@ if ! mtype -i "${BOOT_IMG}" ::/ssh >/dev/null 2>&1; then
     exit 1
 fi
 if mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'module_blacklist=vc4,v3d'; then
-    echo "  ✗ Pi 5 VC4/V3D is blacklisted; primary Wayland cannot start"
+    if [ "${DISPLAY_RECOVERY_MODE}" != "linuxfb" ]; then
+        echo "  ✗ Pi 5 VC4/V3D is blacklisted outside explicit linuxfb recovery mode"
+        exit 1
+    fi
+elif [ "${DISPLAY_RECOVERY_MODE}" = "linuxfb" ]; then
+    echo "  ✗ linuxfb recovery mode is missing the VC4/V3D blacklist"
+    exit 1
+fi
+if [ "${DISPLAY_RECOVERY_MODE}" = "kms" ] &&
+   mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -Eq '(^| )(module_blacklist=|modprobe\.blacklist=)vc4,v3d( |$)'; then
+    echo "  ✗ KMS mode contains a framebuffer recovery blacklist"
+    exit 1
+fi
+if mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -Eq '(^| )video=HDMI-A-[12]:[^ ]+|(^| )hdmi_(group|mode|timings|cvt)(:[01])?='; then
+    echo "  ✗ fixed HDMI resolution/timing is forbidden"
     exit 1
 fi
 if mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'root=PARTUUID='; then
@@ -444,7 +561,11 @@ if mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'root=PARTUUID=';
     exit 1
 fi
 mtype -i "${BOOT_IMG}" ::/YUNSH-FIRSTBOOT.SH >/dev/null
-rm -f "${BOOT_IMG}" "${BUILD_DIR}/yunsh-config-new.txt" "${BUILD_DIR}/yunsh-cmdline-new.txt"
+verify_boot_layer_payload "${BOOT_IMG}"
+FINAL_BOOT_IMG="${BUILD_DIR}/boot-partition-final-verify.img"
+dd if="${OUTPUT_FILE}" of="${FINAL_BOOT_IMG}" bs=512 skip=$BOOT_START count=$BOOT_SIZE 2>/dev/null
+verify_boot_layer_payload "${FINAL_BOOT_IMG}"
+rm -f "${BOOT_IMG}" "${FINAL_BOOT_IMG}" "${BUILD_DIR}/yunsh-config-new.txt" "${BUILD_DIR}/yunsh-cmdline-new.txt"
 echo "  ✓ Boot partition written back"
 
 # ─── Step 7: Create debugfs injection script ──────
@@ -463,6 +584,52 @@ add_file() {
     echo "write \"$src\" \"$dest\"" >> "${DEBUGFS_SCRIPT}"
     echo "  $dest ($size bytes)"
 }
+
+# depmod metadata is part of the Pi 5 kernel stack, not a first-boot repair.
+# macOS cannot safely regenerate it for an ARM64 rootfs, so the builder takes
+# the indexes from the matching, already verified Pi 5 package tree.  A clean
+# image must contain the indexes before firstboot tries to load Wi-Fi, VC4 or
+# any other module.
+PI5_MODULES_DIR="${YUNSH_PI5_MODULES_DIR:-${BUILD_DIR}/pi5-kernel-package-6.18.39/root/usr/lib/modules/${CONFIRMED_PI5_KERNEL_ABI}}"
+PI5_MODULE_INDEX_FILES=(
+    modules.alias
+    modules.alias.bin
+    modules.builtin
+    modules.builtin.alias.bin
+    modules.builtin.bin
+    modules.builtin.modinfo
+    modules.dep
+    modules.dep.bin
+    modules.devname
+    modules.order
+    modules.softdep
+    modules.symbols
+    modules.symbols.bin
+    modules.weakdep
+)
+if [ ! -d "${PI5_MODULES_DIR}/kernel" ]; then
+    echo "ERROR: missing Pi 5 module tree: ${PI5_MODULES_DIR}/kernel"
+    echo "Provide the complete ${CONFIRMED_PI5_KERNEL_ABI} package tree; do not generate a partial image."
+    exit 1
+fi
+PI5_MODULE_BINARY_COUNT="$(find "${PI5_MODULES_DIR}/kernel" -type f \( -name '*.ko' -o -name '*.ko.xz' -o -name '*.ko.zst' \) | wc -l | tr -d ' ')"
+if [ "${PI5_MODULE_BINARY_COUNT}" -lt 1000 ]; then
+    echo "ERROR: Pi 5 module tree is incomplete (${PI5_MODULE_BINARY_COUNT} module files)."
+    exit 1
+fi
+for module_index in "${PI5_MODULE_INDEX_FILES[@]}"; do
+    if [ ! -f "${PI5_MODULES_DIR}/${module_index}" ]; then
+        echo "ERROR: missing Pi 5 module index: ${PI5_MODULES_DIR}/${module_index}"
+        exit 1
+    fi
+done
+echo "  ✓ Pi 5 module tree and depmod indexes: ${PI5_MODULE_BINARY_COUNT} modules"
+
+# Always replace the exact module indexes in a reused base image.  This keeps
+# the rootfs metadata in lockstep with the kernel/initramfs/DTB/overlay ABI.
+for module_index in "${PI5_MODULE_INDEX_FILES[@]}"; do
+    add_file "${PI5_MODULES_DIR}/${module_index}" "/lib/modules/${CONFIRMED_PI5_KERNEL_ABI}/${module_index}"
+done
 
 echo "mkdir /usr/share/yunsh" >> "${DEBUGFS_SCRIPT}"
 echo "mkdir /usr/share/yunsh/ui" >> "${DEBUGFS_SCRIPT}"
@@ -606,6 +773,16 @@ add_file "${BUILD_DIR}/yunsh-update.conf" "/etc/yunsh/update.conf"
 
 add_file "${IMAGE_VERSION_CONF}" "/etc/yunsh/version.conf"
 
+# Keep the selected display path explicit for diagnostics and future migration
+# back to KMS.  This is a policy marker, not a resolution override: both modes
+# retain firmware EDID/HPD mode selection.
+cat > "${BUILD_DIR}/yunsh-display.conf" << DISPLAY_CONF
+mode=${DISPLAY_RECOVERY_MODE}
+kms_overlay=vc4-kms-v3d-pi5
+resolution=edid
+DISPLAY_CONF
+add_file "${BUILD_DIR}/yunsh-display.conf" "/etc/yunsh/display.conf"
+
 # systemd services
 echo "mkdir /etc/systemd/system" >> "${DEBUGFS_SCRIPT}"
 echo "mkdir /etc/systemd/system/multi-user.target.wants" >> "${DEBUGFS_SCRIPT}"
@@ -614,6 +791,8 @@ echo "mkdir /etc/systemd/system/multi-user.target.wants" >> "${DEBUGFS_SCRIPT}"
 cat > "${BUILD_DIR}/yunsh-os.service" << 'SVC'
 [Unit]
 Description=YUNSH OS Spatial UI
+StartLimitIntervalSec=5min
+StartLimitBurst=3
 After=network.target yunsh-firstboot.service yunsh-splash.service yunsh-grow-root.service
 Wants=network.target yunsh-firstboot.service yunsh-splash.service yunsh-grow-root.service
 Conflicts=getty@tty1.service
@@ -621,8 +800,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-ui-launcher
-Restart=always
-RestartSec=2
+Restart=on-failure
+RestartSec=10
 User=root
 # The shell owns the framebuffer directly. Keep diagnostics in the journal;
 # inheriting tty1 makes raw QML/code text flash over activation transitions.
@@ -686,8 +865,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-activation-helper
-Restart=always
-RestartSec=2
+Restart=on-failure
+RestartSec=15
 User=root
 [Install]
 WantedBy=multi-user.target
@@ -704,8 +883,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 Type=simple
 ExecStartPre=/usr/bin/install -d -m 0755 /var/lib/yunsh/space-inbox /var/lib/yunsh/media /var/lib/yunsh/orbit/voice /run/yunsh
 ExecStart=/usr/bin/yunsh-spaced
-Restart=always
-RestartSec=3
+Restart=on-failure
+RestartSec=30
 User=root
 PrivateTmp=true
 ProtectSystem=strict
@@ -726,8 +905,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 Type=simple
 ExecStartPre=/usr/bin/install -d -m 0755 /var/lib/yunsh/space-inbox /run/yunsh
 ExecStart=/usr/bin/yunsh-screen-relayd
-Restart=always
-RestartSec=3
+Restart=on-failure
+RestartSec=30
 User=root
 PrivateTmp=true
 ProtectSystem=strict
@@ -749,7 +928,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-network-daemon
-Restart=always
+Restart=on-failure
+RestartSec=30
 [Install]
 WantedBy=multi-user.target
 NSVC
@@ -779,7 +959,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-bluetooth-daemon
-Restart=always
+Restart=on-failure
+RestartSec=30
 User=root
 [Install]
 WantedBy=multi-user.target
@@ -796,8 +977,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-link-ble
-Restart=always
-RestartSec=3
+Restart=on-failure
+RestartSec=30
 User=root
 [Install]
 WantedBy=multi-user.target
@@ -813,8 +994,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-glasses-bridge
-Restart=always
-RestartSec=3
+Restart=on-failure
+RestartSec=30
 User=root
 [Install]
 WantedBy=multi-user.target
@@ -826,11 +1007,13 @@ cat > "${BUILD_DIR}/yunsh-update.service" << 'USVC'
 [Unit]
 Description=YUNSH OS OTA Update Daemon
 After=network-online.target
+Wants=network-online.target
 ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-update-daemon --foreground
-Restart=always
+Restart=on-failure
+RestartSec=30
 User=root
 [Install]
 WantedBy=multi-user.target
@@ -846,7 +1029,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-appd
-Restart=always
+Restart=on-failure
+RestartSec=30
 [Install]
 WantedBy=multi-user.target
 APPSVC
@@ -863,8 +1047,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/orbitd
-Restart=always
-RestartSec=10
+Restart=on-failure
+RestartSec=60
 User=root
 UMask=0077
 [Install]
@@ -902,8 +1086,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-visiond
-Restart=always
-RestartSec=5
+Restart=on-failure
+RestartSec=30
 User=root
 UMask=0077
 [Install]
@@ -936,8 +1120,9 @@ add_file "${BUILD_DIR}/yunsh-media-setup.service" "/etc/systemd/system/yunsh-med
 cat > "${BUILD_DIR}/yunsh-android-setup.service" << 'ANDROIDSVC'
 [Unit]
 Description=YUNSH OS Android Runtime Setup
-After=network-online.target
+After=network-online.target yunsh-firstboot.service
 Wants=network-online.target
+Wants=yunsh-firstboot.service
 ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=oneshot
@@ -1032,7 +1217,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-headtracking
-Restart=always
+Restart=on-failure
+RestartSec=30
 [Install]
 WantedBy=multi-user.target
 HTSVC
@@ -1047,8 +1233,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-bno085-reader
-Restart=always
-RestartSec=5
+Restart=on-failure
+RestartSec=30
 [Install]
 WantedBy=multi-user.target
 BNOSVC
@@ -1201,6 +1387,18 @@ echo "Commands: $(wc -l < "${DEBUGFS_SCRIPT}")"
     exit 1
 }
 echo "debugfs injection ✓"
+
+# Verify the files in the actual ext4 image after injection.  Checking only
+# the source directory would allow a malformed debugfs script or stale base
+# image to pass while firstboot still has to run depmod to become usable.
+for module_index in "${PI5_MODULE_INDEX_FILES[@]}"; do
+    MODULE_INDEX_STATUS="$("${DEBUGFS}" -R "stat /lib/modules/${CONFIRMED_PI5_KERNEL_ABI}/${module_index}" "${ROOT_PARTITION_IMG}" 2>&1 || true)"
+    if printf '%s\n' "${MODULE_INDEX_STATUS}" | grep -Eq 'File not found|not found|No such file'; then
+        echo "ERROR: injected rootfs is missing /lib/modules/${CONFIRMED_PI5_KERNEL_ABI}/${module_index}."
+        exit 1
+    fi
+done
+echo "  ✓ rootfs Pi 5 module indexes verified"
 
 # ─── Step 9: e2fsck ────────────────────────────────
 echo ""

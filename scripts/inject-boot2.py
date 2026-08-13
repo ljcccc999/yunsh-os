@@ -138,7 +138,7 @@ if result:
 arm_64bit=1
 
 # VideoCore: enable KMS (not FKMS)
-dtoverlay=vc4-kms-v3d
+dtoverlay=vc4-kms-v3d-pi5
 # gpu_mem split: 256MB for Pi 5
 gpu_mem=256
 gpu_mem_256=128
@@ -162,8 +162,6 @@ dtparam=audio=on
 # Boot order: try SD card first, then USB
 boot_order=0xf41
 
-# Disable Bluetooth (not needed on Pi 5 AR)
-dtoverlay=disable-bt
 """
     
     print(f"\n  New config.txt ({len(new_config)} bytes):")

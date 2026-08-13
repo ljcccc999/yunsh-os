@@ -98,8 +98,9 @@ install_waydroid_package() {
         "$codename" > /etc/apt/sources.list.d/waydroid.list
 
     write_state "installing" 20 "Installing the Waydroid runtime"
-    if ! apt-get update -qq ||
-       ! apt-get install -yqq --no-install-recommends waydroid; then
+    local apt_timeout_seconds="${YUNSH_APT_COMMAND_TIMEOUT:-900}"
+    if ! timeout "$apt_timeout_seconds" apt-get update -qq ||
+       ! timeout "$apt_timeout_seconds" apt-get install -yqq --no-install-recommends waydroid; then
         write_state "error" 20 "Android package installation failed" \
             "Check the network connection, then retry from Android Apps"
         return 1
@@ -118,10 +119,45 @@ check_binder_support() {
         grep -qw binder /proc/filesystems 2>/dev/null
 }
 
+runtime_images_path() {
+    local configured_path
+    [ -s "$WAYDROID_DATA_DIR/waydroid.cfg" ] || return 1
+    configured_path="$(sed -n 's/^[[:space:]]*images_path[[:space:]]*=[[:space:]]*//p' \
+        "$WAYDROID_DATA_DIR/waydroid.cfg" | head -n 1)"
+    [ -n "$configured_path" ] || configured_path="$WAYDROID_DATA_DIR/images"
+    case "$configured_path" in
+        /*) ;;
+        *) configured_path="$WAYDROID_DATA_DIR/$configured_path" ;;
+    esac
+    printf '%s\n' "$configured_path"
+}
+
+# Waydroid's preinstalled-image mode intentionally keeps system.img and
+# vendor.img in the preloaded directory and records that directory in
+# waydroid.cfg.  Do not require a second multi-gigabyte copy under
+# /var/lib/waydroid/images; that old check reported a successful init as a
+# missing runtime configuration and produced the F-Droid error screen.
 runtime_initialized() {
+    local image_path
     [ -s "$WAYDROID_DATA_DIR/waydroid.cfg" ] &&
-        [ -s "$WAYDROID_DATA_DIR/images/system.img" ] &&
-        [ -s "$WAYDROID_DATA_DIR/images/vendor.img" ]
+        [ -d "$WAYDROID_DATA_DIR/rootfs" ] || return 1
+    image_path="$(runtime_images_path 2>/dev/null)" || return 1
+    [ -s "$image_path/system.img" ] &&
+        [ -s "$image_path/vendor.img" ]
+}
+
+runtime_diagnostics() {
+    local image_path="missing"
+    image_path="$(runtime_images_path 2>/dev/null || true)"
+    if [ -z "$image_path" ]; then
+        image_path="missing"
+    fi
+    printf 'config=%s; rootfs=%s; images_path=%s; system=%s; vendor=%s' \
+        "$([ -s "$WAYDROID_DATA_DIR/waydroid.cfg" ] && echo present || echo missing)" \
+        "$([ -d "$WAYDROID_DATA_DIR/rootfs" ] && echo present || echo missing)" \
+        "$image_path" \
+        "$([ -s "$image_path/system.img" ] && echo present || echo missing)" \
+        "$([ -s "$image_path/vendor.img" ] && echo present || echo missing)"
 }
 
 preloaded_images_available() {
@@ -168,10 +204,12 @@ setup_runtime() {
     fi
 
     if preloaded_images_available; then
-        # Waydroid's documented custom-image path avoids the long OTA download
-        # when system.img and vendor.img are already present.
+        # Waydroid's documented custom-image path is required here.  Calling
+        # `waydroid init -f` without -i makes Waydroid consult its OTA channel
+        # and can start a second multi-gigabyte download even though the
+        # matching arm64 pair is already inside the image.
         write_state "initializing" 35 "Initializing preloaded Android images"
-        if ! timeout 900 waydroid init -f -s VANILLA </dev/null \
+        if ! timeout 900 waydroid init -f -i "$PRELOAD_IMAGE_DIR" </dev/null \
             >>/var/log/yunsh-android.log 2>&1; then
             write_state "error" 35 "Preloaded Android image initialization failed" \
                 "Check the arm64 system/vendor image pair and Waydroid log"
@@ -201,8 +239,8 @@ setup_runtime() {
     fi
 
     runtime_initialized || {
-        write_state "error" 35 "Android image setup did not complete" \
-            "Waydroid did not create its runtime configuration"
+        write_state "error" 35 "Android runtime files are incomplete" \
+            "Waydroid init returned without a usable config/image set: $(runtime_diagnostics)"
         return 1
     }
 
@@ -279,10 +317,27 @@ elif (service_active != "true" and
         "message": "Android 后台准备超时",
         "error": "准备时间过长，请检查网络后点击“重试准备”",
     })
-initialized = all(
-    os.path.isfile(os.path.join(data_path, relative)) and
-    os.path.getsize(os.path.join(data_path, relative)) > 0
-    for relative in ("waydroid.cfg", "images/system.img", "images/vendor.img")
+config_path = os.path.join(data_path, "waydroid.cfg")
+rootfs_path = os.path.join(data_path, "rootfs")
+images_path = os.path.join(data_path, "images")
+if os.path.isfile(config_path):
+    try:
+        import configparser
+        config = configparser.ConfigParser()
+        config.read(config_path)
+        configured = config.get("waydroid", "images_path", fallback="").strip()
+        if configured:
+            images_path = os.path.abspath(os.path.join(data_path, configured)) \
+                if not os.path.isabs(configured) else configured
+    except (configparser.Error, OSError, ValueError):
+        pass
+initialized = (
+    os.path.isfile(config_path) and os.path.isdir(rootfs_path) and
+    all(
+        os.path.isfile(os.path.join(images_path, relative)) and
+        os.path.getsize(os.path.join(images_path, relative)) > 0
+        for relative in ("system.img", "vendor.img")
+    )
 )
 ready = initialized and os.path.isfile(ready_path)
 display_ready = os.path.exists(wayland_path)
@@ -303,6 +358,7 @@ elif initialized and not display_ready:
 data["ready"] = bool((ready or initialized) and display_ready)
 data["initialized"] = initialized
 data["display_ready"] = display_ready
+data["images_path"] = images_path
 print(json.dumps(data, ensure_ascii=False))
 PY
 }

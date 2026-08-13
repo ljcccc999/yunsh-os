@@ -79,7 +79,7 @@ if idx > 0:
     # Add YUNSH section
     config_region += "\n# === YUNSH OS Settings ===\n"
     config_region += "arm_64bit=1\n"
-    config_region += "[pi5]\ndtoverlay=vc4-kms-v3d\ndisable_splash=1\n"
+    config_region += "[pi5]\ndtoverlay=vc4-kms-v3d-pi5\ndisable_splash=1\n"
     config_region += "framebuffer_width=1920\nframebuffer_height=1080\n"
     config_region += "framebuffer_depth=32\ndisable_overscan=1\n"
     config_region += "[all]\ndtparam=i2c_arm=on\n"

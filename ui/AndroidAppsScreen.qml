@@ -119,6 +119,8 @@ Rectangle {
             text: statusError.length > 0 ? statusError : statusMessage
             color: statusError.length > 0 ? "#C43D4A" : Qt.rgba(23/255, 33/255, 42/255, 0.64)
             font.pixelSize: 14
+            maximumLineCount: 4
+            elide: Text.ElideRight
         }
 
         Rectangle {

@@ -12,6 +12,7 @@ Rectangle {
     property url currentFolder: "file:///home/yunsh"
     property var folderStack: []
     property string statusText: ""
+    property string searchText: ""
     signal backToHome()
     signal androidAppInstalled()
 
@@ -98,9 +99,48 @@ Rectangle {
     Rectangle {
         anchors.fill: parent
         radius: 24
-        color: Qt.rgba(250 / 255, 254 / 255, 1, 0.94)
+        color: "#F5F7FA"
         border.width: 1
-        border.color: "#FFFFFF"
+        border.color: "#DCE3EA"
+    }
+
+    // Finder-style sidebar: stable places are always one click away.
+    Rectangle {
+        id: sidebar
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: 190
+        radius: 24
+        color: "#EEF2F6"
+        clip: true
+
+        Text { x: 22; y: 24; text: "位置"; color: "#73808C"; font.pixelSize: 12; font.bold: true }
+        Column {
+            anchors.left: parent.left; anchors.right: parent.right
+            anchors.top: parent.top; anchors.topMargin: 52
+            spacing: 4
+            Repeater {
+                model: [
+                    {label: "主文件夹", icon: "⌂", path: "file:///home/yunsh"},
+                    {label: "桌面", icon: "▦", path: "file:///home/yunsh/Desktop"},
+                    {label: "下载", icon: "↓", path: "file:///home/yunsh/Downloads"},
+                    {label: "图片", icon: "▧", path: "file:///home/yunsh/Pictures"}
+                ]
+                delegate: Rectangle {
+                    width: sidebar.width - 20; height: 38; radius: 10
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    color: String(filesScreen.currentFolder) === modelData.path
+                        ? "#D7F5FC" : "transparent"
+                    Row {
+                        anchors.fill: parent; anchors.leftMargin: 12; spacing: 10
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.icon; color: "#008EAA"; font.pixelSize: 17 }
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.label; color: "#23313C"; font.pixelSize: 13 }
+                    }
+                    MouseArea { anchors.fill: parent; onClicked: { folderStack = []; currentFolder = modelData.path } }
+                }
+            }
+        }
     }
 
     Row {
@@ -111,18 +151,25 @@ Rectangle {
         height: 62
         spacing: 12
         padding: 16
+        anchors.leftMargin: sidebar.width
 
-        Button {
-            text: "← 返回"
+        GlassButton {
+            width: 70; height: 34
+            bgColor: Qt.rgba(1, 1, 1, 0.78)
             onClicked: filesScreen.backToHome()
+            Text { anchors.centerIn: parent; text: "←"; color: "#344552"; font.pixelSize: 18 }
         }
-        Button {
-            text: "↑ 上一级"
+        GlassButton {
+            width: 70; height: 34
+            bgColor: Qt.rgba(1, 1, 1, 0.78)
             onClicked: filesScreen.goUp()
+            Text { anchors.centerIn: parent; text: "↑"; color: "#344552"; font.pixelSize: 18 }
         }
-        Button {
-            text: "下载"
+        GlassButton {
+            width: 78; height: 34
+            bgColor: Qt.rgba(0, 212/255, 1, 0.18)
             onClicked: filesScreen.openDownloads()
+            Text { anchors.centerIn: parent; text: "下载"; color: "#007E9A"; font.pixelSize: 12 }
         }
         Text {
             anchors.verticalCenter: parent.verticalCenter
@@ -131,19 +178,38 @@ Rectangle {
             font.pixelSize: 17
             font.weight: Font.DemiBold
             elide: Text.ElideMiddle
-            width: Math.max(120, toolbar.width - 190)
+            width: Math.max(120, toolbar.width - 430)
         }
-        Text {
-            anchors.right: parent.right
-            anchors.rightMargin: 18
+        Rectangle {
+            width: 160; height: 30; radius: 15
             anchors.verticalCenter: parent.verticalCenter
-            text: filesScreen.statusText
-            color: "#00A9CC"
-            font.pixelSize: 12
-            elide: Text.ElideRight
-            width: 220
-            horizontalAlignment: Text.AlignRight
+            color: "#E8EDF2"
+            TextInput {
+                anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 8
+                verticalAlignment: TextInput.AlignVCenter
+                color: "#23313C"; font.pixelSize: 12
+                clip: true; text: filesScreen.searchText
+                onTextChanged: filesScreen.searchText = text
+                Text { anchors.verticalCenter: parent.verticalCenter; text: "搜索"; color: "#94A0AA"; visible: parent.text.length === 0 }
+            }
         }
+    }
+
+    // Keep the status label outside the Row.  A right anchor on a Row child
+    // makes Qt Quick discard the Row's layout and produced a warning on the
+    // real framebuffer path.
+    Text {
+        id: statusLabel
+        anchors.right: parent.right
+        anchors.rightMargin: 18
+        anchors.top: parent.top
+        anchors.topMargin: 23
+        text: filesScreen.statusText
+        color: "#00A9CC"
+        font.pixelSize: 12
+        elide: Text.ElideRight
+        width: 220
+        horizontalAlignment: Text.AlignRight
     }
 
     ListView {
@@ -153,58 +219,69 @@ Rectangle {
         anchors.top: toolbar.bottom
         anchors.bottom: parent.bottom
         anchors.margins: 14
+        anchors.leftMargin: sidebar.width + 14
         clip: true
         spacing: 6
         model: fileModel
 
         delegate: Rectangle {
             required property int index
+            readonly property string itemName: String(fileModel.get(index, "fileName"))
+            readonly property url itemUrl: fileModel.get(index, "fileUrl")
+            readonly property bool itemIsFolder: fileModel.isFolder(index)
             width: fileList.width
-            height: 52
-            radius: 14
-            color: itemMouse.pressed ? "#DDF8FF" : "#F5FAFC"
+            height: filesScreen.searchText.length > 0 &&
+                    itemName.toLowerCase().indexOf(filesScreen.searchText.toLowerCase()) < 0 ? 0 : 58
+            radius: 12
+            color: itemMouse.pressed ? "#DDF8FF" : "#FFFFFF"
             border.width: 1
-            border.color: "#E4F2F6"
+            border.color: "#E1E7EC"
 
             Text {
                 anchors.left: parent.left
                 anchors.leftMargin: 16
                 anchors.verticalCenter: parent.verticalCenter
-                text: fileModel.isFolder(index) ? "▣" : "▤"
-                color: fileModel.isFolder(index) ? "#00A9CC" : "#667783"
-                font.pixelSize: 22
+                text: itemIsFolder ? "▰" : "▤"
+                color: itemIsFolder ? "#00A9CC" : "#667783"
+                font.pixelSize: 20
             }
             Text {
                 anchors.left: parent.left
-                anchors.leftMargin: 54
+                anchors.leftMargin: 52
                 anchors.right: parent.right
                 anchors.rightMargin: 16
                 anchors.verticalCenter: parent.verticalCenter
-                text: fileModel.fileName(index)
+                text: itemName
                 color: "#17212A"
-                font.pixelSize: 15
+                font.pixelSize: 14
                 elide: Text.ElideMiddle
+            }
+            Text {
+                anchors.right: parent.right; anchors.rightMargin: 16
+                anchors.verticalCenter: parent.verticalCenter
+                text: itemIsFolder ? "文件夹" : "文件"
+                color: "#8B98A3"; font.pixelSize: 11
             }
             MouseArea {
                 id: itemMouse
                 anchors.fill: parent
                 onClicked: {
-                    var url = fileModel.fileURL(index)
-                    if (fileModel.isFolder(index))
+                    var url = itemUrl
+                    if (itemIsFolder)
                         filesScreen.enterFolder(url)
-                    else if (String(fileModel.fileName(index)).toLowerCase().endsWith(".apk"))
+                    else if (itemName.toLowerCase().endsWith(".apk"))
                         filesScreen.installApk(url)
-                    else if (String(fileModel.fileName(index)).toLowerCase().endsWith(".deb")
-                             || String(fileModel.fileName(index)).toLowerCase().endsWith(".appimage"))
+                    else if (itemName.toLowerCase().endsWith(".deb")
+                             || itemName.toLowerCase().endsWith(".appimage"))
                         return
                     else
                         Qt.openUrlExternally(url)
                 }
                 onDoubleClicked: {
-                    var name = String(fileModel.fileName(index)).toLowerCase()
-                    if (!fileModel.isFolder(index)
+                    var name = itemName.toLowerCase()
+                    if (!itemIsFolder
                             && (name.endsWith(".deb") || name.endsWith(".appimage")))
-                        filesScreen.installLinuxFile(fileModel.fileURL(index))
+                        filesScreen.installLinuxFile(itemUrl)
                 }
             }
         }

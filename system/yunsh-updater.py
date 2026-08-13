@@ -37,6 +37,7 @@ ALLOWED_PREFIXES = (
     "etc/yunsh/openxr.conf",
     "etc/yunsh/version.conf",
     "etc/yunsh/update.conf",
+    "etc/yunsh/display.conf",
 )
 
 logger = logging.getLogger("yunsh-updater")

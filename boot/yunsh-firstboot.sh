@@ -56,9 +56,32 @@ echo "  +------------------------------------------+"
 source /usr/bin/yunsh-install-progress.sh 2>/dev/null || true
 
 TOTAL=22; CUR=0; CURRENT_PROGRESS=0; CURRENT_STATUS="Preparing first setup"
+# Keep the visible milestone monotonic across an automatic retry or a power
+# cycle. Previously a failed late package group restarted the script at 0%
+# and the next run could visibly jump from (for example) 40% back to 24%.
+# This is runtime-only state: a successful setup removes it and a clean image
+# never contains it.
+PROGRESS_STATE="/var/lib/yunsh/firstboot-progress"
+mkdir -p "$(dirname "$PROGRESS_STATE")"
+if [ -r "$PROGRESS_STATE" ]; then
+    saved_progress="$(sed -n '1p' "$PROGRESS_STATE" 2>/dev/null || true)"
+    if [[ "$saved_progress" =~ ^[0-9]+$ ]] && [ "$saved_progress" -ge 0 ] && [ "$saved_progress" -le 100 ]; then
+        CURRENT_PROGRESS="$saved_progress"
+    fi
+fi
+save_progress() {
+    local temporary="${PROGRESS_STATE}.tmp.$$"
+    printf '%s\n' "$CURRENT_PROGRESS" > "$temporary" 2>/dev/null || true
+    mv -f "$temporary" "$PROGRESS_STATE" 2>/dev/null || true
+}
 FIRSTBOOT_APT_FAILED=0
 pct() { CUR=$((CUR+1)); local P=$((CUR*100/TOTAL)); [ "$P" -gt "$1" ] && P=$1
+    # The milestone arguments reflect the planned install stage.  A retry or
+    # an optional package must never make the user-facing total appear to go
+    # backwards (for example 40% -> 24%).
+    [ "$P" -lt "$CURRENT_PROGRESS" ] && P="$CURRENT_PROGRESS"
     CURRENT_PROGRESS="$P"; CURRENT_STATUS="$2"
+    save_progress
     if type draw_frame &>/dev/null 2>&1; then draw_frame "$P" "$2" "$CUR" "$TOTAL"
     else echo "  [$P%] $2"; fi
 }
@@ -66,6 +89,7 @@ pct() { CUR=$((CUR+1)); local P=$((CUR*100/TOTAL)); [ "$P" -gt "$1" ] && P=$1
 progress_detail() {
     local status="$1" detail="${2:-}"
     CURRENT_STATUS="$status"
+    save_progress
     if type draw_frame &>/dev/null 2>&1; then
         draw_frame "$CURRENT_PROGRESS" "$status" "$CUR" "$TOTAL" "$detail"
     else
@@ -79,7 +103,14 @@ progress_detail() {
 if ! id -u yunsh >/dev/null 2>&1; then
     useradd -m -s /bin/bash -G sudo,adm,dialout yunsh 2>/dev/null || true
 fi
-if ! id -u yunsh >/dev/null 2>&1 || ! echo "yunsh:YUNSH123" | chpasswd 2>/dev/null; then
+if id -u yunsh >/dev/null 2>&1; then
+    # A reused Raspberry Pi OS base can already contain a `yunsh` user.  Keep
+    # the release contract identical in that case as well: fixed Linux login
+    # name, administrative recovery groups, and the documented default
+    # password until the user explicitly changes it.
+    usermod -aG sudo,adm,dialout yunsh 2>/dev/null || true
+fi
+if ! id -u yunsh >/dev/null 2>&1 || ! echo "yunsh:yunsh123" | chpasswd 2>/dev/null; then
     echo "  [ERROR] Unable to create the Linux service account." >&2
     exit 1
 fi
@@ -276,6 +307,17 @@ firstboot_exit() {
 trap firstboot_exit EXIT
 apt_services_off
 
+# The Pi 5 kernel modules are injected as a matched ABI set.  macOS builds do
+# not have a native depmod, so regenerate the dependency index on the target
+# before NetworkManager starts; without it brcmfmac exists on disk but Wi-Fi
+# is reported as WIFI-HW missing and no wlan0 is created.
+if [ -x /sbin/depmod ]; then
+    /sbin/depmod -a "$(uname -r)" >>/var/log/yunsh-kernel-modules.log 2>&1 || true
+fi
+if [ -x /sbin/modprobe ]; then
+    /sbin/modprobe brcmfmac >>/var/log/yunsh-kernel-modules.log 2>&1 || true
+fi
+
 # Debian images may start apt-daily/cloud-init package jobs in parallel with
 # firstboot. Stop the scheduled jobs and wait for any transient dpkg/debconf
 # lock before taking ownership of the package database.
@@ -345,7 +387,7 @@ download_apt_group() {
     while kill -0 "$pid" 2>/dev/null; do
         downloaded="$(downloaded_bytes "$manifest")"
         downloaded_mb="$(format_mb "$downloaded")"
-        progress_detail "Downloading: $name" "${downloaded_mb} MB / ${total_mb} MB"
+        progress_detail "Downloading: $name" "本包 ${downloaded_mb} MB / ${total_mb} MB · 总安装进度 ${CURRENT_PROGRESS}%"
         sleep 2
     done
     wait "$pid"; rc=$?
@@ -354,7 +396,7 @@ download_apt_group() {
         recover_stalled_package_processes
     fi
     downloaded="$(downloaded_bytes "$manifest")"
-    progress_detail "Downloading: $name" "$(format_mb "$downloaded") MB / ${total_mb} MB"
+    progress_detail "Downloading: $name" "本包 $(format_mb "$downloaded") MB / ${total_mb} MB · 总安装进度 ${CURRENT_PROGRESS}%"
     rm -f "$manifest"
     return "$rc"
 }
@@ -584,7 +626,26 @@ for i in $(seq 1 30); do
 done
 
 pct 3 "Updating package lists..."
-apt-get update -qq 2>/dev/null || { sleep 10; apt-get update -qq 2>/dev/null || true; }
+# Keep the first package-list refresh under the same bounded/retry policy as
+# every later apt transaction.  The previous bare apt-get could wait forever
+# on a dead mirror or a half-open connection, leaving the visible installer at
+# one percentage until a power cycle.  A timed failure exits firstboot cleanly;
+# the existing partial-install marker makes the next boot retry safely.
+APT_UPDATE_OK=0
+for APT_UPDATE_ATTEMPT in 1 2; do
+    if apt_timeout "package list update (attempt ${APT_UPDATE_ATTEMPT})" \
+        apt-get "${APT_OPTIONS[@]}" update -qq >>/var/log/yunsh-apt.log 2>&1; then
+        APT_UPDATE_OK=1
+        break
+    fi
+    recover_stalled_package_processes
+    [ "$APT_UPDATE_ATTEMPT" -lt 2 ] && sleep 10
+done
+if [ "$APT_UPDATE_OK" -ne 1 ]; then
+    echo "  [ERROR] Package list update failed or timed out; firstboot will retry on reboot." |
+        tee -a /var/log/yunsh-apt.log
+    exit 1
+fi
 
 # Install packages
 # Do not replace the boot-critical Pi 5 kernel/firmware during firstboot.  The
@@ -629,9 +690,10 @@ fi
 apt_services_off
 install_apt 38 "System tools" openssh-server avahi-daemon avahi-utils openssl iptables i2c-tools curl wget git unzip python3-pil psmisc util-linux
 install_apt 44 "Chinese input and emoji" fonts-noto-cjk fonts-noto-color-emoji fcitx5 fcitx5-chinese-addons fcitx5-frontend-qt6 python3-pam
-# Install the userspace Bluetooth audio path during first boot so paired A2DP
-# speakers are ready before activation; hardware pairing remains non-blocking.
-install_apt 50 "Bluetooth audio speakers" pulseaudio pulseaudio-module-bluetooth
+# Install the userspace Bluetooth audio path during first boot when the base
+# repository provides it. A2DP is optional hardware support and must never
+# prevent the core desktop/activation marker from being written.
+install_optional_apt 50 "Bluetooth audio speakers" pulseaudio pulseaudio-module-bluetooth
 # Screen capture, recording, and OCR are optional and can contend with
 # cloud-init's debconf database on a fresh image. Prepare all of them
 # asynchronously with yunsh-media-setup.service after the desktop marker.
@@ -641,7 +703,12 @@ pct 53 "Scheduling screen capture and recording..."
 # stack. Keep both EGL/OpenGL (Qt Quick/Weston) and Vulkan (Waydroid and
 # future spatial compositor work) in the first-boot transaction, rather than
 # silently falling back to an incomplete software graphics stack.
-install_apt 56 "Pi 5 graphics runtime" mesa-utils libgl1-mesa-dri libegl1 mesa-vulkan-drivers
+# Mesa's software/EGL pieces are part of the core check below, but optional
+# utilities/Vulkan packages vary across the Raspberry Pi and generic ARM64
+# repositories. Do not make a repository-specific Vulkan utility failure look
+# like a first-boot or display failure; the optional pieces can be retried
+# after the desktop is reachable.
+install_optional_apt 56 "Pi 5 graphics runtime" mesa-utils libgl1-mesa-dri libegl1 mesa-vulkan-drivers
 install_optional_apt 57 "OpenXR loader and runtime packages" libopenxr-loader1 libopenxr-dev openxr-utils openxr-tools monado monado-service
 
 # Waydroid remains a core component, but its repository and Android image are
@@ -704,7 +771,7 @@ pct 92 "Preparing Android application store..."
 
 pct 98 "Cleaning up..."
 record_display_failure
-CORE_PACKAGES="linux-image-rpi-2712 raspi-firmware raspi-utils-core qml-qt6 qt6-svg-plugins libqt6opengl6 qml6-module-qtqml qml6-module-qtqml-workerscript qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-virtualkeyboard qml6-module-qtquick-templates qml6-module-qt-labs-qmlmodels qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtwebengine qt6-wayland weston network-manager wpasupplicant bluez openssh-server avahi-daemon avahi-utils openssl iptables i2c-tools curl wget git unzip python3-pil python3-cryptography python3-smbus2 python3-dbus python3-gi python3-pam libegl1 libgl1-mesa-dri mesa-vulkan-drivers psmisc util-linux fonts-noto-cjk fonts-noto-color-emoji fcitx5 fcitx5-chinese-addons fcitx5-frontend-qt6 pulseaudio pulseaudio-module-bluetooth"
+CORE_PACKAGES="linux-image-rpi-2712 raspi-firmware raspi-utils-core qml-qt6 qt6-svg-plugins libqt6opengl6 qml6-module-qtqml qml6-module-qtqml-workerscript qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-virtualkeyboard qml6-module-qtquick-templates qml6-module-qt-labs-qmlmodels qml6-module-qt-labs-folderlistmodel qml6-module-qtquick-shapes qml6-module-qtwebengine qt6-wayland weston network-manager wpasupplicant bluez openssh-server avahi-daemon avahi-utils openssl iptables i2c-tools curl wget git unzip python3-pil python3-cryptography python3-smbus2 python3-dbus python3-gi python3-pam libegl1 libgl1-mesa-dri psmisc util-linux fonts-noto-cjk fonts-noto-color-emoji fcitx5 fcitx5-chinese-addons fcitx5-frontend-qt6"
 CORE_MISSING=""
 for package in $CORE_PACKAGES; do
     dpkg-query -W -f='${Status}' "$package" 2>/dev/null |
@@ -727,6 +794,7 @@ fi
 pct 100 "Setup complete! Rebooting..."
 rm -f /etc/yunsh/.firstboot_partial 2>/dev/null || true
 touch /etc/yunsh/.packages_installed
+rm -f "$PROGRESS_STATE" "${PROGRESS_STATE}.tmp.$$" 2>/dev/null || true
 rm -f /usr/bin/yunsh-firstboot.sh
 sync
 sleep 2

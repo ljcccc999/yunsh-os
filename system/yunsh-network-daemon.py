@@ -69,6 +69,27 @@ def configure_wifi_country():
     return country
 
 
+def ensure_wifi_driver():
+    """Build the target's module index and load the Pi 5 SDIO Wi-Fi driver."""
+    release = os.uname().release
+    try:
+        subprocess.run(
+            ["/sbin/depmod", "-a", release],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    try:
+        result = subprocess.run(
+            ["/sbin/modprobe", "brcmfmac"],
+            capture_output=True, text=True, timeout=20, check=False,
+        )
+        if result.returncode != 0 and result.stderr.strip():
+            log.warning("Could not load brcmfmac: %s", result.stderr.strip())
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        log.warning("Could not start the Pi Wi-Fi driver: %s", exc)
+
+
 def run_nmcli(args, timeout=15):
     """Run nmcli command and return (success, output)"""
     try:
@@ -122,13 +143,9 @@ def split_nmcli(line):
 def scan_wifi():
     """Scan Wi-Fi networks"""
     status = get_status()
-    if status.get("ethernet_connected"):
-        return {
-            "success": True,
-            "networks": [],
-            "wifi_suspended": True,
-            "message": "有线网络连接时 Wi-Fi 扫描已暂停",
-        }
+    # Ethernet remains the preferred data path, but it must not hide nearby
+    # Wi-Fi networks in activation/settings.  Users may want to inspect or
+    # prepare a network before unplugging the cable.
     run_nmcli(["radio", "wifi", "on"], timeout=10)
     success, text = run_nmcli([
         "-t", "-e", "yes", "-f", "SSID,SIGNAL,SECURITY,BARS,CHAN",
@@ -344,17 +361,18 @@ def save_status():
 
 
 def reconcile_network_priority():
-    """Prefer Ethernet without permanently changing the user's Wi-Fi state."""
+    """Prefer Ethernet without disabling Wi-Fi discovery."""
     status = get_status()
     os.makedirs(os.path.dirname(ETHERNET_WIFI_MARKER), exist_ok=True)
     if status.get("ethernet_connected"):
-        if status.get("enabled"):
-            run_nmcli(["radio", "wifi", "off"], timeout=10)
-            try:
-                with open(ETHERNET_WIFI_MARKER, "w", encoding="utf-8") as handle:
-                    handle.write("ethernet\n")
-            except OSError:
-                pass
+        # Keep the radio enabled so activation/settings can scan.  If a Wi-Fi
+        # connection is already active, Ethernet is still preferred by the
+        # routing metric; do not erase the user's radio preference.
+        try:
+            if os.path.exists(ETHERNET_WIFI_MARKER):
+                os.remove(ETHERNET_WIFI_MARKER)
+        except OSError:
+            pass
     elif os.path.exists(ETHERNET_WIFI_MARKER):
         run_nmcli(["radio", "wifi", "on"], timeout=10)
         try:
@@ -425,8 +443,13 @@ def socket_server():
 
 def main():
     log.info("YUNSH Network Daemon starting...")
+    ensure_wifi_driver()
     country = configure_wifi_country()
     log.info("Wi-Fi regulatory country: %s", country)
+    # Make the adapter discoverable at activation/settings startup.  An
+    # Ethernet link remains preferred for traffic, but should not leave the
+    # Wi-Fi radio in a hidden/off state.
+    run_nmcli(["radio", "wifi", "on"], timeout=10)
     # Ethernet has priority. Wi-Fi is restored automatically after the cable
     # is removed only when this daemon suspended it.
     reconcile_network_priority()

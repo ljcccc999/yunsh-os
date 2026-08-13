@@ -42,7 +42,7 @@ fi
 exec qemu-system-aarch64 \
     -machine virt -cpu cortex-a72 -smp 4 -m 4096 \
     -kernel "$KERNEL" -initrd "$INITRD" \
-    -append 'root=/dev/vda2 rw rootwait console=ttyAMA0,115200 systemd.mask=boot-firmware.mount systemd.mask=cloud-init-local.service systemd.mask=cloud-init-network.service systemd.mask=cloud-config.service systemd.mask=cloud-final.service systemd.mask=cloud-init.target systemd.mask=regenerate_ssh_host_keys.service systemd.mask=yunsh-firewall.service systemd.mask=apparmor.service systemd.mask=systemd-sysctl.service systemd.mask=nftables.service systemd.mask=keyboard-setup.service' \
+    -append 'root=/dev/vda2 rw rootwait console=ttyAMA0,115200 ip=dhcp systemd.mask=boot-firmware.mount systemd.mask=cloud-init-local.service systemd.mask=cloud-init-network.service systemd.mask=cloud-config.service systemd.mask=cloud-final.service systemd.mask=cloud-init.target systemd.mask=regenerate_ssh_host_keys.service systemd.mask=yunsh-firewall.service systemd.mask=apparmor.service systemd.mask=systemd-sysctl.service systemd.mask=nftables.service systemd.mask=keyboard-setup.service' \
     -drive "if=none,file=$DISK,format=qcow2,id=hd" -device virtio-blk-pci,drive=hd \
     -netdev user,id=net0,hostfwd=tcp::${SSH_PORT}-:22 -device virtio-net-pci,netdev=net0 \
     -device virtio-rng-pci "${INPUT_ARGS[@]}" "${GPU_ARGS[@]}" -display "$QEMU_DISPLAY" \

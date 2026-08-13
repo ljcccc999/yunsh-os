@@ -93,6 +93,11 @@ install_runtime "${YUNSH_DIR}/boot/yunsh-iptables.sh" "yunsh-iptables.sh"
 if [ "${OTA_FORMAT}" != "legacy" ]; then
     cp "${YUNSH_DIR}/yunsh-openxr.conf" "${STAGING}/payload/etc/yunsh/openxr.conf"
     cp "${YUNSH_DIR}/yunsh-android.conf" "${STAGING}/payload/etc/yunsh/android.conf"
+    [ -f "${BUILD_DIR}/yunsh-display.conf" ] || {
+        echo "ERROR: build display policy is missing; run scripts/build-no-hdiutil.sh first" >&2
+        exit 1
+    }
+    cp "${BUILD_DIR}/yunsh-display.conf" "${STAGING}/payload/etc/yunsh/display.conf"
 fi
 
 required_services=(
