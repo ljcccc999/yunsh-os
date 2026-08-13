@@ -208,6 +208,51 @@ def _parse_release(data: dict) -> dict:
     body = data.get("body", "")
     prerelease = data.get("prerelease", False)
     assets = data.get("assets", [])
+
+    def find_asset(suffix: str):
+        return next(
+            (asset for asset in assets
+             if asset.get("name", "").lower().endswith(suffix)),
+            None,
+        )
+
+    def checksum_for(asset):
+        if not asset:
+            return ""
+        name = asset.get("name", "").lower()
+        checksum_names = {
+            name + ".sha256",
+            name.removesuffix(".tar.gz") + ".sha256",
+        }
+        checksum_asset = next(
+            (item for item in assets if item.get("name", "").lower() in checksum_names),
+            None,
+        )
+        return _fetch_sha256(checksum_asset.get("browser_download_url", "")) if checksum_asset else ""
+
+    manifest_asset = find_asset(".ota.manifest.json")
+    chunks_asset = find_asset(".ota.chunks")
+    if manifest_asset and chunks_asset:
+        manifest_sha256 = checksum_for(manifest_asset)
+        manifest_metadata = _fetch_json(manifest_asset.get("browser_download_url", "")) or {}
+        return {
+            "version": tag.lstrip("v"),
+            "tag_name": tag,
+            "download_url": manifest_asset.get("browser_download_url", ""),
+            "manifest_url": manifest_asset.get("browser_download_url", ""),
+            "chunks_url": chunks_asset.get("browser_download_url", ""),
+            "manifest_sha256": manifest_sha256,
+            "sha256": manifest_sha256,
+            "manifest_asset_id": manifest_asset.get("id", ""),
+            "chunks_asset_id": chunks_asset.get("id", ""),
+            "changelog": body,
+            "published_at": published,
+            "build": _build_key(updated),
+            "prerelease": prerelease,
+            "delta": True,
+            "upgrade_class": manifest_metadata.get("upgrade_class", "same-major"),
+        }
+
     download_url = ""
     sha256 = ""
     asset_id = ""
@@ -243,6 +288,7 @@ def _parse_release(data: dict) -> dict:
         "build": _build_key(updated),
         "prerelease": prerelease,
         "asset_id": asset_id,
+        "delta": False,
     }
 
 
@@ -297,6 +343,23 @@ def _build_key(value: str) -> int:
     """Normalize YYYY.MM.DD / ISO-8601 build metadata to YYYYMMDD."""
     digits = "".join(re.findall(r"\d", str(value)))
     return int(digits[:8]) if len(digits) >= 8 else 0
+
+
+def is_upgrade_path_allowed(current: str, latest: str, release: dict) -> bool:
+    """Allow same-major jumps; reserve adjacent-major jumps for bridge OTAs."""
+    try:
+        current_major = int(current.split(".")[0])
+        latest_major = int(latest.split(".")[0])
+    except (ValueError, IndexError):
+        return False
+    delta = latest_major - current_major
+    if delta < 0 or delta > 1:
+        return False
+    if release.get("delta") and _compare_versions(current, "4.0.1") < 0:
+        return False
+    if delta == 1:
+        return release.get("upgrade_class") == "major-bridge"
+    return True
 
 
 def unmetered_network_connected() -> bool:
@@ -644,17 +707,22 @@ class UpdateDaemon:
         latest_build = int(release.get("build", 0) or 0)
         is_newer = (_compare_versions(latest, cur) > 0) if cur else True
         is_major = is_major_update(cur, latest) if (cur and latest) else False
+        path_allowed = is_upgrade_path_allowed(cur, latest, release) if (cur and latest) else True
         allow_major = self._config.get("allow_major_update", True)
 
         available = bool(latest) and (
             (latest != cur and is_newer)
             or (latest == cur and latest_build > cur_build)
         )
+        if available and not path_allowed:
+            logger.info("Update blocked by OTA migration policy: v%s → v%s", cur, latest)
+            available = False
         if available and is_major and not allow_major:
             logger.info("Major update blocked by user setting: v%s → v%s", cur, latest)
             available = False
 
         release["major_update"] = is_major
+        release["upgrade_path_allowed"] = path_allowed
 
         self._latest_release = release
         self._update_available = available
@@ -675,7 +743,14 @@ class UpdateDaemon:
         info.update(release)
 
         # Replace download_url with api.github.com URL (GFW-safe)
-        if release.get("asset_id"):
+        if release.get("delta") and release.get("manifest_asset_id") and release.get("chunks_asset_id"):
+            manifest_api_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/assets/{release['manifest_asset_id']}"
+            chunks_api_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/assets/{release['chunks_asset_id']}"
+            info["manifest_url"] = manifest_api_url
+            info["chunks_url"] = chunks_api_url
+            info["manifest_api_download"] = True
+            info["chunks_api_download"] = True
+        elif release.get("asset_id"):
             api_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/assets/{release['asset_id']}"
             info["download_url"] = api_url
             info["api_download"] = True
@@ -691,6 +766,7 @@ class UpdateDaemon:
             latest_build=latest_build,
             update_available=available,
             major_update=release.get("major_update", False),
+            upgrade_path_allowed=path_allowed,
             last_check_ts=self._last_check_ts,
             auto_update=self._config.get("auto_update", True),
             wifi_only=self._config.get("wifi_only", True),
@@ -740,6 +816,38 @@ class UpdateDaemon:
             state="downloading",
             latest_version=version,
         )
+
+        if release.get("delta") and release.get("manifest_asset_id") and release.get("chunks_asset_id"):
+            manifest_api_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/assets/{release['manifest_asset_id']}"
+            chunks_api_url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/assets/{release['chunks_asset_id']}"
+            self._latest_release["manifest_url"] = manifest_api_url
+            self._latest_release["chunks_url"] = chunks_api_url
+            logger.info("Downloading delta OTA manifest; chunks will use HTTP ranges")
+            try:
+                self._updater_process = subprocess.Popen(
+                    ["/usr/bin/python3", "/usr/bin/yunsh-updater", "auto"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+            except OSError as exc:
+                self._state = "error"
+                write_status(state="error", error=str(exc))
+                return {"error": str(exc)}
+            result = {
+                "status": "ok",
+                "message": "delta OTA manifest download and installation started",
+                "manifest_url": manifest_api_url,
+                "chunks_url": chunks_api_url,
+                "manifest_api_download": True,
+                "chunks_api_download": True,
+                "manifest_sha256": release.get("manifest_sha256", ""),
+                "version": version,
+                "manifest_asset_id": release.get("manifest_asset_id", ""),
+                "chunks_asset_id": release.get("chunks_asset_id", ""),
+            }
+            write_status(state="downloading", progress_pct=0, error=None)
+            return result
 
         if not asset_id:
             logger.warning("No asset_id available, cannot download via API")

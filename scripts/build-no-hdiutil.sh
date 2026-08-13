@@ -8,7 +8,7 @@ BUILD_DIR="${YUNSH_DIR}/build"
 OUTPUT_DIR="${YUNSH_DIR}/output"
 VERSION_CONF="${BUILD_DIR}/yunsh-version.conf"
 if [ ! -f "${VERSION_CONF}" ]; then
-    printf 'VERSION=v4.0\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
+    printf 'VERSION=v4.1\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
 fi
 VERSION="$(awk -F= '$1 == "VERSION" { print $2; exit }' "${VERSION_CONF}")"
 BUILD_ID="${YUNSH_BUILD_ID:-$(date +%Y.%m.%d)}"
@@ -19,13 +19,16 @@ fi
 
 # Boot firmware layers are device-specific. The current release foundation is
 # Raspberry Pi 5; another target must be implemented with its own base image
-# and firmware layer before any image bytes are created.
+# and firmware layer before any image bytes are created. The ABI is pinned to
+# the kernel layer that Tim confirmed on real hardware; silently falling back
+# to an older base kernel is forbidden because it can leave KMS and Wi-Fi
+# without matching modules.
 TARGET_DEVICE="${YUNSH_TARGET_DEVICE:-raspberry-pi-5}"
 case "${TARGET_DEVICE}" in
     pi5|raspberry-pi-5)
         TARGET_DEVICE="raspberry-pi-5"
         PERSISTENT_BOOT_FIRMWARE_DIR="${YUNSH_DIR}/../../启动固件层/Raspberry Pi 5"
-        LEGACY_BOOT_FIRMWARE_DIR="${BUILD_DIR}/pi5-boot-confirmed"
+        CONFIRMED_PI5_KERNEL_ABI="6.18.39+rpt-rpi-2712"
         ;;
     *)
         echo "ERROR: no device foundation is configured for ${TARGET_DEVICE}."
@@ -55,7 +58,16 @@ echo "  YUNSH OS ${VERSION} - Image Builder (no hdiutil)"
 echo "============================================"
 
 # ─── Step 1: Find base image ──────────────────────
-RPI_IMAGE="${BUILD_DIR}/raspios-lite.img"
+# A matching Pi 5 base can be prepared beside the stock image without
+# modifying the original download. Prefer it automatically, while retaining
+# YUNSH_BASE_IMAGE for an explicitly verified input.
+RPI_IMAGE="${YUNSH_BASE_IMAGE:-}"
+if [ -z "$RPI_IMAGE" ] && [ -f "${BUILD_DIR}/raspios-lite-pi5-6.18.39.img" ]; then
+    RPI_IMAGE="${BUILD_DIR}/raspios-lite-pi5-6.18.39.img"
+fi
+if [ -z "$RPI_IMAGE" ]; then
+    RPI_IMAGE="${BUILD_DIR}/raspios-lite.img"
+fi
 if [ ! -f "$RPI_IMAGE" ]; then
     RPI_IMAGE=$(ls "${BUILD_DIR}"/*raspios*.img 2>/dev/null | head -1 || true)
 fi
@@ -191,7 +203,8 @@ echo "  Boot partition extracted ($((BOOT_SIZE_BYTES / 1024 / 1024)) MB)"
 MTOOL="mcopy -i ${BOOT_IMG}"
 
 # Select the persistent, device-specific boot layer. It contains no settings,
-# activation, pairing, or runtime state.
+# activation, pairing, or runtime state. For the default Pi 5 path this is the
+# only accepted source; old copied layers are deliberately not a fallback.
 if [ -n "${YUNSH_BOOT_FIRMWARE_DIR:-}" ]; then
     CONFIRMED_BOOT_DIR="${YUNSH_BOOT_FIRMWARE_DIR}"
 elif [ -n "${YUNSH_CONFIRMED_BOOT_DIR:-}" ]; then
@@ -199,8 +212,6 @@ elif [ -n "${YUNSH_CONFIRMED_BOOT_DIR:-}" ]; then
     CONFIRMED_BOOT_DIR="${YUNSH_CONFIRMED_BOOT_DIR}"
 elif [ -d "${PERSISTENT_BOOT_FIRMWARE_DIR}" ]; then
     CONFIRMED_BOOT_DIR="${PERSISTENT_BOOT_FIRMWARE_DIR}"
-elif [ -d "${LEGACY_BOOT_FIRMWARE_DIR}" ]; then
-    CONFIRMED_BOOT_DIR="${LEGACY_BOOT_FIRMWARE_DIR}"
 else
     echo "ERROR: missing boot firmware layer for ${TARGET_DEVICE}."
     echo "Expected: ${PERSISTENT_BOOT_FIRMWARE_DIR}"
@@ -258,12 +269,17 @@ rm -f "${BASE_INITRAMFS_CHECK}"
     echo "ERROR: cannot determine confirmed boot layer kernel ABI."
     exit 1
 }
+[ "${LAYER_KERNEL_ABI}" = "${CONFIRMED_PI5_KERNEL_ABI}" ] || {
+    echo "ERROR: selected Pi 5 firmware ABI is ${LAYER_KERNEL_ABI}; expected ${CONFIRMED_PI5_KERNEL_ABI}."
+    exit 1
+}
+[ "${BASE_KERNEL_ABI}" = "${CONFIRMED_PI5_KERNEL_ABI}" ] || {
+    echo "ERROR: base image ABI is ${BASE_KERNEL_ABI}, but 4.1 requires ${CONFIRMED_PI5_KERNEL_ABI}."
+    echo "The build must use a rootfs with matching /lib/modules; it will not fall back to the old kernel."
+    exit 1
+}
 APPLY_CONFIRMED_BOOT_LAYER=1
-if [ "${BASE_KERNEL_ABI}" != "${LAYER_KERNEL_ABI}" ]; then
-    APPLY_CONFIRMED_BOOT_LAYER=0
-    echo "  ⚠ Boot layer ABI ${LAYER_KERNEL_ABI} does not match rootfs ABI ${BASE_KERNEL_ABI}."
-    echo "  ✓ Preserving the clean base image's matched kernel, initramfs, DTBs and modules."
-fi
+echo "  ✓ Pi 5 firmware layer and base rootfs ABI: ${CONFIRMED_PI5_KERNEL_ABI}"
 
 copy_confirmed_boot_file() {
     local source_file="$1"
@@ -299,16 +315,15 @@ fi
 echo ""
 echo "→ config.txt..."
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null > "${BUILD_DIR}/yunsh-config-new.txt"
-# Preserve the VC4 overlay selected by the matched boot stack. Raspberry Pi
-# OS uses the generic overlay and maps it to the Pi 5 implementation; a
-# confirmed, ABI-matched layer may provide the explicit -pi5 overlay.
-if ! grep -q '^disable_fw_kms_setup=1$' "${BUILD_DIR}/yunsh-config-new.txt"; then
-    sed -i '' -e '/^auto_initramfs=1$/a\
-disable_fw_kms_setup=1' "${BUILD_DIR}/yunsh-config-new.txt" 2>/dev/null ||
-    sed -i -e '/^auto_initramfs=1$/a disable_fw_kms_setup=1' "${BUILD_DIR}/yunsh-config-new.txt"
-fi
+# Use the dedicated Pi 5 KMS overlay from the confirmed firmware layer. Never
+# restore the v3.1.6 regression: the generic overlay plus
+# disable_fw_kms_setup=1 can prevent VC4/HVS/V3D from creating DRM devices.
+sed -i '' -e 's/^dtoverlay=vc4-kms-v3d$/dtoverlay=vc4-kms-v3d-pi5/' \
+    -e '/^disable_fw_kms_setup=1$/d' "${BUILD_DIR}/yunsh-config-new.txt" 2>/dev/null ||
+sed -i -e 's/^dtoverlay=vc4-kms-v3d$/dtoverlay=vc4-kms-v3d-pi5/' \
+    -e '/^disable_fw_kms_setup=1$/d' "${BUILD_DIR}/yunsh-config-new.txt"
 KMS_OVERLAY=""
-if ! grep -Eq '^dtoverlay=vc4-kms-v3d(-pi5)?([,[:space:]]|$)' "${BUILD_DIR}/yunsh-config-new.txt"; then
+if ! grep -q '^dtoverlay=vc4-kms-v3d-pi5' "${BUILD_DIR}/yunsh-config-new.txt"; then
     KMS_OVERLAY="dtoverlay=vc4-kms-v3d-pi5"
 fi
 cat >> "${BUILD_DIR}/yunsh-config-new.txt" << YUNSHCONF
@@ -355,14 +370,15 @@ case " ${CMDLINE} " in
     *) CMDLINE="${CMDLINE} root=/dev/mmcblk0p2" ;;
 esac
 # Keep the canonical Pi 5 SD layout. Serial0
-# remains the diagnostic console; tty1 stays clean for splash and UI output.
+# remains the diagnostic console; tty1 is reserved for splash, firstboot
+# progress, and the graphical shell output.
 CMDLINE=$(printf '%s\n' "${CMDLINE}" | sed -E 's/  +/ /g; s/^ +//; s/ +$//')
-echo "${CMDLINE} console=tty1 quiet logo.nologo consoleblank=0 loglevel=3 vt.global_cursor_default=0 cma=256M psi=1 systemd.show_status=false systemd.log_target=journal systemd.log_level=notice systemd.default_standard_output=journal" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
+echo "${CMDLINE} quiet logo.nologo consoleblank=0 loglevel=3 vt.global_cursor_default=0 cma=256M psi=1 systemd.show_status=false systemd.log_target=journal systemd.log_level=notice systemd.default_standard_output=journal" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
 mdel -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null || true
 mcopy -i "${BOOT_IMG}" "${BUILD_DIR}/yunsh-cmdline-new.txt" ::/cmdline.txt
-if grep -Eq '(^| )(splash|module_blacklist=)' "${BUILD_DIR}/yunsh-cmdline-new.txt" ||
-   ! grep -Eq '(^| )console=tty1( |$)' "${BUILD_DIR}/yunsh-cmdline-new.txt"; then
-    echo "ERROR: boot cmdline is missing the quiet local tty1 display channel or still exposes a splash/GPU blacklist" >&2
+if grep -Eq '(^| )(splash|module_blacklist=|console=tty1( |$))' "${BUILD_DIR}/yunsh-cmdline-new.txt" ||
+   ! grep -Eq '(^| )console=serial0,115200( |$)' "${BUILD_DIR}/yunsh-cmdline-new.txt"; then
+    echo "ERROR: boot cmdline is missing the serial diagnostic channel or still exposes a local console/GPU blacklist" >&2
     exit 1
 fi
 echo "  ✓ cmdline.txt modified"
@@ -406,7 +422,11 @@ sync
 # a failed mtools write must stop the build rather than becoming an unbootable
 # image published under an otherwise valid checksum.
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -Eq '^dtoverlay=vc4-kms-v3d(-pi5)?([,[:space:]]|$)'
-mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^disable_fw_kms_setup=1$'
+mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtoverlay=vc4-kms-v3d-pi5'
+if mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^disable_fw_kms_setup=1$'; then
+    echo "  ✗ disable_fw_kms_setup=1 is forbidden on the Pi 5 release path"
+    exit 1
+fi
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^hdmi_drive=2'
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtparam=i2c_arm=on'
 mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'psi=1'
@@ -556,7 +576,7 @@ fi
 if [ -f "$APK_FILE" ] && [ "$(stat -f%z "$APK_FILE" 2>/dev/null || stat -c%s "$APK_FILE" 2>/dev/null || echo 0)" -ge 1000000 ]; then
     echo "  Optional Tencent Appstore APK injected"
 elif [ "${YUNSH_INCLUDE_FDROID_FALLBACK:-0}" != "1" ]; then
-    echo "ERROR: no valid Android app-store APK is available for the full 4.0 image"
+    echo "ERROR: no valid Android app-store APK is available for the full 4.1 image"
     exit 1
 else
     echo "  F-Droid is the configured Android app store"
@@ -614,8 +634,9 @@ WantedBy=multi-user.target
 SVC
 add_file "${BUILD_DIR}/yunsh-os.service" "/etc/systemd/system/yunsh-os.service"
 
-# First-boot installer: preserve progress in the journal and on serial0 without
-# painting installation logs over the optical display.
+# First-boot installer: the script renders one progress surface on tty1; the
+# service itself sends status only to the journal, while serial0 remains the
+# separate diagnostic channel from cmdline.txt.
 cat > "${BUILD_DIR}/yunsh-firstboot.service" << 'FBSVC'
 [Unit]
 Description=YUNSH OS First Boot Installer
@@ -635,8 +656,8 @@ RestartSec=30
 # The installer only writes progress; a terminal handoff must not deliver
 # SIGHUP when serial/tty getty services start during first boot.
 StandardInput=null
-StandardOutput=journal+console
-StandardError=journal+console
+StandardOutput=journal
+StandardError=journal
 [Install]
 WantedBy=multi-user.target
 FBSVC
@@ -1155,6 +1176,18 @@ dd if="${OUTPUT_FILE}" of="${ROOT_PARTITION_IMG}" bs=512 \
    skip=$ROOT_START count=$ROOT_SIZE 2>/dev/null
 echo "  ✓ root partition extracted ($((ROOT_SIZE * 512 / 1024 / 1024)) MB)"
 
+# Check the actual rootfs module directory as well as the boot initramfs ABI.
+# The initramfs check catches a mismatched boot image early; this check prevents
+# a base image with a matching-looking initramfs but stale /lib/modules from
+# reaching a real Pi 5.
+ROOT_MODULES_STATUS="$("${DEBUGFS}" -R "stat /lib/modules/${CONFIRMED_PI5_KERNEL_ABI}" "${ROOT_PARTITION_IMG}" 2>&1 || true)"
+if printf '%s\n' "${ROOT_MODULES_STATUS}" | grep -Eq 'File not found|not found|No such file'; then
+    echo "ERROR: rootfs does not contain /lib/modules/${CONFIRMED_PI5_KERNEL_ABI}."
+    echo "The Pi 5 kernel, initramfs, DTBs, overlays and rootfs modules must come from one ABI-matched stack."
+    exit 1
+fi
+echo "  ✓ rootfs modules ABI: ${CONFIRMED_PI5_KERNEL_ABI}"
+
 # Grow ext4 now, before any YUNSH files are injected.  This makes the SD card
 # immediately usable and removes the fragile first-boot growfs dependency.
 "${E2FSCK}" -fy "${ROOT_PARTITION_IMG}" >/dev/null
@@ -1193,10 +1226,9 @@ echo "Root partition written ✓"
 # ─── Step 11: Verify ─────────────────────────────
 echo ""
 echo "=== Quick verification ==="
-# Extract root and check files
-ROOT_TEST_IMG="${BUILD_DIR}/root-test.img"
-dd if="${OUTPUT_FILE}" of="${ROOT_TEST_IMG}" bs=512 \
-   skip=$ROOT_START count=$ROOT_SIZE 2>/dev/null
+# Check the already fsck-verified root partition before it is discarded. This
+# avoids a second multi-gigabyte rootfs copy on the Mac build volume.
+ROOT_TEST_IMG="${ROOT_PARTITION_IMG}"
 
 echo "Files injected:"
 "${E2FSPROGS}/sbin/debugfs" -R "ls -l /usr/bin/yunsh" "${ROOT_TEST_IMG}" 2>/dev/null | head -5 || true

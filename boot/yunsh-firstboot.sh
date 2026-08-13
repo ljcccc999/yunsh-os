@@ -6,9 +6,10 @@
 export DEBIAN_FRONTEND=noninteractive
 export DEBCONF_NONINTERACTIVE_SEEN=true
 
-# Keep a persistent log as well as the HDMI console.  On a fresh image the
-# desktop packages are deliberately installed online; a missing network must
-# be diagnosable on-device rather than looking like a blank desktop.
+# Keep a persistent log and render the installer once on the local display VT.
+# The service's journal remains the diagnostic channel. Do not also write to
+# /dev/console: on Pi 5 that is the same visible VT as /dev/tty1 and produces
+# two overlapping progress surfaces plus raw boot text.
 mkdir -p /var/log
 # The local firstboot surface is tty1.  Explicitly select it before drawing so
 # a getty/serial-console handoff cannot leave the HDMI output on an empty VT.
@@ -16,7 +17,7 @@ mkdir -p /var/log
 if [ -c /dev/tty1 ] && command -v chvt >/dev/null 2>&1; then
     chvt 1 >/dev/null 2>&1 || true
 fi
-exec > >(tee -a /var/log/yunsh-firstboot.log /dev/tty1 /dev/console) 2>&1
+exec > >(tee -a /var/log/yunsh-firstboot.log /dev/tty1) 2>&1
 trap 'rc=$?; printf "[TRACE] firstboot exit rc=%s line=%s\n" "$rc" "$LINENO" >> /var/log/yunsh-firstboot.log' EXIT
 trap 'printf "[TRACE] firstboot signal TERM line=%s\n" "$LINENO" >> /var/log/yunsh-firstboot.log; exit 143' TERM
 trap 'printf "[TRACE] firstboot signal INT line=%s\n" "$LINENO" >> /var/log/yunsh-firstboot.log; exit 130' INT

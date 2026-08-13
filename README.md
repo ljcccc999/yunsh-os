@@ -21,7 +21,7 @@ system world, an optical-display-ready desktop, the system-level Orbit agent,
 connected-device services, and Bluetooth-connected motion tracking in one
 portable Raspberry Pi 5 environment.
 
-The current local release line is **v4.0**, with a circular liquid-glass
+The current local release line is **v4.1**, with a circular liquid-glass
 Orbit identity, direct in-island tool approvals, voice speaking-wave feedback,
 interruptible window transitions, a movable Orbit and spatial keyboard, and a
 desktop icon shelf that recedes when an application window opens, all within a
@@ -138,7 +138,7 @@ data, a local vision model, and real Raspberry Pi/optical-display testing.
 - SpaceCapsule workspace manager.
 - iPhone Screen Relay as a movable, resizable, pinnable spatial window, using an explicitly started ReplayKit broadcast over encrypted local Wi-Fi.
 - Settings, system information, update center, network, and Bluetooth management.
-- Integrated Android application environment through Waydroid on the YUNSH Wayland session. The full v4.0 image preloads the matching arm64 system/vendor images and F-Droid; background initialization and app installation never block the Linux desktop or activation flow.
+- Integrated Android application environment through Waydroid on the YUNSH Wayland session. The full v4.1 image preloads the matching arm64 system/vendor images and F-Droid; background initialization and app installation never block the Linux desktop or activation flow.
 - Android preparation reports failed or stale background setup with an explicit
   retry action instead of leaving the interface in an endless preparing state.
 - APK downloads are saved to the native Linux Downloads folder. Opening an APK from the browser download list or the native Files app installs it into Waydroid and adds it to the YUNSH home-screen pages automatically.
@@ -162,6 +162,15 @@ data, a local vision model, and real Raspberry Pi/optical-display testing.
 - Optional, skippable Orbit setup with provider, model, API key, and voice selection.
 - Wi-Fi and Bluetooth management.
 - OTA update service and factory-reset workflow.
+
+### OTA updates
+
+YUNSH OS v4.0 devices can install the small **v4.0.1 legacy bridge OTA**.
+After rebooting into v4.0.1, the updater downloads a verified manifest and
+only the changed content chunks for v4.1 and later same-major releases. The
+bridge does not rewrite boot firmware, the kernel, or `/lib/modules`; those
+components still require a matching full image when the installed Pi 5 ABI is
+not already the validated baseline.
 - Power, input, splash-screen, screenshot, recording, lock, and destructive
   action confirmation services.
 - Optional 3DoF input through a Bluetooth-connected motion controller or compatible orientation source.
