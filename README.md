@@ -1,8 +1,12 @@
-# YUNSH OS
-
 <p align="center">
   <img src="logo/logo-256.png" width="128" alt="YUNSH logo" />
 </p>
+
+<p align="center">
+  <strong>English</strong> | <a href="README.zh-CN.md">中文</a>
+</p>
+
+# YUNSH OS
 
 <p align="center">
   A connected spatial desktop for Raspberry Pi 5 and transparent AR displays.
