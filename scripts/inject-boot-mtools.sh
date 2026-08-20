@@ -40,7 +40,7 @@ cat > "${BUILD_DIR}/yunsh-config.txt" << 'CONFIGEOF'
 # YUNSH OS - v1.0.1
 # Raspberry Pi 5 config
 arm_64bit=1
-dtoverlay=vc4-kms-v3d
+dtoverlay=vc4-kms-v3d-pi5
 gpu_mem=256
 gpu_mem_256=128
 disable_splash=1
@@ -52,7 +52,6 @@ hdmi_mode=82
 display_auto_detect=1
 dtparam=audio=on
 boot_order=0xf41
-dtoverlay=disable-bt
 CONFIGEOF
 
 # Use mtools drive image

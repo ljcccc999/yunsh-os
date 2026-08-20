@@ -8,28 +8,50 @@ BUILD_DIR="${YUNSH_DIR}/build"
 OUTPUT_DIR="${YUNSH_DIR}/output"
 VERSION_CONF="${BUILD_DIR}/yunsh-version.conf"
 if [ ! -f "${VERSION_CONF}" ]; then
-    printf 'VERSION=v3.1.1\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
+    printf 'VERSION=v4.1\nBUILD=%s\n' "$(date +%Y.%m.%d)" > "${VERSION_CONF}"
 fi
 VERSION="$(awk -F= '$1 == "VERSION" { print $2; exit }' "${VERSION_CONF}")"
 BUILD_ID="${YUNSH_BUILD_ID:-$(date +%Y.%m.%d)}"
-if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.]+)?$ ]]; then
+if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+(\.[0-9]+)?([.-][A-Za-z0-9.]+)?$ ]]; then
     echo "ERROR: invalid VERSION in ${VERSION_CONF}: ${VERSION}"
     exit 1
 fi
 
 # Boot firmware layers are device-specific. The current release foundation is
 # Raspberry Pi 5; another target must be implemented with its own base image
-# and firmware layer before any image bytes are created.
+# and firmware layer before any image bytes are created. The ABI is pinned to
+# the kernel layer that Tim confirmed on real hardware; silently falling back
+# to an older base kernel is forbidden because it can leave KMS and Wi-Fi
+# without matching modules.
 TARGET_DEVICE="${YUNSH_TARGET_DEVICE:-raspberry-pi-5}"
 case "${TARGET_DEVICE}" in
     pi5|raspberry-pi-5)
         TARGET_DEVICE="raspberry-pi-5"
         PERSISTENT_BOOT_FIRMWARE_DIR="${YUNSH_DIR}/../../启动固件层/Raspberry Pi 5"
-        LEGACY_BOOT_FIRMWARE_DIR="${BUILD_DIR}/pi5-boot-confirmed"
+        CONFIRMED_PI5_KERNEL_ABI="6.18.39+rpt-rpi-2712"
         ;;
     *)
         echo "ERROR: no device foundation is configured for ${TARGET_DEVICE}."
         echo "Prepare that device's base image and boot firmware layer before building."
+        exit 1
+        ;;
+esac
+
+# The Pi 5 KMS configuration is the normal display path.  A target that
+# cannot create /dev/dri/card0 must still remain usable through the explicit
+# linuxfb recovery branch in yunsh-ui-launcher; it must not be made the normal
+# release configuration because that would remove Wayland and break Android.
+# Both paths keep firmware EDID/HPD mode selection and never force 1080p.
+DISPLAY_RECOVERY_MODE="${YUNSH_DISPLAY_RECOVERY_MODE:-kms}"
+case "${DISPLAY_RECOVERY_MODE}" in
+    linuxfb)
+        DISPLAY_CMDLINE_SUFFIX="module_blacklist=vc4,v3d"
+        ;;
+    kms)
+        DISPLAY_CMDLINE_SUFFIX=""
+        ;;
+    *)
+        echo "ERROR: YUNSH_DISPLAY_RECOVERY_MODE must be linuxfb or kms"
         exit 1
         ;;
 esac
@@ -55,7 +77,16 @@ echo "  YUNSH OS ${VERSION} - Image Builder (no hdiutil)"
 echo "============================================"
 
 # ─── Step 1: Find base image ──────────────────────
-RPI_IMAGE="${BUILD_DIR}/raspios-lite.img"
+# A matching Pi 5 base can be prepared beside the stock image without
+# modifying the original download. Prefer it automatically, while retaining
+# YUNSH_BASE_IMAGE for an explicitly verified input.
+RPI_IMAGE="${YUNSH_BASE_IMAGE:-}"
+if [ -z "$RPI_IMAGE" ] && [ -f "${BUILD_DIR}/raspios-lite-pi5-6.18.39.img" ]; then
+    RPI_IMAGE="${BUILD_DIR}/raspios-lite-pi5-6.18.39.img"
+fi
+if [ -z "$RPI_IMAGE" ]; then
+    RPI_IMAGE="${BUILD_DIR}/raspios-lite.img"
+fi
 if [ ! -f "$RPI_IMAGE" ]; then
     RPI_IMAGE=$(ls "${BUILD_DIR}"/*raspios*.img 2>/dev/null | head -1 || true)
 fi
@@ -95,11 +126,23 @@ echo "  ✓ ${OUTPUT_FILE}"
 # Ship enough writable root space for the complete desktop.  The stock image
 # relies on initramfs + systemd-growfs during the first boot; that job has an
 # infinite timeout and is the source of the apparent post-initramfs hang.
-# Six GiB remains below the actual capacity of a nominal 8 GB SD card.
-MIN_IMAGE_BYTES=$((6 * 1024 * 1024 * 1024))
+#
+# 4.0/4.1 preloads the arm64 Waydroid system/vendor pair (roughly 2.4 GiB
+# unpacked).  A 6 GiB image leaves no room for the Chinese input stack and
+# makes APT fail with "not enough free space" on an 8 GB SD card.  Seven GiB
+# fits within the usable capacity of a nominal 8 GB card while leaving the
+# firstboot package transaction enough headroom.  Keep this overrideable for
+# a deliberately slim image or a larger test disk, but never silently shrink
+# the default below the space required by the preloaded Android assets.
+MIN_IMAGE_GIB="${YUNSH_MIN_IMAGE_GIB:-7}"
+if ! [[ "${MIN_IMAGE_GIB}" =~ ^[0-9]+$ ]] || [ "${MIN_IMAGE_GIB}" -lt 7 ]; then
+    echo "ERROR: YUNSH_MIN_IMAGE_GIB must be an integer >= 7 for the preloaded Waydroid image"
+    exit 1
+fi
+MIN_IMAGE_BYTES=$((MIN_IMAGE_GIB * 1024 * 1024 * 1024))
 CURRENT_IMAGE_BYTES=$(stat -f%z "${OUTPUT_FILE}" 2>/dev/null || stat -c%s "${OUTPUT_FILE}")
 if [ "${CURRENT_IMAGE_BYTES}" -lt "${MIN_IMAGE_BYTES}" ]; then
-    echo "  → Expanding image to 6 GiB for first-boot desktop installation"
+    echo "  → Expanding image to ${MIN_IMAGE_GIB} GiB for first-boot desktop installation"
     truncate -s "${MIN_IMAGE_BYTES}" "${OUTPUT_FILE}"
     python3 - "${OUTPUT_FILE}" <<'PY'
 import struct, sys
@@ -124,27 +167,46 @@ python3 "${YUNSH_DIR}/scripts/generate-splash.py"
 
 # ─── Step 5: Download a verified Android app store ──
 echo ""
-echo "=== Downloading Android app store ==="
+echo "=== Preparing F-Droid Android app store ==="
 APK_FILE="${BUILD_DIR}/apps/appstore.apk"
 FDROID_FILE="${BUILD_DIR}/apps/fdroid.apk"
 mkdir -p "${BUILD_DIR}/apps"
-if [ ! -f "$APK_FILE" ] || [ "$(stat -f%z "$APK_FILE" 2>/dev/null || echo 0)" -lt 1000000 ]; then
+if [ "${YUNSH_USE_TENCENT_APPSTORE:-0}" != "1" ]; then
+    YUNSH_INCLUDE_FDROID_FALLBACK=1
+fi
+if [ "${YUNSH_USE_TENCENT_APPSTORE:-0}" = "1" ]; then
+if [ ! -f "$APK_FILE" ] || [ "$(stat -f%z "$APK_FILE" 2>/dev/null || stat -c%s "$APK_FILE" 2>/dev/null || echo 0)" -lt 1000000 ]; then
     for url in \
         "https://dlied6.myapp.com/myapp/1104466820/sgame/20191217/com.tencent.android.qqdownloader_latest.apk" \
         "https://appdownload.myapp.com/myapp/1104466820/sgame/20191217/com.tencent.android.qqdownloader.apk"; do
         echo "  Trying: $url"
-        curl -L -o "${APK_FILE}" --max-time 30 "$url" 2>/dev/null && break || true
+        curl -fL --connect-timeout 15 --retry 3 --retry-delay 2 \
+            -o "${APK_FILE}.download" --max-time 300 "$url" 2>/dev/null && {
+            mv "${APK_FILE}.download" "${APK_FILE}"
+            break
+        } || true
     done
-    if [ ! -f "$APK_FILE" ] || [ "$(stat -f%z "$APK_FILE" 2>/dev/null || echo 0)" -lt 100000 ]; then
+    if [ ! -f "$APK_FILE" ] || [ "$(stat -f%z "$APK_FILE" 2>/dev/null || stat -c%s "$APK_FILE" 2>/dev/null || echo 0)" -lt 100000 ]; then
         rm -f "$APK_FILE"
-        echo "  Tencent Appstore unavailable; using F-Droid"
+        echo "  Tencent Appstore unavailable"
+        if [ "${YUNSH_ALLOW_FDROID_FALLBACK:-0}" = "1" ]; then
+            YUNSH_INCLUDE_FDROID_FALLBACK=1
+            echo "  Using F-Droid as the configured Android app store"
+        else
+            echo "ERROR: Tencent Appstore was explicitly requested but is unavailable"
+            echo "Remove YUNSH_USE_TENCENT_APPSTORE=1 to use the default F-Droid store."
+            exit 1
+        fi
     fi
 fi
-if [ ! -f "$FDROID_FILE" ] || [ "$(stat -f%z "$FDROID_FILE" 2>/dev/null || echo 0)" -lt 1000000 ]; then
+fi
+if [ "${YUNSH_INCLUDE_FDROID_FALLBACK:-0}" = "1" ] &&
+   { [ ! -f "$FDROID_FILE" ] || [ "$(stat -f%z "$FDROID_FILE" 2>/dev/null || stat -c%s "$FDROID_FILE" 2>/dev/null || echo 0)" -lt 1000000 ]; }; then
     curl -fL --connect-timeout 15 --max-time 300 \
         -o "${FDROID_FILE}.download" https://f-droid.org/F-Droid.apk
     mv "${FDROID_FILE}.download" "$FDROID_FILE"
 fi
+if [ "${YUNSH_INCLUDE_FDROID_FALLBACK:-0}" = "1" ]; then
 python3 - "$FDROID_FILE" <<'PY'
 import os, sys, zipfile
 p = sys.argv[1]
@@ -155,6 +217,7 @@ with zipfile.ZipFile(p) as z:
         raise SystemExit("ERROR: APK has no AndroidManifest.xml")
 print(f"  ✓ verified APK container ({os.path.getsize(p)} bytes)")
 PY
+fi
 
 # ─── Step 6: Inject boot partition (mtools) ────────
 echo ""
@@ -171,7 +234,8 @@ echo "  Boot partition extracted ($((BOOT_SIZE_BYTES / 1024 / 1024)) MB)"
 MTOOL="mcopy -i ${BOOT_IMG}"
 
 # Select the persistent, device-specific boot layer. It contains no settings,
-# activation, pairing, or runtime state.
+# activation, pairing, or runtime state. For the default Pi 5 path this is the
+# only accepted source; old copied layers are deliberately not a fallback.
 if [ -n "${YUNSH_BOOT_FIRMWARE_DIR:-}" ]; then
     CONFIRMED_BOOT_DIR="${YUNSH_BOOT_FIRMWARE_DIR}"
 elif [ -n "${YUNSH_CONFIRMED_BOOT_DIR:-}" ]; then
@@ -179,40 +243,47 @@ elif [ -n "${YUNSH_CONFIRMED_BOOT_DIR:-}" ]; then
     CONFIRMED_BOOT_DIR="${YUNSH_CONFIRMED_BOOT_DIR}"
 elif [ -d "${PERSISTENT_BOOT_FIRMWARE_DIR}" ]; then
     CONFIRMED_BOOT_DIR="${PERSISTENT_BOOT_FIRMWARE_DIR}"
-elif [ -d "${LEGACY_BOOT_FIRMWARE_DIR}" ]; then
-    CONFIRMED_BOOT_DIR="${LEGACY_BOOT_FIRMWARE_DIR}"
 else
     echo "ERROR: missing boot firmware layer for ${TARGET_DEVICE}."
     echo "Expected: ${PERSISTENT_BOOT_FIRMWARE_DIR}"
     exit 1
 fi
 
-if [ -f "${CONFIRMED_BOOT_DIR}/DEVICE.conf" ]; then
-    LAYER_DEVICE_ID="$(awk -F= '$1 == "DEVICE_ID" {print $2; exit}' "${CONFIRMED_BOOT_DIR}/DEVICE.conf")"
-    if [ "${LAYER_DEVICE_ID}" != "${TARGET_DEVICE}" ]; then
-        echo "ERROR: firmware layer targets ${LAYER_DEVICE_ID:-unknown}, not ${TARGET_DEVICE}."
+for layer_metadata in DEVICE.conf SHA256SUMS README.md; do
+    if [ ! -f "${CONFIRMED_BOOT_DIR}/${layer_metadata}" ]; then
+        echo "ERROR: Pi 5 firmware layer is missing provenance file: ${layer_metadata}"
         exit 1
     fi
+done
+LAYER_DEVICE_ID="$(awk -F= '$1 == "DEVICE_ID" {print $2; exit}' "${CONFIRMED_BOOT_DIR}/DEVICE.conf")"
+LAYER_ARCHITECTURE="$(awk -F= '$1 == "ARCHITECTURE" {print $2; exit}' "${CONFIRMED_BOOT_DIR}/DEVICE.conf")"
+LAYER_TYPE="$(awk -F= '$1 == "LAYER_TYPE" {print $2; exit}' "${CONFIRMED_BOOT_DIR}/DEVICE.conf")"
+if [ "${LAYER_DEVICE_ID}" != "${TARGET_DEVICE}" ] ||
+   [ "${LAYER_ARCHITECTURE}" != "arm64" ] ||
+   [ "${LAYER_TYPE}" != "boot-firmware" ]; then
+    echo "ERROR: invalid Pi 5 firmware layer metadata: DEVICE_ID=${LAYER_DEVICE_ID:-unknown} ARCHITECTURE=${LAYER_ARCHITECTURE:-unknown} LAYER_TYPE=${LAYER_TYPE:-unknown}"
+    exit 1
 fi
 for required_firmware in \
     kernel_2712.img \
     initramfs_2712 \
     bcm2712-rpi-5-b.dtb \
+    bcm2712d0-rpi-5-b.dtb \
+    overlays/README \
+    overlays/overlay_map.dtb \
     overlays/vc4-kms-v3d-pi5.dtbo; do
     if [ ! -f "${CONFIRMED_BOOT_DIR}/${required_firmware}" ]; then
         echo "ERROR: incomplete ${TARGET_DEVICE} firmware layer: ${required_firmware}"
         exit 1
     fi
 done
-if [ -f "${CONFIRMED_BOOT_DIR}/SHA256SUMS" ]; then
-    (
-        cd "${CONFIRMED_BOOT_DIR}"
-        shasum -a 256 -c SHA256SUMS >/dev/null
-    ) || {
-        echo "ERROR: boot firmware layer checksum verification failed."
-        exit 1
-    }
-fi
+(
+    cd "${CONFIRMED_BOOT_DIR}"
+    shasum -a 256 -c SHA256SUMS >/dev/null
+) || {
+    echo "ERROR: boot firmware layer checksum verification failed."
+    exit 1
+}
 
 # A boot layer is only safe when its kernel/initramfs ABI matches the clean
 # Raspberry Pi OS rootfs used by this build.  Mixing a newer confirmed kernel
@@ -238,12 +309,17 @@ rm -f "${BASE_INITRAMFS_CHECK}"
     echo "ERROR: cannot determine confirmed boot layer kernel ABI."
     exit 1
 }
+[ "${LAYER_KERNEL_ABI}" = "${CONFIRMED_PI5_KERNEL_ABI}" ] || {
+    echo "ERROR: selected Pi 5 firmware ABI is ${LAYER_KERNEL_ABI}; expected ${CONFIRMED_PI5_KERNEL_ABI}."
+    exit 1
+}
+[ "${BASE_KERNEL_ABI}" = "${CONFIRMED_PI5_KERNEL_ABI}" ] || {
+    echo "ERROR: base image ABI is ${BASE_KERNEL_ABI}, but ${VERSION} requires ${CONFIRMED_PI5_KERNEL_ABI}."
+    echo "The build must use a rootfs with matching /lib/modules; it will not fall back to the old kernel."
+    exit 1
+}
 APPLY_CONFIRMED_BOOT_LAYER=1
-if [ "${BASE_KERNEL_ABI}" != "${LAYER_KERNEL_ABI}" ]; then
-    APPLY_CONFIRMED_BOOT_LAYER=0
-    echo "  ⚠ Boot layer ABI ${LAYER_KERNEL_ABI} does not match rootfs ABI ${BASE_KERNEL_ABI}."
-    echo "  ✓ Preserving the clean base image's matched kernel, initramfs, DTBs and modules."
-fi
+echo "  ✓ Pi 5 firmware layer and base rootfs ABI: ${CONFIRMED_PI5_KERNEL_ABI}"
 
 copy_confirmed_boot_file() {
     local source_file="$1"
@@ -275,20 +351,64 @@ if [ "${APPLY_CONFIRMED_BOOT_LAYER}" -eq 1 ]; then
     echo "  ✓ Confirmed firmware payload applied"
 fi
 
+# The source checksum file proves what was selected, but it does not prove
+# that mtools actually replaced every boot file in the FAT image.  Verify the
+# bytes after injection, including the legacy-named files kept in the Pi 5
+# layer for firmware compatibility.  The active Pi 5 path is kernel_2712,
+# initramfs_2712, bcm2712*.dtb and vc4-kms-v3d-pi5.dtbo; the complete payload
+# check prevents a stale base-image file from surviving a rebuild.
+boot_layer_payload_file() {
+    case "$1" in
+        *.dtb|*.dtbo|*.img|*.elf|*.dat|initramfs*|bootcode.bin|LICENCE.broadcom)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+verify_boot_layer_payload() {
+    local fat_image="$1"
+    local verify_dir="${BUILD_DIR}/boot-layer-verify"
+    local expected rel actual extracted
+    rm -rf "${verify_dir}"
+    mkdir -p "${verify_dir}"
+    while read -r expected rel; do
+        rel="${rel#./}"
+        boot_layer_payload_file "${rel}" || continue
+        extracted="${verify_dir}/${rel}"
+        mkdir -p "$(dirname "${extracted}")"
+        mcopy -i "${fat_image}" "::/${rel}" "${extracted}" >/dev/null 2>&1 || {
+            echo "ERROR: final FAT image is missing Pi 5 firmware payload: ${rel}"
+            return 1
+        }
+        actual="$(shasum -a 256 "${extracted}" | awk '{print $1}')"
+        if [ "${actual}" != "${expected}" ]; then
+            echo "ERROR: final FAT payload hash mismatch: ${rel}"
+            echo "       source=${expected} final=${actual}"
+            return 1
+        fi
+    done < "${CONFIRMED_BOOT_DIR}/SHA256SUMS"
+    rm -rf "${verify_dir}"
+    return 0
+}
+
 # Modify config.txt --- extract, modify, write back
 echo ""
 echo "→ config.txt..."
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null > "${BUILD_DIR}/yunsh-config-new.txt"
-# Preserve the VC4 overlay selected by the matched boot stack. Raspberry Pi
-# OS uses the generic overlay and maps it to the Pi 5 implementation; a
-# confirmed, ABI-matched layer may provide the explicit -pi5 overlay.
-if ! grep -q '^disable_fw_kms_setup=1$' "${BUILD_DIR}/yunsh-config-new.txt"; then
-    sed -i '' -e '/^auto_initramfs=1$/a\
-disable_fw_kms_setup=1' "${BUILD_DIR}/yunsh-config-new.txt" 2>/dev/null ||
-    sed -i -e '/^auto_initramfs=1$/a disable_fw_kms_setup=1' "${BUILD_DIR}/yunsh-config-new.txt"
-fi
+# Use the dedicated Pi 5 KMS overlay from the confirmed firmware layer. Never
+# restore the v3.1.6 regression: the generic overlay plus
+# disable_fw_kms_setup=1 can prevent VC4/HVS/V3D from creating DRM devices.
+sed -i '' -e 's/^dtoverlay=vc4-kms-v3d$/dtoverlay=vc4-kms-v3d-pi5/' \
+    -e '/^dtoverlay=disable-bt$/d' \
+    -e '/^disable_fw_kms_setup=1$/d' "${BUILD_DIR}/yunsh-config-new.txt" 2>/dev/null ||
+sed -i -e 's/^dtoverlay=vc4-kms-v3d$/dtoverlay=vc4-kms-v3d-pi5/' \
+    -e '/^dtoverlay=disable-bt$/d' \
+    -e '/^disable_fw_kms_setup=1$/d' "${BUILD_DIR}/yunsh-config-new.txt"
 KMS_OVERLAY=""
-if ! grep -Eq '^dtoverlay=vc4-kms-v3d(-pi5)?([,[:space:]]|$)' "${BUILD_DIR}/yunsh-config-new.txt"; then
+if ! grep -q '^dtoverlay=vc4-kms-v3d-pi5' "${BUILD_DIR}/yunsh-config-new.txt"; then
     KMS_OVERLAY="dtoverlay=vc4-kms-v3d-pi5"
 fi
 cat >> "${BUILD_DIR}/yunsh-config-new.txt" << YUNSHCONF
@@ -335,14 +455,29 @@ case " ${CMDLINE} " in
     *) CMDLINE="${CMDLINE} root=/dev/mmcblk0p2" ;;
 esac
 # Keep the canonical Pi 5 SD layout. Serial0
-# remains the diagnostic console; tty1 stays clean for splash and UI output.
+# remains the diagnostic console; tty1 is reserved for splash, firstboot
+# progress, and the graphical shell output.
 CMDLINE=$(printf '%s\n' "${CMDLINE}" | sed -E 's/  +/ /g; s/^ +//; s/ +$//')
-echo "${CMDLINE} console=tty1 quiet logo.nologo consoleblank=0 loglevel=3 vt.global_cursor_default=0 cma=256M psi=1 systemd.show_status=false systemd.log_target=journal systemd.log_level=notice systemd.default_standard_output=journal" > "${BUILD_DIR}/yunsh-cmdline-new.txt"
+echo "${CMDLINE} quiet logo.nologo consoleblank=0 loglevel=3 vt.global_cursor_default=0 cma=256M psi=1 systemd.show_status=false systemd.log_target=journal systemd.log_level=notice systemd.default_standard_output=journal ${DISPLAY_CMDLINE_SUFFIX}" | sed -E 's/  +/ /g; s/[[:space:]]+$//' > "${BUILD_DIR}/yunsh-cmdline-new.txt"
 mdel -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null || true
 mcopy -i "${BOOT_IMG}" "${BUILD_DIR}/yunsh-cmdline-new.txt" ::/cmdline.txt
-if grep -Eq '(^| )(splash|module_blacklist=)' "${BUILD_DIR}/yunsh-cmdline-new.txt" ||
-   ! grep -Eq '(^| )console=tty1( |$)' "${BUILD_DIR}/yunsh-cmdline-new.txt"; then
-    echo "ERROR: boot cmdline is missing the quiet local tty1 display channel or still exposes a splash/GPU blacklist" >&2
+if grep -Eq '(^| )(splash|console=tty1( |$))' "${BUILD_DIR}/yunsh-cmdline-new.txt" ||
+   ! grep -Eq '(^| )console=serial0,115200( |$)' "${BUILD_DIR}/yunsh-cmdline-new.txt"; then
+    echo "ERROR: boot cmdline is missing the serial diagnostic channel or still exposes a local console/GPU blacklist" >&2
+    exit 1
+fi
+if [ "${DISPLAY_RECOVERY_MODE}" = "linuxfb" ] &&
+   ! grep -Eq '(^| )module_blacklist=vc4,v3d( |$)' "${BUILD_DIR}/yunsh-cmdline-new.txt"; then
+    echo "ERROR: linuxfb recovery mode must blacklist the failing VC4/V3D modules before they remove simplefb" >&2
+    exit 1
+fi
+if [ "${DISPLAY_RECOVERY_MODE}" = "kms" ] &&
+   grep -Eq '(^| )(module_blacklist=|modprobe\.blacklist=)vc4,v3d( |$)' "${BUILD_DIR}/yunsh-cmdline-new.txt"; then
+    echo "ERROR: KMS mode must not carry the framebuffer recovery blacklist" >&2
+    exit 1
+fi
+if grep -Eq '(^| )video=HDMI-A-[12]:[^ ]+|(^| )hdmi_(group|mode|timings|cvt)(:[01])?=' "${BUILD_DIR}/yunsh-cmdline-new.txt"; then
+    echo "ERROR: fixed HDMI resolution/timing is forbidden; keep EDID mode selection" >&2
     exit 1
 fi
 echo "  ✓ cmdline.txt modified"
@@ -386,7 +521,15 @@ sync
 # a failed mtools write must stop the build rather than becoming an unbootable
 # image published under an otherwise valid checksum.
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -Eq '^dtoverlay=vc4-kms-v3d(-pi5)?([,[:space:]]|$)'
-mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^disable_fw_kms_setup=1$'
+mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtoverlay=vc4-kms-v3d-pi5'
+if mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^disable_fw_kms_setup=1$'; then
+    echo "  ✗ disable_fw_kms_setup=1 is forbidden on the Pi 5 release path"
+    exit 1
+fi
+if mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtoverlay=disable-bt$'; then
+    echo "  ✗ Bluetooth is disabled in the Pi 5 release path"
+    exit 1
+fi
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^hdmi_drive=2'
 mtype -i "${BOOT_IMG}" ::/CONFIG.TXT 2>/dev/null | grep -q '^dtparam=i2c_arm=on'
 mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'psi=1'
@@ -396,7 +539,21 @@ if ! mtype -i "${BOOT_IMG}" ::/ssh >/dev/null 2>&1; then
     exit 1
 fi
 if mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'module_blacklist=vc4,v3d'; then
-    echo "  ✗ Pi 5 VC4/V3D is blacklisted; primary Wayland cannot start"
+    if [ "${DISPLAY_RECOVERY_MODE}" != "linuxfb" ]; then
+        echo "  ✗ Pi 5 VC4/V3D is blacklisted outside explicit linuxfb recovery mode"
+        exit 1
+    fi
+elif [ "${DISPLAY_RECOVERY_MODE}" = "linuxfb" ]; then
+    echo "  ✗ linuxfb recovery mode is missing the VC4/V3D blacklist"
+    exit 1
+fi
+if [ "${DISPLAY_RECOVERY_MODE}" = "kms" ] &&
+   mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -Eq '(^| )(module_blacklist=|modprobe\.blacklist=)vc4,v3d( |$)'; then
+    echo "  ✗ KMS mode contains a framebuffer recovery blacklist"
+    exit 1
+fi
+if mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -Eq '(^| )video=HDMI-A-[12]:[^ ]+|(^| )hdmi_(group|mode|timings|cvt)(:[01])?='; then
+    echo "  ✗ fixed HDMI resolution/timing is forbidden"
     exit 1
 fi
 if mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'root=PARTUUID='; then
@@ -404,7 +561,11 @@ if mtype -i "${BOOT_IMG}" ::/CMDLINE.TXT 2>/dev/null | grep -q 'root=PARTUUID=';
     exit 1
 fi
 mtype -i "${BOOT_IMG}" ::/YUNSH-FIRSTBOOT.SH >/dev/null
-rm -f "${BOOT_IMG}" "${BUILD_DIR}/yunsh-config-new.txt" "${BUILD_DIR}/yunsh-cmdline-new.txt"
+verify_boot_layer_payload "${BOOT_IMG}"
+FINAL_BOOT_IMG="${BUILD_DIR}/boot-partition-final-verify.img"
+dd if="${OUTPUT_FILE}" of="${FINAL_BOOT_IMG}" bs=512 skip=$BOOT_START count=$BOOT_SIZE 2>/dev/null
+verify_boot_layer_payload "${FINAL_BOOT_IMG}"
+rm -f "${BOOT_IMG}" "${FINAL_BOOT_IMG}" "${BUILD_DIR}/yunsh-config-new.txt" "${BUILD_DIR}/yunsh-cmdline-new.txt"
 echo "  ✓ Boot partition written back"
 
 # ─── Step 7: Create debugfs injection script ──────
@@ -424,12 +585,60 @@ add_file() {
     echo "  $dest ($size bytes)"
 }
 
+# depmod metadata is part of the Pi 5 kernel stack, not a first-boot repair.
+# macOS cannot safely regenerate it for an ARM64 rootfs, so the builder takes
+# the indexes from the matching, already verified Pi 5 package tree.  A clean
+# image must contain the indexes before firstboot tries to load Wi-Fi, VC4 or
+# any other module.
+PI5_MODULES_DIR="${YUNSH_PI5_MODULES_DIR:-${BUILD_DIR}/pi5-kernel-package-6.18.39/root/usr/lib/modules/${CONFIRMED_PI5_KERNEL_ABI}}"
+PI5_MODULE_INDEX_FILES=(
+    modules.alias
+    modules.alias.bin
+    modules.builtin
+    modules.builtin.alias.bin
+    modules.builtin.bin
+    modules.builtin.modinfo
+    modules.dep
+    modules.dep.bin
+    modules.devname
+    modules.order
+    modules.softdep
+    modules.symbols
+    modules.symbols.bin
+    modules.weakdep
+)
+if [ ! -d "${PI5_MODULES_DIR}/kernel" ]; then
+    echo "ERROR: missing Pi 5 module tree: ${PI5_MODULES_DIR}/kernel"
+    echo "Provide the complete ${CONFIRMED_PI5_KERNEL_ABI} package tree; do not generate a partial image."
+    exit 1
+fi
+PI5_MODULE_BINARY_COUNT="$(find "${PI5_MODULES_DIR}/kernel" -type f \( -name '*.ko' -o -name '*.ko.xz' -o -name '*.ko.zst' \) | wc -l | tr -d ' ')"
+if [ "${PI5_MODULE_BINARY_COUNT}" -lt 1000 ]; then
+    echo "ERROR: Pi 5 module tree is incomplete (${PI5_MODULE_BINARY_COUNT} module files)."
+    exit 1
+fi
+for module_index in "${PI5_MODULE_INDEX_FILES[@]}"; do
+    if [ ! -f "${PI5_MODULES_DIR}/${module_index}" ]; then
+        echo "ERROR: missing Pi 5 module index: ${PI5_MODULES_DIR}/${module_index}"
+        exit 1
+    fi
+done
+echo "  ✓ Pi 5 module tree and depmod indexes: ${PI5_MODULE_BINARY_COUNT} modules"
+
+# Always replace the exact module indexes in a reused base image.  This keeps
+# the rootfs metadata in lockstep with the kernel/initramfs/DTB/overlay ABI.
+for module_index in "${PI5_MODULE_INDEX_FILES[@]}"; do
+    add_file "${PI5_MODULES_DIR}/${module_index}" "/lib/modules/${CONFIRMED_PI5_KERNEL_ABI}/${module_index}"
+done
+
 echo "mkdir /usr/share/yunsh" >> "${DEBUGFS_SCRIPT}"
 echo "mkdir /usr/share/yunsh/ui" >> "${DEBUGFS_SCRIPT}"
 echo "mkdir /usr/share/yunsh/icons" >> "${DEBUGFS_SCRIPT}"
 echo "mkdir /usr/share/yunsh/apps" >> "${DEBUGFS_SCRIPT}"
 echo "mkdir /usr/share/yunsh/logo" >> "${DEBUGFS_SCRIPT}"
 echo "mkdir /etc/yunsh" >> "${DEBUGFS_SCRIPT}"
+echo "mkdir /etc/waydroid-extra" >> "${DEBUGFS_SCRIPT}"
+echo "mkdir /etc/waydroid-extra/images" >> "${DEBUGFS_SCRIPT}"
 
 # A reused base image must never turn a release into an already-installed or
 # already-activated system. Remove all boot-state markers before injecting the
@@ -475,9 +684,12 @@ add_file "${YUNSH_DIR}/system/yunsh-bno085-reader" "/usr/bin/yunsh-bno085-reader
 add_file "${YUNSH_DIR}/system/yunsh-headtracking-sim" "/usr/bin/yunsh-headtracking-sim"
 add_file "${YUNSH_DIR}/system/yunsh-screenshotd" "/usr/bin/yunsh-screenshotd"
 add_file "${YUNSH_DIR}/system/yunsh-recordingd" "/usr/bin/yunsh-recordingd"
+add_file "${YUNSH_DIR}/system/yunsh-visiond" "/usr/bin/yunsh-visiond"
 add_file "${YUNSH_DIR}/system/yunsh-media-setup" "/usr/bin/yunsh-media-setup"
 add_file "${YUNSH_DIR}/system/yunsh-grow-root" "/usr/bin/yunsh-grow-root"
 add_file "${YUNSH_DIR}/system/yunsh-time-sync" "/usr/bin/yunsh-time-sync"
+add_file "${YUNSH_DIR}/system/yunsh-openxr" "/usr/bin/yunsh-openxr"
+add_file "${YUNSH_DIR}/system/yunsh-openxr-run" "/usr/bin/yunsh-openxr-run"
 add_file "${YUNSH_DIR}/system/yunsh-factory-reset" "/usr/bin/yunsh-factory-reset"
 add_file "${YUNSH_DIR}/system/yunsh-install-progress.sh" "/usr/bin/yunsh-install-progress.sh"
 add_file "${YUNSH_DIR}/system/yunsh-inputd" "/usr/bin/yunsh-inputd"
@@ -494,6 +706,27 @@ add_file "${YUNSH_DIR}/system/yunsh-logrotate.conf" "/etc/logrotate.d/yunsh"
 add_file "${YUNSH_DIR}/.gitignore" "/root/.gitignore"
 add_file "${YUNSH_DIR}/boot/yunsh-firstboot.sh" "/usr/bin/yunsh-firstboot.sh"
 add_file "${YUNSH_DIR}/boot/yunsh-iptables.sh" "/usr/bin/yunsh-iptables.sh"
+add_file "${YUNSH_DIR}/yunsh-openxr.conf" "/etc/yunsh/openxr.conf"
+add_file "${YUNSH_DIR}/yunsh-android.conf" "/etc/yunsh/android.conf"
+
+# Optional offline Android payload. The images are intentionally kept outside
+# Git and are injected only when the builder has a complete matching arm64
+# pair. This removes the multi-hour first-boot download while keeping builds
+# reproducible and preventing a partial payload from being called ready.
+ANDROID_PRELOAD_DIR="${YUNSH_ANDROID_PRELOAD_DIR:-${BUILD_DIR}/android-runtime/images}"
+if [ -s "${ANDROID_PRELOAD_DIR}/system.img" ] &&
+   [ -s "${ANDROID_PRELOAD_DIR}/vendor.img" ]; then
+    add_file "${ANDROID_PRELOAD_DIR}/system.img" "/etc/waydroid-extra/images/system.img"
+    add_file "${ANDROID_PRELOAD_DIR}/vendor.img" "/etc/waydroid-extra/images/vendor.img"
+    echo "  ✓ Preloaded arm64 Waydroid system/vendor images"
+else
+    echo "  ⚠ No complete arm64 Waydroid preload found"
+    if [ "${YUNSH_REQUIRE_ANDROID_PRELOAD:-1}" = "1" ]; then
+        echo "ERROR: release image requires a complete arm64 Waydroid system.img/vendor.img pair"
+        echo "Run scripts/prepare-waydroid-arm64-images.sh first, or set YUNSH_REQUIRE_ANDROID_PRELOAD=0 for a non-Android development image."
+        exit 1
+    fi
+fi
 
 # Android application stores
 APK_FILE="${BUILD_DIR}/apps/appstore.apk"
@@ -502,8 +735,19 @@ if [ -f "$APK_FILE" ] && [ "$(stat -f%z "$APK_FILE" 2>/dev/null || stat -c%s "$A
     add_file "$APK_FILE" "/usr/share/yunsh/apps/appstore.apk"
     echo "  Tencent Appstore APK injected"
 fi
-add_file "$FDROID_FILE" "/usr/share/yunsh/apps/fdroid.apk"
-echo "  F-Droid APK injected (verified catalogue)"
+if [ "${YUNSH_INCLUDE_FDROID_FALLBACK:-0}" = "1" ] && [ -f "$FDROID_FILE" ]; then
+    add_file "$FDROID_FILE" "/usr/share/yunsh/apps/fdroid.apk"
+    echo "  Optional F-Droid fallback injected"
+fi
+
+if [ -f "$APK_FILE" ] && [ "$(stat -f%z "$APK_FILE" 2>/dev/null || stat -c%s "$APK_FILE" 2>/dev/null || echo 0)" -ge 1000000 ]; then
+    echo "  Optional Tencent Appstore APK injected"
+elif [ "${YUNSH_INCLUDE_FDROID_FALLBACK:-0}" != "1" ]; then
+    echo "ERROR: no valid Android app-store APK is available for the full 4.1 image"
+    exit 1
+else
+    echo "  F-Droid is the configured Android app store"
+fi
 
 # Launcher script
 LAUNCHER_FILE="${BUILD_DIR}/yunsh-ui-launcher"
@@ -529,6 +773,16 @@ add_file "${BUILD_DIR}/yunsh-update.conf" "/etc/yunsh/update.conf"
 
 add_file "${IMAGE_VERSION_CONF}" "/etc/yunsh/version.conf"
 
+# Keep the selected display path explicit for diagnostics and future migration
+# back to KMS.  This is a policy marker, not a resolution override: both modes
+# retain firmware EDID/HPD mode selection.
+cat > "${BUILD_DIR}/yunsh-display.conf" << DISPLAY_CONF
+mode=${DISPLAY_RECOVERY_MODE}
+kms_overlay=vc4-kms-v3d-pi5
+resolution=edid
+DISPLAY_CONF
+add_file "${BUILD_DIR}/yunsh-display.conf" "/etc/yunsh/display.conf"
+
 # systemd services
 echo "mkdir /etc/systemd/system" >> "${DEBUGFS_SCRIPT}"
 echo "mkdir /etc/systemd/system/multi-user.target.wants" >> "${DEBUGFS_SCRIPT}"
@@ -537,6 +791,8 @@ echo "mkdir /etc/systemd/system/multi-user.target.wants" >> "${DEBUGFS_SCRIPT}"
 cat > "${BUILD_DIR}/yunsh-os.service" << 'SVC'
 [Unit]
 Description=YUNSH OS Spatial UI
+StartLimitIntervalSec=5min
+StartLimitBurst=3
 After=network.target yunsh-firstboot.service yunsh-splash.service yunsh-grow-root.service
 Wants=network.target yunsh-firstboot.service yunsh-splash.service yunsh-grow-root.service
 Conflicts=getty@tty1.service
@@ -544,8 +800,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-ui-launcher
-Restart=always
-RestartSec=2
+Restart=on-failure
+RestartSec=10
 User=root
 # The shell owns the framebuffer directly. Keep diagnostics in the journal;
 # inheriting tty1 makes raw QML/code text flash over activation transitions.
@@ -557,8 +813,9 @@ WantedBy=multi-user.target
 SVC
 add_file "${BUILD_DIR}/yunsh-os.service" "/etc/systemd/system/yunsh-os.service"
 
-# First-boot installer: preserve progress in the journal and on serial0 without
-# painting installation logs over the optical display.
+# First-boot installer: the script renders one progress surface on tty1; the
+# service itself sends status only to the journal, while serial0 remains the
+# separate diagnostic channel from cmdline.txt.
 cat > "${BUILD_DIR}/yunsh-firstboot.service" << 'FBSVC'
 [Unit]
 Description=YUNSH OS First Boot Installer
@@ -578,8 +835,8 @@ RestartSec=30
 # The installer only writes progress; a terminal handoff must not deliver
 # SIGHUP when serial/tty getty services start during first boot.
 StandardInput=null
-StandardOutput=journal+console
-StandardError=journal+console
+StandardOutput=journal
+StandardError=journal
 [Install]
 WantedBy=multi-user.target
 FBSVC
@@ -608,8 +865,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-activation-helper
-Restart=always
-RestartSec=2
+Restart=on-failure
+RestartSec=15
 User=root
 [Install]
 WantedBy=multi-user.target
@@ -626,8 +883,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 Type=simple
 ExecStartPre=/usr/bin/install -d -m 0755 /var/lib/yunsh/space-inbox /var/lib/yunsh/media /var/lib/yunsh/orbit/voice /run/yunsh
 ExecStart=/usr/bin/yunsh-spaced
-Restart=always
-RestartSec=3
+Restart=on-failure
+RestartSec=30
 User=root
 PrivateTmp=true
 ProtectSystem=strict
@@ -648,8 +905,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 Type=simple
 ExecStartPre=/usr/bin/install -d -m 0755 /var/lib/yunsh/space-inbox /run/yunsh
 ExecStart=/usr/bin/yunsh-screen-relayd
-Restart=always
-RestartSec=3
+Restart=on-failure
+RestartSec=30
 User=root
 PrivateTmp=true
 ProtectSystem=strict
@@ -671,7 +928,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-network-daemon
-Restart=always
+Restart=on-failure
+RestartSec=30
 [Install]
 WantedBy=multi-user.target
 NSVC
@@ -701,7 +959,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-bluetooth-daemon
-Restart=always
+Restart=on-failure
+RestartSec=30
 User=root
 [Install]
 WantedBy=multi-user.target
@@ -718,8 +977,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-link-ble
-Restart=always
-RestartSec=3
+Restart=on-failure
+RestartSec=30
 User=root
 [Install]
 WantedBy=multi-user.target
@@ -735,8 +994,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-glasses-bridge
-Restart=always
-RestartSec=3
+Restart=on-failure
+RestartSec=30
 User=root
 [Install]
 WantedBy=multi-user.target
@@ -748,11 +1007,13 @@ cat > "${BUILD_DIR}/yunsh-update.service" << 'USVC'
 [Unit]
 Description=YUNSH OS OTA Update Daemon
 After=network-online.target
+Wants=network-online.target
 ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-update-daemon --foreground
-Restart=always
+Restart=on-failure
+RestartSec=30
 User=root
 [Install]
 WantedBy=multi-user.target
@@ -768,7 +1029,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-appd
-Restart=always
+Restart=on-failure
+RestartSec=30
 [Install]
 WantedBy=multi-user.target
 APPSVC
@@ -785,8 +1047,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/orbitd
-Restart=always
-RestartSec=10
+Restart=on-failure
+RestartSec=60
 User=root
 UMask=0077
 [Install]
@@ -814,6 +1076,25 @@ WantedBy=multi-user.target
 ORBITVOICESVC
 add_file "${BUILD_DIR}/orbit-voice-setup.service" "/etc/systemd/system/orbit-voice-setup.service"
 
+# USB camera bridge for on-demand AI + XR observation. It is deliberately
+# independent from the desktop: missing cameras or ffmpeg must never block UI.
+cat > "${BUILD_DIR}/yunsh-vision.service" << 'VISIONSVC'
+[Unit]
+Description=YUNSH USB Vision Camera Bridge
+After=local-fs.target
+ConditionPathExists=/etc/yunsh/.packages_installed
+[Service]
+Type=simple
+ExecStart=/usr/bin/yunsh-visiond
+Restart=on-failure
+RestartSec=30
+User=root
+UMask=0077
+[Install]
+WantedBy=multi-user.target
+VISIONSVC
+add_file "${BUILD_DIR}/yunsh-vision.service" "/etc/systemd/system/yunsh-vision.service"
+
 cat > "${BUILD_DIR}/yunsh-media-setup.service" << 'MEDIASVC'
 [Unit]
 Description=YUNSH Optional Screen Recording and OCR Setup
@@ -839,8 +1120,9 @@ add_file "${BUILD_DIR}/yunsh-media-setup.service" "/etc/systemd/system/yunsh-med
 cat > "${BUILD_DIR}/yunsh-android-setup.service" << 'ANDROIDSVC'
 [Unit]
 Description=YUNSH OS Android Runtime Setup
-After=network-online.target
+After=network-online.target yunsh-firstboot.service
 Wants=network-online.target
+Wants=yunsh-firstboot.service
 ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=oneshot
@@ -852,6 +1134,28 @@ RestartSec=120
 WantedBy=multi-user.target
 ANDROIDSVC
 add_file "${BUILD_DIR}/yunsh-android-setup.service" "/etc/systemd/system/yunsh-android-setup.service"
+
+# Install the embedded Android stores after the runtime is ready. This is an
+# independent background job: a slow Waydroid session or a bad APK must never
+# delay the Linux desktop, activation, or yunsh-os.service.
+cat > "${BUILD_DIR}/yunsh-android-store.service" << 'ANDROIDSTORESVC'
+[Unit]
+Description=YUNSH OS Preinstall Android App Stores
+After=yunsh-os.service yunsh-android-setup.service
+Wants=yunsh-android-setup.service
+ConditionPathExists=/etc/yunsh/.packages_installed
+ConditionPathExists=/usr/share/yunsh/apps/appstore.apk
+[Service]
+Type=simple
+ExecStart=/usr/bin/yunsh-android install-store
+TimeoutStartSec=900
+Restart=on-failure
+RestartSec=120
+Nice=10
+[Install]
+WantedBy=multi-user.target
+ANDROIDSTORESVC
+add_file "${BUILD_DIR}/yunsh-android-store.service" "/etc/systemd/system/yunsh-android-store.service"
 
 # Splash service
 cat > "${BUILD_DIR}/yunsh-splash.service" << 'SSVC'
@@ -913,7 +1217,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-headtracking
-Restart=always
+Restart=on-failure
+RestartSec=30
 [Install]
 WantedBy=multi-user.target
 HTSVC
@@ -928,8 +1233,8 @@ ConditionPathExists=/etc/yunsh/.packages_installed
 [Service]
 Type=simple
 ExecStart=/usr/bin/yunsh-bno085-reader
-Restart=always
-RestartSec=5
+Restart=on-failure
+RestartSec=30
 [Install]
 WantedBy=multi-user.target
 BNOSVC
@@ -966,10 +1271,12 @@ WantedBy=multi-user.target
 TERMSVC
 add_file "${BUILD_DIR}/yunsh-terminal.service" "/etc/systemd/system/yunsh-terminal.service"
 
+add_file "${YUNSH_DIR}/yunsh-openxr.service" "/etc/systemd/system/yunsh-openxr.service"
+
 # Enable services
 for service in yunsh-os yunsh-firstboot yunsh-grow-root yunsh-local-api yunsh-spaced yunsh-screen-relay yunsh-network yunsh-bluetooth \
-               yunsh-update yunsh-link-ble yunsh-glasses-bridge yunsh-appd yunsh-android-setup yunsh-terminal yunsh-headtracking \
-               yunsh-powerd yunsh-splash yunsh-boot-health yunsh-media-setup yunsh-time-sync orbit orbit-voice-setup; do
+               yunsh-update yunsh-link-ble yunsh-glasses-bridge yunsh-appd yunsh-android-setup yunsh-android-store yunsh-terminal yunsh-headtracking \
+               yunsh-powerd yunsh-splash yunsh-boot-health yunsh-media-setup yunsh-time-sync yunsh-openxr yunsh-vision orbit orbit-voice-setup; do
     echo "rm /etc/systemd/system/multi-user.target.wants/${service}.service" >> "${DEBUGFS_SCRIPT}"
     echo "symlink /etc/systemd/system/multi-user.target.wants/${service}.service ../${service}.service" >> "${DEBUGFS_SCRIPT}"
 done
@@ -1040,7 +1347,7 @@ for bin in yunsh-update-daemon yunsh-updater yunsh-network-daemon yunsh-bluetoot
            yunsh-screenshotd yunsh-factory-reset yunsh-install-progress.sh yunsh-inputd \
            yunsh-powerd yunsh-firstboot.sh yunsh-iptables.sh yunsh-ui-launcher yunsh-splash \
            yunsh-boot-health yunsh-appd yunsh-terminal yunsh-disk-helper yunsh-headtracking yunsh-headtracking-sim \
-           yunsh-bno085-reader yunsh-activation-helper yunsh-keyinject yunsh-android yunsh-recordingd yunsh-media-setup yunsh-grow-root yunsh-time-sync orbitd orbit-voice-setup; do
+           yunsh-bno085-reader yunsh-activation-helper yunsh-keyinject yunsh-android yunsh-recordingd yunsh-visiond yunsh-media-setup yunsh-grow-root yunsh-time-sync yunsh-openxr yunsh-openxr-run orbitd orbit-voice-setup; do
     echo "set_inode_field /usr/bin/${bin} mode 0100755" >> "${DEBUGFS_SCRIPT}"
 done
 echo "set_inode_field /etc/rc.local mode 0100755" >> "${DEBUGFS_SCRIPT}"
@@ -1055,6 +1362,18 @@ dd if="${OUTPUT_FILE}" of="${ROOT_PARTITION_IMG}" bs=512 \
    skip=$ROOT_START count=$ROOT_SIZE 2>/dev/null
 echo "  ✓ root partition extracted ($((ROOT_SIZE * 512 / 1024 / 1024)) MB)"
 
+# Check the actual rootfs module directory as well as the boot initramfs ABI.
+# The initramfs check catches a mismatched boot image early; this check prevents
+# a base image with a matching-looking initramfs but stale /lib/modules from
+# reaching a real Pi 5.
+ROOT_MODULES_STATUS="$("${DEBUGFS}" -R "stat /lib/modules/${CONFIRMED_PI5_KERNEL_ABI}" "${ROOT_PARTITION_IMG}" 2>&1 || true)"
+if printf '%s\n' "${ROOT_MODULES_STATUS}" | grep -Eq 'File not found|not found|No such file'; then
+    echo "ERROR: rootfs does not contain /lib/modules/${CONFIRMED_PI5_KERNEL_ABI}."
+    echo "The Pi 5 kernel, initramfs, DTBs, overlays and rootfs modules must come from one ABI-matched stack."
+    exit 1
+fi
+echo "  ✓ rootfs modules ABI: ${CONFIRMED_PI5_KERNEL_ABI}"
+
 # Grow ext4 now, before any YUNSH files are injected.  This makes the SD card
 # immediately usable and removes the fragile first-boot growfs dependency.
 "${E2FSCK}" -fy "${ROOT_PARTITION_IMG}" >/dev/null
@@ -1068,6 +1387,18 @@ echo "Commands: $(wc -l < "${DEBUGFS_SCRIPT}")"
     exit 1
 }
 echo "debugfs injection ✓"
+
+# Verify the files in the actual ext4 image after injection.  Checking only
+# the source directory would allow a malformed debugfs script or stale base
+# image to pass while firstboot still has to run depmod to become usable.
+for module_index in "${PI5_MODULE_INDEX_FILES[@]}"; do
+    MODULE_INDEX_STATUS="$("${DEBUGFS}" -R "stat /lib/modules/${CONFIRMED_PI5_KERNEL_ABI}/${module_index}" "${ROOT_PARTITION_IMG}" 2>&1 || true)"
+    if printf '%s\n' "${MODULE_INDEX_STATUS}" | grep -Eq 'File not found|not found|No such file'; then
+        echo "ERROR: injected rootfs is missing /lib/modules/${CONFIRMED_PI5_KERNEL_ABI}/${module_index}."
+        exit 1
+    fi
+done
+echo "  ✓ rootfs Pi 5 module indexes verified"
 
 # ─── Step 9: e2fsck ────────────────────────────────
 echo ""
@@ -1093,10 +1424,9 @@ echo "Root partition written ✓"
 # ─── Step 11: Verify ─────────────────────────────
 echo ""
 echo "=== Quick verification ==="
-# Extract root and check files
-ROOT_TEST_IMG="${BUILD_DIR}/root-test.img"
-dd if="${OUTPUT_FILE}" of="${ROOT_TEST_IMG}" bs=512 \
-   skip=$ROOT_START count=$ROOT_SIZE 2>/dev/null
+# Check the already fsck-verified root partition before it is discarded. This
+# avoids a second multi-gigabyte rootfs copy on the Mac build volume.
+ROOT_TEST_IMG="${ROOT_PARTITION_IMG}"
 
 echo "Files injected:"
 "${E2FSPROGS}/sbin/debugfs" -R "ls -l /usr/bin/yunsh" "${ROOT_TEST_IMG}" 2>/dev/null | head -5 || true
@@ -1122,8 +1452,11 @@ REQUIRED_ROOT_FILES="
 /usr/bin/orbitd
 /usr/bin/orbit-voice-setup
 /usr/bin/yunsh-recordingd
+/usr/bin/yunsh-visiond
 /usr/bin/yunsh-media-setup
 /usr/bin/yunsh-time-sync
+/usr/bin/yunsh-openxr
+/usr/bin/yunsh-openxr-run
 /usr/share/yunsh/ui/main.qml
 /usr/share/yunsh/ui/HomeScreen.qml
 /usr/share/yunsh/ui/OrbitPanel.qml
@@ -1131,15 +1464,20 @@ REQUIRED_ROOT_FILES="
 /usr/share/yunsh/icons/orbit.png
 /usr/share/yunsh/logo/logo-256.png
 /etc/yunsh/version.conf
+/etc/yunsh/android.conf
+/etc/yunsh/openxr.conf
 /etc/systemd/system/yunsh-os.service
 /etc/systemd/system/yunsh-firstboot.service
 /etc/systemd/system/yunsh-boot-health.service
 /etc/systemd/system/yunsh-grow-root.service
 /etc/systemd/system/yunsh-android-setup.service
+/etc/systemd/system/yunsh-android-store.service
 /etc/systemd/system/orbit.service
 /etc/systemd/system/orbit-voice-setup.service
+/etc/systemd/system/yunsh-vision.service
 /etc/systemd/system/yunsh-media-setup.service
 /etc/systemd/system/yunsh-time-sync.service
+/etc/systemd/system/yunsh-openxr.service
 /etc/systemd/system/rpi-resize.service
 /etc/systemd/system/rpi-resize-swap-file.service
 /etc/systemd/system/userconfig.service
@@ -1149,10 +1487,13 @@ REQUIRED_ROOT_FILES="
 /etc/systemd/system/multi-user.target.wants/yunsh-boot-health.service
 /etc/systemd/system/multi-user.target.wants/yunsh-grow-root.service
 /etc/systemd/system/multi-user.target.wants/yunsh-android-setup.service
+/etc/systemd/system/multi-user.target.wants/yunsh-android-store.service
 /etc/systemd/system/multi-user.target.wants/orbit.service
 /etc/systemd/system/multi-user.target.wants/orbit-voice-setup.service
+/etc/systemd/system/multi-user.target.wants/yunsh-vision.service
 /etc/systemd/system/multi-user.target.wants/yunsh-media-setup.service
 /etc/systemd/system/multi-user.target.wants/yunsh-time-sync.service
+/etc/systemd/system/multi-user.target.wants/yunsh-openxr.service
 "
 for required in ${REQUIRED_ROOT_FILES}; do
     if ! "${E2FSPROGS}/sbin/debugfs" -R "stat ${required}" "${ROOT_TEST_IMG}" 2>&1 |

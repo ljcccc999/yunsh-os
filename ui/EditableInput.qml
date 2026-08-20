@@ -19,6 +19,20 @@ TextInput {
 
     function pasteWithPriority() {
         var xhr = new XMLHttpRequest()
+        var completed = false
+        function insertText(value) {
+            if (completed) return
+            completed = true
+            if (value && value.length > 0) {
+                var pos = input.cursorPosition
+                input.text = input.text.substring(0, pos) + value + input.text.substring(pos)
+                input.cursorPosition = pos + value.length
+            } else {
+                // Preserve Qt's native system-clipboard path when Flow has no
+                // phone text or its local bridge is temporarily unavailable.
+                input.paste()
+            }
+        }
         xhr.open("GET", "http://127.0.0.1:8591/api/clipboard", true)
         xhr.timeout = 700
         xhr.onreadystatechange = function() {
@@ -26,12 +40,10 @@ TextInput {
                 return
             var phoneText = ""
             try { phoneText = JSON.parse(xhr.responseText || "{}").text || "" } catch (error) {}
-            if (phoneText.length > 0) {
-                var pos = input.cursorPosition
-                input.text = input.text.substring(0, pos) + phoneText + input.text.substring(pos)
-                input.cursorPosition = pos + phoneText.length
-            }
+            insertText(phoneText)
         }
+        xhr.onerror = function() { insertText("") }
+        xhr.ontimeout = function() { insertText("") }
         xhr.send()
     }
 

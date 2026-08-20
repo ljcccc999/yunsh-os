@@ -26,13 +26,8 @@ BOOT_LOCK_PATH = os.environ.get("YUNSH_BOOT_LOCK_PATH", "/etc/yunsh/boot-lock")
 APP_MAP = {
     "appstore": {
         "type": "waydroid",
-        "name": "Android Apps",
+        "name": "F-Droid",
         "command": "launch-store",
-    },
-    "files": {
-        "type": "waydroid",
-        "name": "Files",
-        "command": "launch-files",
     },
 }
 
@@ -70,6 +65,8 @@ class AppHandler(BaseHTTPRequestHandler):
             result = self.android_retry()
         elif action == "install_apk":
             result = self.install_apk(req.get("path", ""))
+        elif action == "install_linux_file":
+            result = self.install_linux_file(req.get("path", ""))
         elif action == "delete_download":
             result = self.delete_download(req.get("path", ""))
         elif action == "android_apps":
@@ -331,6 +328,55 @@ class AppHandler(BaseHTTPRequestHandler):
         except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
             return {"status": "error", "message": str(exc)}
 
+    def install_linux_file(self, requested_path):
+        """Install or launch a native Linux application from Downloads."""
+        try:
+            path = os.path.realpath(str(requested_path))
+            if (
+                os.path.commonpath((DOWNLOAD_DIR, path)) != DOWNLOAD_DIR
+                or not os.path.isfile(path)
+            ):
+                return {"status": "error", "message": "Only files in Downloads can be opened"}
+
+            lower = path.lower()
+            if lower.endswith(".deb"):
+                result = subprocess.run(
+                    ["/usr/bin/apt-get", "install", "-y", "--no-install-recommends",
+                     "./" + os.path.basename(path)],
+                    cwd=DOWNLOAD_DIR,
+                    capture_output=True,
+                    text=True,
+                    timeout=600,
+                )
+                if result.returncode != 0:
+                    return {
+                        "status": "error",
+                        "message": result.stderr.strip() or "Linux package installation failed",
+                    }
+                return {"status": "ok", "message": "Linux application installed"}
+
+            if lower.endswith(".appimage"):
+                os.chmod(path, os.stat(path).st_mode | 0o111)
+                env = os.environ.copy()
+                env.update({
+                    "HOME": "/home/yunsh",
+                    "USER": "yunsh",
+                    "LOGNAME": "yunsh",
+                    "XDG_RUNTIME_DIR": "/run/yunsh-runtime",
+                    "WAYLAND_DISPLAY": "wayland-0",
+                    "XDG_SESSION_TYPE": "wayland",
+                })
+                subprocess.Popen(
+                    [path], cwd=DOWNLOAD_DIR, env=env,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                return {"status": "ok", "message": "Linux AppImage is launching"}
+
+            return {"status": "error", "message": "支持的 Linux 文件格式：.deb、.AppImage"}
+        except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+            return {"status": "error", "message": str(exc)}
+
     def delete_download(self, requested_path):
         """Delete one browser download, restricted to the Downloads folder."""
         try:
@@ -375,7 +421,7 @@ class AppHandler(BaseHTTPRequestHandler):
                 pass
             return values
 
-        version = read_values("/etc/yunsh/version.conf").get("VERSION", "v3.1.6")
+        version = read_values("/etc/yunsh/version.conf").get("VERSION", "v4.0")
         language = read_values("/etc/yunsh/language.conf")
         return {
             "status": "ok",
@@ -435,7 +481,7 @@ class AppHandler(BaseHTTPRequestHandler):
         model = read_text("/proc/device-tree/model").replace("\x00", "").strip()
         return {
             "status": "ok",
-            "version": version.get("VERSION", "v3.1.6"),
+            "version": version.get("VERSION", "v4.0"),
             "build": version.get("BUILD", ""),
             "model": model or "Raspberry Pi",
             "cpu": f"{cpu_name or 'ARM processor'} × {os.cpu_count() or 1}",

@@ -300,7 +300,7 @@ arm_64bit=1
 
 [pi5]
 # Pi 5 KMS display. EDID selects mono or binocular SBS native mode.
-dtoverlay=vc4-kms-v3d
+dtoverlay=vc4-kms-v3d-pi5
 disable_splash=1
 dtparam=audio=off
 display_auto_detect=1
@@ -445,6 +445,7 @@ add_file "${YUNSH_DIR}/system/yunsh-bno085-reader" "/usr/bin/yunsh-bno085-reader
 add_file "${YUNSH_DIR}/system/yunsh-headtracking-sim" "/usr/bin/yunsh-headtracking-sim"
 add_file "${YUNSH_DIR}/system/yunsh-screenshotd" "/usr/bin/yunsh-screenshotd"
 add_file "${YUNSH_DIR}/system/yunsh-recordingd" "/usr/bin/yunsh-recordingd"
+add_file "${YUNSH_DIR}/system/yunsh-visiond" "/usr/bin/yunsh-visiond"
 add_file "${YUNSH_DIR}/system/yunsh-media-setup" "/usr/bin/yunsh-media-setup"
 add_file "${YUNSH_DIR}/system/yunsh-factory-reset" "/usr/bin/yunsh-factory-reset"
 add_file "${YUNSH_DIR}/system/yunsh-install-progress.sh" "/usr/bin/yunsh-install-progress.sh"
@@ -506,10 +507,15 @@ if [ ! -f /etc/yunsh/.packages_installed ]; then
     fi
 fi
 
-# Phase 2: Ensure yunsh user exists
+# Phase 2: Ensure every image made by this legacy builder has the same
+# recoverable Linux account as the main builder.  Do not only set the
+# password when creating the user: a base image may already contain `yunsh`
+# with an unknown or empty password.
 if ! id -u yunsh &>/dev/null 2>&1; then
     useradd -m -s /bin/bash yunsh 2>/dev/null || true
-    echo "yunsh:YUNSH123" | chpasswd 2>/dev/null || true
+fi
+if id -u yunsh &>/dev/null 2>&1; then
+    echo "yunsh:yunsh123" | chpasswd 2>/dev/null || true
     usermod -aG sudo,audio,video,input,render yunsh 2>/dev/null || true
 fi
 
@@ -756,6 +762,11 @@ BNO_SVC_FILE="${BUILD_DIR}/yunsh-bno085-reader.service"
 cp "${YUNSH_DIR}/system/yunsh-bno085-reader.service" "${BNO_SVC_FILE}"
 add_file "${BNO_SVC_FILE}" "/etc/systemd/system/yunsh-bno085-reader.service"
 
+# USB camera bridge for on-demand AI + XR observation.
+VISION_SVC_FILE="${BUILD_DIR}/yunsh-vision.service"
+cp "${YUNSH_DIR}/system/yunsh-vision.service" "${VISION_SVC_FILE}"
+add_file "${VISION_SVC_FILE}" "/etc/systemd/system/yunsh-vision.service"
+
 # ─── Auto-login for tty1 ──────────────────────────
 echo "" >> "${DEBUGFS_SCRIPT}"
 echo "# === Auto-login ===" >> "${DEBUGFS_SCRIPT}"
@@ -797,6 +808,7 @@ echo "set_inode_field /usr/bin/yunsh-network-daemon mode 0100755" >> "${DEBUGFS_
 echo "set_inode_field /usr/bin/yunsh-bluetooth-daemon mode 0100755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-screenshotd mode 0100755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-recordingd mode 0100755" >> "${DEBUGFS_SCRIPT}"
+echo "set_inode_field /usr/bin/yunsh-visiond mode 0100755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-media-setup mode 0100755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-factory-reset mode 0100755" >> "${DEBUGFS_SCRIPT}"
 echo "set_inode_field /usr/bin/yunsh-install-progress.sh mode 0100755" >> "${DEBUGFS_SCRIPT}"

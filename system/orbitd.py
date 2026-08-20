@@ -94,6 +94,7 @@ PERMISSION_LABELS = {
     "settings": "修改系统设置",
     "network": "访问网络",
     "screen": "读取屏幕与窗口状态",
+    "camera": "使用 USB 摄像头观察环境",
     "microphone": "使用麦克风进行语音识别",
     "memory": "保存长期任务记忆",
     "world": "控制 YUNSH 世界层",
@@ -107,6 +108,8 @@ TOOL_PERMISSION = {
     "system_status": "screen",
     "ui_state": "screen",
     "capture_screen": "screen",
+    "camera_status": "camera",
+    "capture_camera": "camera",
     "start_screen_recording": "screen",
     "stop_screen_recording": "screen",
     "recording_status": "screen",
@@ -259,6 +262,29 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "camera_status",
+            "description": "Check connected USB cameras and whether on-demand Linux capture is available.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "capture_camera",
+            "description": "Capture one frame from a connected USB camera for local OCR or visual analysis. Capture is on demand and does not keep the camera streaming.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "device": {"type": "string", "description": "Optional device such as /dev/video0"},
+                    "width": {"type": "integer", "minimum": 320, "maximum": 1920},
+                    "height": {"type": "integer", "minimum": 240, "maximum": 1080},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "start_screen_recording",
             "description": "Start visibly indicated screen recording.",
             "parameters": {"type": "object", "properties": {}},
@@ -386,6 +412,7 @@ def default_config():
         "model": "deepseek-v4-flash",
         "apiKey": "",
         "endpoint": "",
+        "profiles": {},
         "permissions": dict(DEFAULT_PERMISSIONS),
         "alwaysAllowedTools": [],
         "voice": "sweet_female",
@@ -406,6 +433,41 @@ def load_config():
                 config.update(loaded)
         except (OSError, ValueError, InvalidToken, json.JSONDecodeError):
             pass
+    # v3.1.6 and earlier stored only one provider.  Preserve that value while
+    # migrating to a provider-keyed vault so switching provider never reuses a
+    # Kimi key for DeepSeek (or vice versa).
+    profiles = config.get("profiles")
+    if not isinstance(profiles, dict):
+        profiles = {}
+    provider = str(config.get("provider", "deepseek")).lower()
+    if provider not in PROVIDERS:
+        provider = "deepseek"
+    if config.get("apiKey") and provider not in profiles:
+        profiles[provider] = {
+            "model": config.get("model", ""),
+            "endpoint": config.get("endpoint", ""),
+            "apiKey": config.get("apiKey", ""),
+            "updatedAt": config.get("updatedAt", 0),
+        }
+    clean_profiles = {}
+    for profile_provider, profile in profiles.items():
+        profile_provider = str(profile_provider).lower()
+        if profile_provider not in PROVIDERS or not isinstance(profile, dict):
+            continue
+        clean_profiles[profile_provider] = {
+            "model": str(profile.get("model", "")),
+            "endpoint": str(profile.get("endpoint", "")),
+            "apiKey": str(profile.get("apiKey", "")),
+            "updatedAt": profile.get("updatedAt", 0),
+        }
+    config["profiles"] = clean_profiles
+    active = clean_profiles.get(provider)
+    if active:
+        config["model"] = active["model"]
+        config["endpoint"] = active["endpoint"]
+        config["apiKey"] = active["apiKey"]
+    config["provider"] = provider
+
     permissions = dict(DEFAULT_PERMISSIONS)
     supplied = config.get("permissions")
     if isinstance(supplied, dict):
@@ -429,6 +491,7 @@ def save_config(config):
 
 
 def public_config(config):
+    profiles = config.get("profiles", {})
     return {
         "provider": config["provider"],
         "model": config["model"],
@@ -437,6 +500,22 @@ def public_config(config):
         "apiKeyHint": (
             "••••" + config["apiKey"][-4:] if len(config.get("apiKey", "")) >= 4 else ""
         ),
+        "profiles": [
+            {
+                "provider": provider,
+                "name": PROVIDERS[provider]["name"],
+                "model": profile.get("model", ""),
+                "endpoint": profile.get("endpoint", ""),
+                "hasApiKey": bool(profile.get("apiKey")),
+                "apiKeyHint": (
+                    "••••" + profile["apiKey"][-4:]
+                    if len(profile.get("apiKey", "")) >= 4 else ""
+                ),
+                "active": provider == config["provider"],
+            }
+            for provider, profile in profiles.items()
+            if provider in PROVIDERS
+        ],
         "permissions": config["permissions"],
         "alwaysAllowedTools": config.get("alwaysAllowedTools", []),
         "permissionLabels": PERMISSION_LABELS,
@@ -476,13 +555,11 @@ def update_config(payload):
             endpoint += "/chat/completions"
 
     existing = load_config()
+    profiles = dict(existing.get("profiles", {}))
+    existing_profile = profiles.get(provider, {})
     api_key = payload.get("apiKey")
     if api_key is None or api_key == "":
-        api_key = (
-            existing.get("apiKey", "")
-            if existing.get("provider") == provider
-            else ""
-        )
+        api_key = existing_profile.get("apiKey", "")
     api_key = str(api_key).strip()
     if api_key and (len(api_key) < 8 or len(api_key) > 512 or any(c in api_key for c in "\r\n\0")):
         raise ValueError("API Key 格式不正确")
@@ -502,19 +579,59 @@ def update_config(payload):
         name for name in existing.get("alwaysAllowedTools", [])
         if permissions.get(TOOL_PERMISSION.get(name, ""), True)
     ]
+    profile_updated_at = time.time()
+    profiles[provider] = {
+        "model": model,
+        "apiKey": api_key,
+        "endpoint": endpoint,
+        "updatedAt": profile_updated_at,
+    }
     config = {
         "provider": provider,
         "model": model,
         "apiKey": api_key,
         "endpoint": endpoint,
+        "profiles": profiles,
         "permissions": permissions,
         "alwaysAllowedTools": allowed_tools,
         "voice": voice,
         "speakResponses": payload.get(
             "speakResponses", existing.get("speakResponses", True)
         ) is not False,
-        "updatedAt": time.time(),
+        "updatedAt": profile_updated_at,
     }
+    save_config(config)
+    return public_config(config)
+
+
+def reveal_provider_key(payload):
+    provider = str(payload.get("provider", "")).lower()
+    if provider not in PROVIDERS:
+        raise ValueError("不支持的 API 提供商")
+    profile = load_config().get("profiles", {}).get(provider)
+    if not profile or not profile.get("apiKey"):
+        raise ValueError("这个提供商还没有保存 API Key")
+    return {"provider": provider, "apiKey": profile["apiKey"]}
+
+
+def delete_provider_profile(payload):
+    provider = str(payload.get("provider", "")).lower()
+    if provider not in PROVIDERS:
+        raise ValueError("不支持的 API 提供商")
+    config = load_config()
+    profiles = dict(config.get("profiles", {}))
+    if provider not in profiles:
+        return public_config(config)
+    del profiles[provider]
+    config["profiles"] = profiles
+    if config.get("provider") == provider:
+        next_provider = next(iter(profiles), "deepseek")
+        next_profile = profiles.get(next_provider, {})
+        config["provider"] = next_provider
+        config["model"] = next_profile.get("model", PROVIDERS[next_provider]["models"][0]["id"] if PROVIDERS[next_provider]["models"] else "")
+        config["endpoint"] = next_profile.get("endpoint", "")
+        config["apiKey"] = next_profile.get("apiKey", "")
+    config["updatedAt"] = time.time()
     save_config(config)
     return public_config(config)
 
@@ -642,6 +759,40 @@ def execute_tool(config, name, arguments):
                 old_capture.unlink()
             except OSError:
                 pass
+        return result
+    if name in {"camera_status", "capture_camera"}:
+        require_permission(config, "camera")
+        endpoint = (
+            "http://127.0.0.1:8598/status"
+            if name == "camera_status"
+            else "http://127.0.0.1:8598/capture"
+        )
+        body = None if name == "camera_status" else json.dumps({
+            key: arguments[key] for key in ("device", "width", "height") if key in arguments
+        }).encode("utf-8")
+        request = urllib.request.Request(
+            endpoint,
+            data=body,
+            headers={"Content-Type": "application/json"} if body is not None else {},
+            method="POST" if body is not None else "GET",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                result = json.loads(response.read(MAX_BODY).decode("utf-8"))
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"USB 摄像头服务不可用：{exc}") from exc
+        if name == "capture_camera" and result.get("captured"):
+            path = pathlib.Path(str(result.get("path", "")))
+            result["ocrAvailable"] = False
+            result["text"] = ""
+            if path.is_file() and shutil.which("tesseract"):
+                ocr = subprocess.run(
+                    ["tesseract", str(path), "stdout", "-l", "chi_sim+eng"],
+                    capture_output=True, text=True, timeout=45,
+                )
+                if ocr.returncode == 0:
+                    result["ocrAvailable"] = True
+                    result["text"] = ocr.stdout[-MAX_TOOL_OUTPUT:]
         return result
     if name in {"start_screen_recording", "stop_screen_recording", "recording_status"}:
         require_permission(config, "screen")
@@ -951,7 +1102,9 @@ SYSTEM_PROMPT = """你是 Orbit，YUNSH OS 的系统级 AI Agent。
 截图、录屏、文件修改、Shell、记忆等能力在首次使用时会由系统请求确认；
 关机、重启和破坏性命令永远需要新确认。拒绝后尊重用户决定并提供安全替代方案。
 YUNSH 世界是系统层，不要称其为普通 App。当前显示硬件把一个完整画面同步到左右屏，
-不把 SBS 当作默认模式。用简洁自然的中文回复，明确说明执行结果和失败原因。"""
+不把 SBS 当作默认模式。USB 摄像头只在用户授权并调用 camera_status 或
+capture_camera 时按需采集；当前摄像头桥接不等于已经完成目标检测、深度估计或 6DoF。
+用简洁自然的中文回复，明确说明执行结果和失败原因。"""
 
 REASONING_GUIDANCE = {
     "low": "本轮使用 Low 推理强度：优先快速完成直接任务，减少不必要的展开。",
@@ -997,6 +1150,8 @@ def tool_approval(config, name, arguments):
         "system_status": "允许 Orbit 读取设备状态",
         "ui_state": "允许 Orbit 查看当前界面与窗口状态",
         "capture_screen": "允许 Orbit 截取并识别当前屏幕",
+        "camera_status": "允许 Orbit 查看已连接的 USB 摄像头状态",
+        "capture_camera": "允许 Orbit 使用 USB 摄像头拍摄一帧并进行本地识别",
         "start_screen_recording": "允许 Orbit 开始录制屏幕",
         "stop_screen_recording": "允许 Orbit 停止并保存录屏",
         "recording_status": "允许 Orbit 查看录屏状态",
@@ -1214,11 +1369,16 @@ class Handler(BaseHTTPRequestHandler):
             if self.path in {
                 "/v1/config", "/v1/chat", "/v1/approve",
                 "/v1/voice/speak", "/v1/voice/listen",
-                "/v1/permissions/grant",
+                "/v1/permissions/grant", "/v1/config/reveal-key",
+                "/v1/config/delete-profile",
             }:
                 require_screen_unlocked()
             if self.path == "/v1/config":
                 result = update_config(payload)
+            elif self.path == "/v1/config/reveal-key":
+                result = reveal_provider_key(payload)
+            elif self.path == "/v1/config/delete-profile":
+                result = delete_provider_profile(payload)
             elif self.path == "/v1/chat":
                 result = chat(payload)
             elif self.path == "/v1/approve":

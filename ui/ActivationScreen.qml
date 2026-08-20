@@ -23,12 +23,16 @@ Rectangle {
     property string selectedLanguage: "简体中文"
     property string selectedKeyboard: "拼音"
     property string wifiSSID: ""
-    property string accountUsername: "YUNSH Link"
+    // This is the display name for the optional local YUNSH profile.  The
+    // Linux/SSH account is always the fixed system account `yunsh`; keeping
+    // the two concepts explicit prevents activation from appearing to create
+    // a different login user.
+    property string accountUsername: "yunsh"
     property string accountPassword: ""
     property string accountConfirmPassword: ""
     property string bootPassword: ""
     property string bootConfirmPassword: ""
-    readonly property string defaultBootPassword: "YUNSH123"
+    readonly property string defaultBootPassword: "yunsh123"
     property bool accountValid: false
     property string accountError: ""
     property bool activationConfigReady: false
@@ -1255,7 +1259,7 @@ Rectangle {
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: 430
-                    text: "未设置自定义密码时：默认开机/命令行密码为 YUNSH123；默认用户为 YUNSH Link（系统账户 yunsh）"
+                    text: "未设置自定义密码时：默认开机/命令行密码为 yunsh123；默认系统账户为 yunsh"
                     color: "#52616C"
                     font.pixelSize: 11
                     horizontalAlignment: Text.AlignHCenter
@@ -1280,7 +1284,7 @@ Rectangle {
                             verticalAlignment: TextInput.AlignVCenter
                             color: "#17212A"; font.pixelSize: 15
                             placeholderText: "你的显示名称"
-                            text: "YUNSH Link"
+                            text: "yunsh"
                             placeholderTextColor: Qt.rgba(23/255, 33/255, 42/255, 0.36)
                             onTextChanged: {
                                 accountUsername = text
@@ -1402,7 +1406,7 @@ Rectangle {
                         MouseArea {
                             anchors.fill: parent; hoverEnabled: true
                             onClicked: {
-                                accountUsername = "YUNSH Link"
+                                accountUsername = "yunsh"
                                 accountPassword = ""
                                 accountConfirmPassword = ""
                                 bootPassword = ""

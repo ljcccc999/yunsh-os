@@ -39,7 +39,7 @@ framebuffer_ignore_alpha=0
 arm_64bit=1
 
 # GPU — only vc4-kms-v3d (no FKMS — conflicts on Pi 5)
-dtoverlay=vc4-kms-v3d
+dtoverlay=vc4-kms-v3d-pi5
 max_framebuffers=2
 
 # Serial console for debugging
@@ -53,7 +53,7 @@ dtoverlay=dwc2,dr_mode=host
 
 # YUNSH OS additions
 [pi5]
-dtoverlay=vc4-kms-v3d
+dtoverlay=vc4-kms-v3d-pi5
 disable_splash=1
 framebuffer_width=1920
 framebuffer_height=1080

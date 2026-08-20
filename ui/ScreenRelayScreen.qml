@@ -47,14 +47,25 @@ Rectangle {
         color: relay.live ? "#050607" : Qt.rgba(248/255, 252/255, 255/255, 0.72)
     }
 
-    Image {
-        id: phoneFrame
+    // Clip the decoded frame inside a real rounded viewport.  Clipping only
+    // the outer window still lets the image's opaque rectangular corners show
+    // through at the two bottom corners when the iPhone frame is letterboxed.
+    Rectangle {
+        id: phoneViewport
         anchors.fill: parent
         anchors.margins: 10
-        fillMode: Image.PreserveAspectFit
-        cache: false
-        asynchronous: true
+        radius: 20
+        clip: true
+        color: "#050607"
         visible: live
+
+        Image {
+            id: phoneFrame
+            anchors.fill: parent
+            fillMode: Image.PreserveAspectFit
+            cache: false
+            asynchronous: true
+        }
     }
 
     Column {

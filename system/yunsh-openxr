@@ -1,0 +1,81 @@
+#!/bin/sh
+# YUNSH OpenXR runtime capability probe.
+# This helper is non-blocking and does not start an XR runtime.
+
+set -u
+
+STATE_DIR="${YUNSH_STATE_DIR:-/var/lib/yunsh}"
+STATE_FILE="${STATE_DIR}/openxr-status.json"
+CONFIG_FILE="${YUNSH_OPENXR_CONFIG:-/etc/yunsh/openxr.conf}"
+
+mkdir -p "$STATE_DIR" 2>/dev/null || true
+
+loader="unavailable"
+vulkan="unavailable"
+runtime="unavailable"
+runtime_json=""
+tracking="yunsh-headtracking"
+
+if command -v ldconfig >/dev/null 2>&1 &&
+   ldconfig -p 2>/dev/null | grep -q 'libopenxr_loader\.so'; then
+    loader="available"
+elif [ -e /usr/lib/aarch64-linux-gnu/libopenxr_loader.so.1 ] ||
+     [ -e /usr/lib/arm-linux-gnueabihf/libopenxr_loader.so.1 ] ||
+     [ -e /usr/lib/libopenxr_loader.so.1 ]; then
+    loader="available"
+fi
+
+if command -v vulkaninfo >/dev/null 2>&1; then
+    vulkan="available"
+elif command -v ldconfig >/dev/null 2>&1 &&
+     ldconfig -p 2>/dev/null | grep -q 'libvulkan\.so'; then
+    vulkan="available"
+fi
+
+if [ -r "$CONFIG_FILE" ]; then
+    configured_runtime="$(sed -n 's/^xr_runtime_json=//p' "$CONFIG_FILE" | head -n 1)"
+    [ -n "$configured_runtime" ] && [ -r "$configured_runtime" ] && runtime_json="$configured_runtime"
+    configured_tracking="$(sed -n 's/^tracking_source=//p' "$CONFIG_FILE" | head -n 1)"
+    [ -n "$configured_tracking" ] && tracking="$configured_tracking"
+fi
+
+if [ -n "${XR_RUNTIME_JSON:-}" ] && [ -r "${XR_RUNTIME_JSON}" ]; then
+    runtime_json="$XR_RUNTIME_JSON"
+fi
+
+if [ -z "$runtime_json" ]; then
+    for candidate in \
+        /etc/openxr/1/active_runtime.json \
+        /usr/share/openxr/1/active_runtime.json \
+        /usr/local/share/openxr/1/active_runtime.json \
+        /etc/openxr/1/openxr_monado.json \
+        /usr/share/openxr/1/openxr_monado.json \
+        /usr/local/share/openxr/1/openxr_monado.json; do
+        if [ -r "$candidate" ]; then
+            runtime_json="$candidate"
+            break
+        fi
+    done
+fi
+
+[ -n "$runtime_json" ] && runtime="manifest-found"
+timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || printf unknown)"
+
+json_escape() {
+    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+printf '{"loader":"%s","vulkan":"%s","runtime":"%s","runtime_json":"%s","tracking_source":"%s","checked_at":"%s"}\n' \
+    "$loader" "$vulkan" "$runtime" "$(json_escape "$runtime_json")" \
+    "$(json_escape "$tracking")" "$timestamp" > "$STATE_FILE" 2>/dev/null || true
+
+case "${1:-status}" in
+    status|probe)
+        printf 'OpenXR loader: %s\nVulkan: %s\nRuntime manifest: %s\nTracking source: %s\n' \
+            "$loader" "$vulkan" "${runtime_json:-not found}" "$tracking"
+        ;;
+    *)
+        printf 'usage: %s [status|probe]\n' "$0" >&2
+        exit 2
+        ;;
+esac

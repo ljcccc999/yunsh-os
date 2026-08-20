@@ -1,11 +1,15 @@
 [Unit]
-Description=YUNSH OS Head Tracking
+Description=YUNSH USB Vision Camera Bridge
 After=local-fs.target
 ConditionPathExists=/etc/yunsh/.packages_installed
+
 [Service]
 Type=simple
-ExecStart=/usr/bin/yunsh-headtracking
-Restart=on-failure
-RestartSec=30
+ExecStart=/usr/bin/yunsh-visiond
+Restart=always
+RestartSec=5
+User=root
+UMask=0077
+
 [Install]
 WantedBy=multi-user.target

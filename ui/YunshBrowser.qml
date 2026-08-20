@@ -15,6 +15,7 @@ Item {
     signal backToHome()
     signal requestVirtualKeyboard(var target)
     signal dismissVirtualKeyboard()
+    signal androidAppInstalled()
 
     property url currentUrl: "https://www.bing.com"
     property bool isLoading: false
@@ -24,16 +25,40 @@ Item {
     property string downloadStatus: ""
     property string downloadedApkPath: ""
     property bool downloadBusy: false
+    property var activeDownload: null
+    property real downloadReceivedBytes: 0
+    property real downloadTotalBytes: 0
+    readonly property real downloadProgress: downloadTotalBytes > 0
+        ? Math.max(0, Math.min(1, downloadReceivedBytes / downloadTotalBytes)) : 0
     property bool desktopMode: false
     property string defaultUserAgent: ""
     property double keyboardSuppressedUntil: 0
     property int activeTabIndex: 0
 
+    Timer {
+        id: downloadStatusTimer
+        interval: 2600
+        repeat: false
+        onTriggered: browserScreen.downloadStatus = ""
+    }
+
+    Timer {
+        id: downloadProgressTimer
+        interval: 120
+        repeat: true
+        running: browserScreen.downloadBusy && browserScreen.activeDownload !== null
+        onTriggered: {
+            if (!browserScreen.activeDownload) return
+            browserScreen.downloadReceivedBytes = Number(browserScreen.activeDownload.receivedBytes || 0)
+            browserScreen.downloadTotalBytes = Number(browserScreen.activeDownload.totalBytes || 0)
+        }
+    }
+
     // An empty tab is a real editable start surface.  WebEngine still uses
     // about:blank internally as its inert document, but that implementation
     // detail must never be painted or exposed to the user.
     function isEmptyTab() {
-        return browserTabs.count > 0 &&
+        return browserTabs.count > 0 && activeTabIndex >= 0 && activeTabIndex < browserTabs.count &&
             String(browserTabs.get(activeTabIndex).address || "").length === 0
     }
 
@@ -41,6 +66,19 @@ Item {
 
     function openDownloadsFolder() {
         Qt.openUrlExternally("file:///home/yunsh/Downloads")
+    }
+
+    function openDownloadItem(index) {
+        if (index < 0 || index >= downloadHistory.count)
+            return
+        var item = downloadHistory.get(index)
+        if (String(item.name).toLowerCase().endsWith(".apk")) {
+            downloadedApkPath = item.path
+            installDownloadedApk()
+        } else {
+            Qt.openUrlExternally("file://" + item.path)
+        }
+        downloadsPopup.close()
     }
 
     function removeDownload(index) {
@@ -172,12 +210,16 @@ Item {
             downloadBusy = false
             try {
                 var data = JSON.parse(xhr.responseText)
-                downloadStatus = data.status === "ok"
-                    ? "Android 应用安装完成"
+            downloadStatus = data.status === "ok"
+                    ? "Android 应用安装完成，正在刷新桌面"
                     : (data.message || "安装失败")
-            } catch (error) {
-                downloadStatus = "无法连接 Android 安装服务"
-            }
+            if (data.status === "ok")
+                androidAppInstalled()
+            downloadStatusTimer.restart()
+        } catch (error) {
+            downloadStatus = "无法连接 Android 安装服务"
+            downloadStatusTimer.restart()
+        }
         }
         xhr.send(JSON.stringify({
             action: "install_apk",
@@ -200,27 +242,38 @@ Item {
         onDownloadRequested: function(download) {
             download.downloadDirectory = "/home/yunsh/Downloads"
             browserScreen.downloadStatus = "正在下载 " + download.suggestedFileName
+            downloadStatusTimer.stop()
             browserScreen.downloadedApkPath = ""
             browserScreen.downloadBusy = true
+            browserScreen.activeDownload = download
+            browserScreen.downloadReceivedBytes = 0
+            browserScreen.downloadTotalBytes = Number(download.totalBytes || 0)
             download.accept()
         }
 
         onDownloadFinished: function(download) {
             browserScreen.downloadBusy = false
+            browserScreen.activeDownload = null
             if (download.state === WebEngineDownloadRequest.DownloadCompleted) {
                 var path = download.downloadDirectory + "/" + download.downloadFileName
-                browserScreen.downloadStatus = "已保存到 Downloads"
+                browserScreen.downloadStatus = "下载完成 · 已保存到 Downloads"
                 downloadHistory.insert(0, {
                     name: download.downloadFileName,
                     path: path,
                     time: Qt.formatTime(new Date(), "HH:mm")
                 })
                 while (downloadHistory.count > 10) downloadHistory.remove(10)
-                if (download.downloadFileName.toLowerCase().endsWith(".apk"))
+                if (download.downloadFileName.toLowerCase().endsWith(".apk")) {
                     browserScreen.downloadedApkPath = path
+                    browserScreen.downloadStatus = "APK 下载完成，正在安装…"
+                    Qt.callLater(function() { browserScreen.installDownloadedApk() })
+                } else {
+                    downloadStatusTimer.restart()
+                }
             } else {
                 browserScreen.downloadStatus = download.interruptReasonString.length > 0
                     ? download.interruptReasonString : "下载未完成"
+                downloadStatusTimer.restart()
             }
         }
     }
@@ -457,8 +510,10 @@ Item {
 
         onUrlChanged: {
             browserScreen.currentUrl = webView.url
-            browserTabs.setProperty(browserScreen.activeTabIndex, "address", webView.url.toString())
-            urlInput.text = webView.url.toString() === "about:blank" ? "" : webView.url.toString()
+            var blank = webView.url.toString() === "about:blank"
+            if (!(blank && browserScreen.isEmptyTab()))
+                browserTabs.setProperty(browserScreen.activeTabIndex, "address", webView.url.toString())
+            urlInput.text = blank ? "" : webView.url.toString()
         }
 
         // Background color
@@ -472,8 +527,13 @@ Item {
                 browserScreen.loadProgress = 100
                 pageTitle = webView.title
                 browserTabs.setProperty(activeTabIndex, "title", webView.title || "标签页")
-                browserTabs.setProperty(activeTabIndex, "address", webView.url.toString())
-                urlInput.text = webView.url.toString()
+                var blank = webView.url.toString() === "about:blank"
+                if (!(blank && browserScreen.isEmptyTab())) {
+                    browserTabs.setProperty(activeTabIndex, "address", webView.url.toString())
+                    urlInput.text = webView.url.toString()
+                } else {
+                    urlInput.text = ""
+                }
                 browserScreen._pendingDomain = ""
             } else if (loadRequest.status === WebEngineView.LoadFailedStatus) {
                 browserScreen.isLoading = false
@@ -543,40 +603,63 @@ Item {
         anchors.bottom: bottomBar.top
         anchors.bottomMargin: 12
         width: Math.min(parent.width - 40, 520)
-        height: downloadStatus.length > 0 ? 52 : 0
+        height: downloadStatus.length > 0 ? (downloadBusy ? 78 : 52) : 0
         radius: 18
         color: Qt.rgba(248/255, 252/255, 255/255, 0.92)
         border.color: Qt.rgba(255/255, 255/255, 255/255, 0.94)
         visible: downloadStatus.length > 0
         z: 20
 
-        Row {
+        Column {
             anchors.fill: parent
             anchors.leftMargin: 18
             anchors.rightMargin: 10
-            spacing: 12
+            anchors.topMargin: 7
+            anchors.bottomMargin: 7
+            spacing: 5
 
-            Text {
-                width: parent.width - (downloadedApkPath.length > 0 ? 110 : 24)
-                anchors.verticalCenter: parent.verticalCenter
-                text: downloadStatus
-                elide: Text.ElideMiddle
-                color: "#17212A"
-                font.pixelSize: 13
+            Row {
+                width: parent.width
+                height: 28
+                spacing: 12
+                Text {
+                    width: parent.width - (downloadedApkPath.length > 0 ? 110 : 24)
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: downloadBusy && downloadTotalBytes > 0
+                        ? downloadStatus + "  " + Math.round(downloadProgress * 100) + "%"
+                        : downloadStatus
+                    elide: Text.ElideMiddle
+                    color: "#17212A"
+                    font.pixelSize: 13
+                }
+
+                GlassButton {
+                    width: 88
+                    height: 34
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: downloadedApkPath.length > 0
+                    enabled: !downloadBusy
+                    onClicked: browserScreen.installDownloadedApk()
+                    Text {
+                        anchors.centerIn: parent
+                        text: downloadBusy ? "安装中…" : "安装 APK"
+                        color: "#00D4FF"
+                        font.pixelSize: 12
+                    }
+                }
             }
 
-            GlassButton {
-                width: 88
-                height: 34
-                anchors.verticalCenter: parent.verticalCenter
-                visible: downloadedApkPath.length > 0
-                enabled: !downloadBusy
-                onClicked: browserScreen.installDownloadedApk()
-                Text {
-                    anchors.centerIn: parent
-                    text: downloadBusy ? "安装中…" : "安装 APK"
+            Rectangle {
+                width: parent.width
+                height: 4
+                radius: 2
+                visible: downloadBusy
+                color: Qt.rgba(0, 0.83, 1, 0.16)
+                Rectangle {
+                    width: parent.width * (downloadTotalBytes > 0 ? downloadProgress : 0.18)
+                    height: parent.height
+                    radius: 2
                     color: "#00D4FF"
-                    font.pixelSize: 12
                 }
             }
         }
@@ -741,7 +824,7 @@ Item {
                         Text { anchors.verticalCenter: parent.verticalCenter; text: "×"; color: "#FF453A"; font.pixelSize: 18; z: 2
                             MouseArea { anchors.fill: parent; anchors.margins: -8; z: 2; onClicked: browserScreen.removeDownload(index) } }
                     }
-                    MouseArea { anchors.fill: parent; z: 0; onClicked: browserScreen.openDownloadsFolder() }
+                    MouseArea { anchors.fill: parent; z: 0; onClicked: browserScreen.openDownloadItem(index) }
                 }
             }
             Text {

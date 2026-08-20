@@ -38,6 +38,7 @@ done
 # ─── Remove activation flag (shows wizard on next boot) ───
 rm -f /etc/yunsh/.activated
 rm -f /etc/yunsh/.firstboot_partial
+rm -f /var/lib/yunsh/firstboot-progress
 echo "✓ 激活状态已重置"
 
 # ─── Keep system flags & config (don't reinstall system) ───
@@ -65,8 +66,9 @@ echo "✓ 用户文件（截图/文档）已清除"
 if ! id -u yunsh >/dev/null 2>&1; then
     useradd -m -s /bin/bash -G sudo,adm,dialout yunsh
 fi
+usermod -aG sudo,adm,dialout yunsh
 install -d -o yunsh -g yunsh /home/yunsh
-echo "yunsh:YUNSH123" | chpasswd
+echo "yunsh:yunsh123" | chpasswd
 echo "✓ 系统账号已保留；本机密码已重置"
 
 # ─── Reset user settings (language, Wi-Fi, Bluetooth) ───

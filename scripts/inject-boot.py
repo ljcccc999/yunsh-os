@@ -109,7 +109,7 @@ def find_config_range(data):
     """Find config.txt content range by looking for unique markers."""
     markers = [
         b"gpu_mem=", b"arm_64bit=", b"hdmi_group=", b"disable_overscan=",
-        b"dtoverlay=vc4-kms-v3d"
+        b"dtoverlay=vc4-kms-v3d-pi5"
     ]
     for marker in markers:
         idx = data.find(marker)
@@ -181,7 +181,7 @@ def modify_config(data):
     new_lines.append('# === YUNSH OS Settings ===')
     new_lines.append('arm_64bit=1')
     new_lines.append('[pi5]')
-    new_lines.append('dtoverlay=vc4-kms-v3d')
+    new_lines.append('dtoverlay=vc4-kms-v3d-pi5')
     new_lines.append('disable_splash=1')
     new_lines.append('framebuffer_width=1920')
     new_lines.append('framebuffer_height=1080')

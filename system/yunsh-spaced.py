@@ -54,6 +54,7 @@ ORBIT_ROUTES = {
     "/v1/phone/orbit/status": ("GET", "/v1/status"),
     "/v1/phone/orbit/chat": ("POST", "/v1/chat"),
     "/v1/phone/orbit/config": ("POST", "/v1/config"),
+    "/v1/phone/orbit/delete-profile": ("POST", "/v1/config/delete-profile"),
     "/v1/phone/orbit/approve": ("POST", "/v1/approve"),
 }
 
@@ -467,6 +468,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path in {
             "/v1/phone/orbit/chat",
             "/v1/phone/orbit/config",
+            "/v1/phone/orbit/delete-profile",
             "/v1/phone/orbit/approve",
         }:
             if not phone_authorized(self.headers.get("X-YUNSH-Key")):
@@ -546,10 +548,28 @@ def advertise(fingerprint):
         return None
 
 
+def maintain_advertisement(fingerprint, stop_event):
+    """Keep Bonjour discovery alive across Avahi/network restarts."""
+    publisher = None
+    while not stop_event.is_set():
+        if publisher is None or publisher.poll() is not None:
+            publisher = advertise(fingerprint)
+        stop_event.wait(3)
+    if publisher is not None and publisher.poll() is None:
+        publisher.terminate()
+
+
 if __name__ == "__main__":
     ensure_certificate()
     fingerprint = certificate_fingerprint()
-    advertiser = advertise(fingerprint)
+    advertisement_stop = threading.Event()
+    advertisement_thread = threading.Thread(
+        target=maintain_advertisement,
+        args=(fingerprint, advertisement_stop),
+        name="yunsh-bonjour",
+        daemon=True,
+    )
+    advertisement_thread.start()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.minimum_version = ssl.TLSVersion.TLSv1_2
@@ -558,5 +578,5 @@ if __name__ == "__main__":
     try:
         server.serve_forever()
     finally:
-        if advertiser is not None:
-            advertiser.terminate()
+        advertisement_stop.set()
+        advertisement_thread.join(timeout=5)

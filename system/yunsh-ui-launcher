@@ -87,46 +87,66 @@ fi
 
 /usr/bin/yunsh-disk-helper 2>/dev/null || true
 
-# Waydroid requires a real Wayland session. Weston owns DRM/KMS and composes
-# both the YUNSH shell and Android surfaces on the same display. Keep Wayland
-# as the normal path; do not silently replace it with linuxfb when DRM fails.
+# Waydroid requires a real Wayland session. Weston owns the display and
+# composes both the YUNSH shell and Android surfaces on the same output. DRM
+# KMS is the preferred compositor backend, while fbdev Weston is the
+# compatibility bridge for a working framebuffer-only boot. Direct Qt linuxfb
+# remains the final recovery path when no Wayland backend can be loaded.
 if ! command -v weston >/dev/null 2>&1; then
     echo "YUNSH: Weston is not installed." >&2
     exit 1
 fi
 DISPLAY_BACKEND="wayland"
+COMPOSITOR_BACKEND=""
 DRM_DEVICE=""
-if [ -d /dev/dri ]; then
-    DRM_DEVICE="$(find /dev/dri -maxdepth 1 -type c -name 'card*' -print -quit 2>/dev/null || true)"
-fi
+# A missing DRM node is a hardware/display fault, not a reason to let
+# systemd restart the whole shell every two seconds.  On the Pi 5 the node can
+# appear a little after udev/firmware initialization, so wait in this single
+# process and keep SSH/recovery responsive while it is unavailable.
+display_wait_log=""
+while :; do
+    DRM_DEVICE=""
+    if [ -d /dev/dri ]; then
+        DRM_DEVICE="$(find /dev/dri -maxdepth 1 -type c -name 'card*' -print -quit 2>/dev/null || true)"
+    fi
+    if [ -n "$DRM_DEVICE" ] || [ -c /dev/fb0 ]; then
+        break
+    fi
+    if [ -z "$display_wait_log" ] || [ "$display_wait_log" -le 0 ]; then
+        printf '%s No DRM or framebuffer device; waiting without restarting the shell.\n' \
+            "$(date -Iseconds)" >>"$UI_LOG"
+        display_wait_log=12
+    else
+        display_wait_log=$((display_wait_log - 1))
+    fi
+    sleep 5
+done
 
-if [ -n "$DRM_DEVICE" ]; then
-    # A compositor killed during startup can leave its socket behind. Do not
-    # treat that dead endpoint as a valid session.
-    if [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && ! pgrep -x weston >/dev/null 2>&1; then
+start_weston_backend() {
+    local backend="$1"
+    local weston_state=""
+    local weston_args="--backend=$backend --renderer=pixman --shell=kiosk-shell.so --socket=$WAYLAND_DISPLAY --idle-time=0"
+
+    # A compositor killed during startup can leave its socket behind.  A
+    # socket alone is never accepted as a healthy display endpoint.
+    if [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] &&
+       ! pgrep -x weston >/dev/null 2>&1; then
         rm -f "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" \
             "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY.lock"
     fi
     if [ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]; then
         # Weston versions shipped by Debian/Raspberry Pi OS do not all accept
-        # --continue-without-input. Passing an unsupported option makes Weston
-        # quit before it creates its Wayland socket, leaving the display black.
-        # Weston GL hit drm_output_find_plane_for_view(fb) on the Pi 5 + 4K
-        # display when the pointer entered a view. Pixman avoids that broken
-        # hardware-plane import while retaining Wayland, DRM and libinput.
-        WESTON_ARGS="--backend=drm-backend.so --renderer=pixman --shell=kiosk-shell.so --socket=$WAYLAND_DISPLAY --idle-time=0"
+        # this option. Passing an unsupported option makes Weston quit before
+        # creating its socket, so add it only when advertised.
         if weston --help 2>&1 | grep -q -- '--continue-without-input'; then
-            WESTON_ARGS="$WESTON_ARGS --continue-without-input"
+            weston_args="$weston_args --continue-without-input"
         fi
         # shellcheck disable=SC2086
-        weston $WESTON_ARGS >>"$WESTON_LOG" 2>&1 &
+        weston $weston_args >>"$WESTON_LOG" 2>&1 &
         WESTON_PID=$!
-        # Weston may take several seconds to initialize GBM/EGL on a cold Pi.
+        # Weston may take several seconds to initialize a cold display.
         for _ in $(seq 1 300); do
             weston_state="$(ps -o stat= -p "$WESTON_PID" 2>/dev/null | tr -d '[:space:]')"
-            # A Weston process can leave its socket behind for a short time
-            # after aborting in the DRM backend.  A socket alone is therefore
-            # not proof that a usable Wayland display exists.
             if [ -z "$weston_state" ] || [[ "$weston_state" == Z* ]]; then
                 break
             fi
@@ -134,38 +154,64 @@ if [ -n "$DRM_DEVICE" ]; then
             sleep 0.1
         done
     fi
-    weston_ready=false
+
     if [ -n "${WESTON_PID:-}" ]; then
         weston_state="$(ps -o stat= -p "$WESTON_PID" 2>/dev/null | tr -d '[:space:]')"
         if [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] &&
            [ -n "$weston_state" ] && [[ "$weston_state" != Z* ]]; then
-            # Let the compositor finish its first repaint.  This catches the
-            # Pi DRM assertion path that creates a socket before aborting.
+            # Let the compositor finish its first repaint. This catches the
+            # Pi DRM assertion path that can create a socket before aborting.
             sleep 0.5
             weston_state="$(ps -o stat= -p "$WESTON_PID" 2>/dev/null | tr -d '[:space:]')"
-            [ -n "$weston_state" ] && [[ "$weston_state" != Z* ]] && weston_ready=true
+            [ -n "$weston_state" ] && [[ "$weston_state" != Z* ]] && return 0
         fi
-    elif [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && pgrep -x weston >/dev/null 2>&1; then
+    elif [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] &&
+         pgrep -x weston >/dev/null 2>&1; then
         # An already-running compositor may belong to the service wrapper.
-        weston_ready=true
+        return 0
     fi
-    if [ "$weston_ready" != true ]; then
-        rm -f "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" \
-            "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY.lock"
-        printf '%s Weston failed; entering explicit recovery framebuffer path.\n' \
+
+    [ -n "${WESTON_PID:-}" ] && kill "$WESTON_PID" 2>/dev/null || true
+    rm -f "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" \
+        "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY.lock"
+    return 1
+}
+
+if [ -n "$DRM_DEVICE" ]; then
+    # Weston GL hit drm_output_find_plane_for_view(fb) on the Pi 5 + 4K
+    # display when the pointer entered a view. Pixman avoids that broken
+    # hardware-plane import while retaining Wayland, DRM and libinput.
+    if start_weston_backend "drm-backend.so"; then
+        COMPOSITOR_BACKEND="drm"
+    else
+        printf '%s Weston DRM failed; entering compatibility framebuffer path.\n' \
             "$(date -Iseconds)" >>"$UI_LOG"
         DISPLAY_BACKEND="linuxfb"
     fi
 else
-    printf '%s No DRM device found; entering explicit recovery framebuffer path.\n' \
+    printf '%s No DRM device found; trying Weston fbdev compatibility backend.\n' \
         "$(date -Iseconds)" >>"$UI_LOG"
-    DISPLAY_BACKEND="linuxfb"
+    # Debian/Raspberry Pi OS builds that ship Weston commonly install this
+    # module below libweston-*/.  Use the actual module path so the fallback
+    # does not depend on a particular libweston ABI directory name.
+    FBDEV_BACKEND="$(find /usr/lib /lib -type f -name 'fbdev-backend.so' -print -quit 2>/dev/null || true)"
+    if [ -n "$FBDEV_BACKEND" ] && start_weston_backend "$FBDEV_BACKEND"; then
+        COMPOSITOR_BACKEND="fbdev"
+        printf '%s Using Weston fbdev Wayland compatibility backend.\n' \
+            "$(date -Iseconds)" >>"$UI_LOG"
+    else
+        printf '%s Weston fbdev unavailable; entering explicit linuxfb recovery path.\n' \
+            "$(date -Iseconds)" >>"$UI_LOG"
+        DISPLAY_BACKEND="linuxfb"
+    fi
 fi
 
 if [ "$DISPLAY_BACKEND" = "linuxfb" ]; then
     if [ ! -c /dev/fb0 ]; then
-        echo "YUNSH: Wayland failed and no recovery framebuffer exists." >&2
-        exit 1
+        printf '%s Wayland failed and no recovery framebuffer exists; retrying display detection.\n' \
+            "$(date -Iseconds)" >>"$UI_LOG"
+        sleep 10
+        exec "$0"
     fi
     export QT_QPA_PLATFORM="linuxfb:fb=/dev/fb0"
     export QT_QUICK_BACKEND="software"
@@ -178,8 +224,13 @@ else
     }
     export QT_QPA_PLATFORM="wayland"
     export QT_QUICK_BACKEND="software"
-    printf '%s Using primary Wayland DRM compositor with Weston pixman renderer.\n' \
-        "$(date -Iseconds)" >>"$UI_LOG"
+    if [ "$COMPOSITOR_BACKEND" = "fbdev" ]; then
+        printf '%s Using Wayland with Weston fbdev compositor and pixman renderer.\n' \
+            "$(date -Iseconds)" >>"$UI_LOG"
+    else
+        printf '%s Using primary Wayland DRM compositor with Weston pixman renderer.\n' \
+            "$(date -Iseconds)" >>"$UI_LOG"
+    fi
 fi
 
 # Fcitx must start after Weston has created the Wayland socket.  The previous
